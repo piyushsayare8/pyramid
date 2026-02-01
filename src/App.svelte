@@ -3,38 +3,29 @@
   import panzoom from 'panzoom';
 
   // Configuration
-  const blockSize = 50;
-  const totalRows = 77;
-  const canvasWidth = 4000;
-  const canvasHeight = 4000;
+  const blockSize = 40;
+  const totalRows = 100;
+  const canvasWidth = 6000;
+  const canvasHeight = 6000;
   const centerX = canvasWidth / 2;
 
   // Generate all blocks
   let blocks = [];
-  let totalBlocks = 0;
+  let currentPrice = 5050;
 
-  // Price calculation based on row position
-  function calculatePrice(row) {
-    if (row === 1) return 3000; // The King
-    if (row <= 10) return Math.round(3000 - (row - 1) * 250); // Top tier: $3000-$750
-    if (row <= 30) return Math.round(750 - (row - 10) * 25); // Middle tier: $750-$250
-    if (row <= 50) return Math.round(250 - (row - 30) * 10); // Lower middle: $250-$50
-    return Math.max(1, Math.round(50 - (row - 50) * 1.8)); // Bottom tier: $50-$1
-  }
-
-  // Get border style based on row
-  function getBorderStyle(row) {
-    if (row === 1) return 'king'; // The King - special glow
-    if (row <= 10) return 'gold';
-    if (row <= 40) return 'silver';
+  // Get border style based on price
+  function getBorderStyle(price) {
+    if (price === 5050) return 'king'; // The King - special glow
+    if (price >= 4000) return 'gold';
+    if (price >= 1000) return 'silver';
     return 'standard';
   }
 
-  // Get fill color based on row tier
-  function getFillColor(row) {
-    if (row === 1) return '#1a1a2e'; // King - dark royal
-    if (row <= 10) return '#2d2d44'; // Gold tier
-    if (row <= 40) return '#252535'; // Silver tier
+  // Get fill color based on price tier
+  function getFillColor(price) {
+    if (price === 5050) return '#1a1a2e'; // King - dark royal
+    if (price >= 4000) return '#2d2d44'; // Gold tier
+    if (price >= 1000) return '#252535'; // Silver tier
     return '#1e1e28'; // Standard tier
   }
 
@@ -44,17 +35,17 @@
     let startX = centerX - (rowWidth / 2);
 
     for (let col = 0; col < row; col++) {
-      totalBlocks++;
       blocks.push({
-        id: totalBlocks,
+        id: currentPrice,
         x: startX + (col * blockSize),
         y: (row - 1) * blockSize + 50, // Start from top with padding
         row: row,
         col: col,
-        price: calculatePrice(row),
-        borderStyle: getBorderStyle(row),
-        fillColor: getFillColor(row)
+        price: currentPrice,
+        borderStyle: getBorderStyle(currentPrice),
+        fillColor: getFillColor(currentPrice)
       });
+      currentPrice--;
     }
   }
 
@@ -148,7 +139,7 @@
   <!-- Header UI -->
   <div class="header">
     <h1>THE PYRAMID</h1>
-    <p class="subtitle">3,003 Blocks of History</p>
+    <p class="subtitle">5,050 Blocks of History</p>
   </div>
 
   <!-- Controls -->
@@ -165,19 +156,19 @@
   <div class="legend">
     <div class="legend-item">
       <div class="legend-box king"></div>
-      <span>The King ($3,000)</span>
+      <span>The King ($5,050)</span>
     </div>
     <div class="legend-item">
       <div class="legend-box gold"></div>
-      <span>Gold Tier ($750-$2,750)</span>
+      <span>Gold Tier ($4,000-$5,049)</span>
     </div>
     <div class="legend-item">
       <div class="legend-box silver"></div>
-      <span>Silver Tier ($250-$725)</span>
+      <span>Silver Tier ($1,000-$3,999)</span>
     </div>
     <div class="legend-item">
       <div class="legend-box standard"></div>
-      <span>Standard ($1-$240)</span>
+      <span>Standard ($1-$999)</span>
     </div>
   </div>
 
@@ -187,7 +178,7 @@
       <div class="tooltip-row">Block #{hoveredBlock.id}</div>
       <div class="tooltip-price">{formatPrice(hoveredBlock.price)}</div>
       <div class="tooltip-pos">Row {hoveredBlock.row}, Position {hoveredBlock.col + 1}</div>
-      {#if hoveredBlock.row === 1}
+      {#if hoveredBlock.price === 5050}
         <div class="tooltip-king">👑 THE KING</div>
       {/if}
     </div>
@@ -263,7 +254,7 @@
         />
         
         <!-- King crown emoji -->
-        {#if block.row === 1}
+        {#if block.price === 5050}
           <text
             x={block.x + blockSize / 2}
             y={block.y + blockSize / 2 + 6}
