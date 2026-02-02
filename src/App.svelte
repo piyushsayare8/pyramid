@@ -6,9 +6,15 @@
   // Configuration
   const blockSize = 40;
   const totalRows = 100;
-  const canvasWidth = 6000;
-  const canvasHeight = 6000;
+  const canvasWidth = totalRows * blockSize;
+  const canvasHeight = totalRows * blockSize + 100;
   const centerX = canvasWidth / 2;
+  const pyramidWidth = totalRows * blockSize;
+  const pyramidHeight = totalRows * blockSize + 100;
+  
+  // Million Dollar Homepage style fixed zoom configuration
+  const FIXED_MIN_ZOOM = 0.15; // Fixed minimum zoom level (15%)
+  const MAX_ZOOM = 3.0; // Maximum zoom level
 
   // API Configuration
   const API_URL = import.meta.env.VITE_API_URL || 'https://pyramid-backend.piyushsayare8.workers.dev';
@@ -67,7 +73,7 @@
   let containerElement;
   let panzoomInstance;
   let hoveredBlock = null;
-  let initialScale = 1;
+  let fixedMinZoom = FIXED_MIN_ZOOM;
   let showPurchaseForm = false;
   let selectedBlock = null;
   let soldSlots = [];
@@ -99,28 +105,110 @@
   onMount(() => {
     // Load sold slots from backend
     loadSoldSlots();
-    // Calculate initial scale to fit pyramid on screen
-    const containerRect = containerElement.getBoundingClientRect();
-    const pyramidHeight = totalRows * blockSize + 100;
-    const pyramidWidth = totalRows * blockSize;
     
-    // Calculate scale to fit the entire pyramid
-    const scaleX = containerRect.width / pyramidWidth;
-    const scaleY = containerRect.height / pyramidHeight;
-    initialScale = Math.min(scaleX, scaleY) * 0.9; // 90% to add some padding
-
-    // Initialize panzoom
+    // Initialize panzoom with fixed zoom levels
     panzoomInstance = panzoom(svgElement, {
-      maxZoom: 5,
-      minZoom: 0.1,
-      initialZoom: initialScale,
+      maxZoom: MAX_ZOOM,
+      minZoom: fixedMinZoom, // Fixed minimum zoom - no zooming out further
+      initialZoom: fixedMinZoom, // Start at minimum zoom
       bounds: true,
-      boundsPadding: 0.5
+      disablePan: false,
+      smoothPan: false, // Disable smooth pan for better control
+      zoomSpeed: 0.1 // Moderate zoom speed
     });
 
-    // Center the pyramid initially
-    const offsetX = (containerRect.width - pyramidWidth * initialScale) / 2 - (centerX - pyramidWidth / 2) * initialScale;
-    const offsetY = (containerRect.height - pyramidHeight * initialScale) / 2;
+    // Add strict bounds constraint to keep pyramid within viewport
+    panzoomInstance.on('pan', () => {
+      const transform = panzoomInstance.getTransform();
+      const scale = transform.scale;
+      const x = transform.x;
+      const y = transform.y;
+      
+      // Get container dimensions
+      const containerRect = containerElement.getBoundingClientRect();
+      
+      // Calculate scaled canvas dimensions
+      const scaledWidth = canvasWidth * scale;
+      const scaledHeight = canvasHeight * scale;
+      
+      // Strict bounds - never allow canvas to go beyond container edges
+      let minX, maxX, minY, maxY;
+      
+      if (scaledWidth <= containerRect.width) {
+        // If canvas fits, center it
+        minX = maxX = (containerRect.width - scaledWidth) / 2;
+      } else {
+        // If larger, allow panning but keep edges visible
+        minX = containerRect.width - scaledWidth;
+        maxX = 0;
+      }
+      
+      if (scaledHeight <= containerRect.height) {
+        // If canvas fits, center it
+        minY = maxY = (containerRect.height - scaledHeight) / 2;
+      } else {
+        // If larger, allow panning but keep edges visible
+        minY = containerRect.height - scaledHeight;
+        maxY = 0;
+      }
+      
+      // Apply strict constraints
+      const constrainedX = Math.max(minX, Math.min(maxX, x));
+      const constrainedY = Math.max(minY, Math.min(maxY, y));
+      
+      // Apply constraints if needed
+      if (constrainedX !== x || constrainedY !== y) {
+        panzoomInstance.moveTo(constrainedX, constrainedY);
+      }
+    });
+
+    // Also constrain zoom changes
+    panzoomInstance.on('zoom', () => {
+      const transform = panzoomInstance.getTransform();
+      const scale = transform.scale;
+      
+      // Ensure zoom stays within bounds
+      if (scale < fixedMinZoom) {
+        panzoomInstance.zoomAbs(0, 0, fixedMinZoom);
+      } else if (scale > MAX_ZOOM) {
+        panzoomInstance.zoomAbs(0, 0, MAX_ZOOM);
+      }
+      
+      // Re-apply pan constraints after zoom
+      const x = transform.x;
+      const y = transform.y;
+      const containerRect = containerElement.getBoundingClientRect();
+      const scaledWidth = canvasWidth * scale;
+      const scaledHeight = canvasHeight * scale;
+      
+      let minX, maxX, minY, maxY;
+      
+      if (scaledWidth <= containerRect.width) {
+        minX = maxX = (containerRect.width - scaledWidth) / 2;
+      } else {
+        minX = containerRect.width - scaledWidth;
+        maxX = 0;
+      }
+      
+      if (scaledHeight <= containerRect.height) {
+        minY = maxY = (containerRect.height - scaledHeight) / 2;
+      } else {
+        minY = containerRect.height - scaledHeight;
+        maxY = 0;
+      }
+      
+      const constrainedX = Math.max(minX, Math.min(maxX, x));
+      const constrainedY = Math.max(minY, Math.min(maxY, y));
+      
+      if (constrainedX !== x || constrainedY !== y) {
+        panzoomInstance.moveTo(constrainedX, constrainedY);
+      }
+    });
+
+    // Center the pyramid initially at minimum zoom
+    const containerRect = containerElement.getBoundingClientRect();
+    const offsetX = (containerRect.width - canvasWidth * fixedMinZoom) / 2;
+    const offsetY = (containerRect.height - canvasHeight * fixedMinZoom) / 2;
     
     panzoomInstance.moveTo(offsetX, offsetY);
 
@@ -203,6 +291,20 @@
     closePurchaseForm();
   }
 
+  function viewRandomProfile() {
+    // Get only sold blocks (blocks with owners)
+    const soldBlocks = blocks.filter(block => block.sold);
+    
+    if (soldBlocks.length === 0) {
+      alert('No profiles available yet. Be the first to purchase a block!');
+      return;
+    }
+    
+    // Select a random sold block
+    const randomIndex = Math.floor(Math.random() * soldBlocks.length);
+    selectedBlock = soldBlocks[randomIndex];
+  }
+
   function formatPrice(price) {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -214,32 +316,16 @@
   function resetView() {
     if (panzoomInstance) {
       const containerRect = containerElement.getBoundingClientRect();
-      const pyramidHeight = totalRows * blockSize + 100;
-      const pyramidWidth = totalRows * blockSize;
       
-      const offsetX = (containerRect.width - pyramidWidth * initialScale) / 2 - (centerX - pyramidWidth / 2) * initialScale;
-      const offsetY = (containerRect.height - pyramidHeight * initialScale) / 2;
+      // Reset to fixed minimum zoom and center
+      const offsetX = (containerRect.width - canvasWidth * fixedMinZoom) / 2;
+      const offsetY = (containerRect.height - canvasHeight * fixedMinZoom) / 2;
       
-      panzoomInstance.zoomAbs(0, 0, initialScale);
+      panzoomInstance.zoomAbs(0, 0, fixedMinZoom);
       panzoomInstance.moveTo(offsetX, offsetY);
     }
   }
 
-  function zoomToKing() {
-    if (panzoomInstance) {
-      const containerRect = containerElement.getBoundingClientRect();
-      const topX = centerX;
-      const topY = 75;
-      
-      panzoomInstance.zoomAbs(0, 0, 3);
-      setTimeout(() => {
-        panzoomInstance.moveTo(
-          containerRect.width / 2 - topX * 3,
-          containerRect.height / 2 - topY * 3
-        );
-      }, 50);
-    }
-  }
 </script>
 
 <div class="pyramid-container" bind:this={containerElement}>
@@ -254,28 +340,13 @@
     <button on:click={resetView} class="control-btn">
       <span>⟲</span> Reset View
     </button>
-    <button on:click={zoomToKing} class="control-btn gold">
-      <span>⭐</span> View Top Block
-    </button>
-    <button on:click={() => { selectedBlock = blocks.find(b => b.id === 5050) || null; }} class="control-btn premium">
-      <span>🏆</span> View Top Block
-    </button>
   </div>
 
-  <!-- Legend -->
-  <div class="legend">
-    <div class="legend-item">
-      <div class="legend-box gold"></div>
-      <span>Gold Tier (Rows 1-45)</span>
-    </div>
-    <div class="legend-item">
-      <div class="legend-box silver"></div>
-      <span>Silver Tier (Rows 46-85)</span>
-    </div>
-    <div class="legend-item">
-      <div class="legend-box standard"></div>
-      <span>Standard Tier (Rows 86-100)</span>
-    </div>
+  <!-- Random Profile Viewer Button -->
+  <div class="center-controls">
+    <button on:click={viewRandomProfile} class="profile-btn">
+      <span>👤</span> View Random Profile
+    </button>
   </div>
 
   <!-- Block Modal -->
@@ -511,9 +582,8 @@
   .header {
     position: absolute;
     top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    text-align: center;
+    left: 20px;
+    text-align: left;
     z-index: 100;
     pointer-events: none;
   }
@@ -543,6 +613,15 @@
     right: 20px;
     display: flex;
     gap: 10px;
+    z-index: 100;
+  }
+
+  /* Center Controls */
+  .center-controls {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 100;
   }
 
@@ -593,6 +672,35 @@
     border-color: #66BB6A;
     color: #66BB6A;
     box-shadow: 0 0 15px rgba(76, 175, 80, 0.3);
+  }
+
+  /* Profile Button */
+  .profile-btn {
+    padding: 8px 16px;
+    border: 2px solid #FFD700;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.05));
+    color: #FFD700;
+    font-size: 0.9rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 10px rgba(255, 215, 0, 0.2);
+  }
+
+  .profile-btn:hover {
+    background: rgba(255, 215, 0, 0.2);
+    border-color: #FFA500;
+    color: #FFA500;
+    box-shadow: 0 6px 25px rgba(255, 215, 0, 0.4);
+    transform: translateY(-2px);
+  }
+
+  .profile-btn:active {
+    transform: translateY(0);
   }
 
   /* Legend */
