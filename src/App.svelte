@@ -19,6 +19,112 @@
   // API Configuration
   const API_URL = import.meta.env.VITE_API_URL || 'https://pyramid-backend.piyushsayare8.workers.dev';
 
+  // Color palette for random filling (same as PurchaseForm)
+  const colorPalette = [
+    '#FFD700', // Gold
+    '#FF6B6B', // Red
+    '#4ECDC4', // Teal
+    '#45B7D1', // Blue
+    '#96CEB4', // Green
+    '#FECA57', // Yellow
+    '#B983FF', // Purple
+    '#FD79A8', // Pink
+    '#A29BFE', // Light Purple
+    '#6C5CE7', // Dark Purple
+    '#00B894', // Emerald
+    '#E17055', // Orange
+    '#74B9FF', // Light Blue
+    '#A29BFE', // Lavender
+    '#FF7675', // Coral
+    '#55A3FF', // Sky Blue
+    '#FD79A8', // Rose
+    '#FDCB6E', // Amber
+    '#6C5CE7', // Indigo
+    '#00CEC9', // Turquoise
+  ];
+
+  // Calculate text size based on content length (matching PurchaseForm)
+  function calculateTextSize(text, maxChars = 50) {
+    if (!text) return 12;
+    const length = text.length;
+    if (length <= 5) return 12;
+    if (length <= 10) return 11;
+    if (length <= 15) return 10;
+    if (length <= 20) return 9;
+    if (length <= 25) return 8;
+    if (length <= 35) return 7;
+    if (length <= 45) return 6;
+    return 5;
+  }
+
+  // Calculate inner content area (excluding borders) - matching PurchaseForm logic
+  function getInnerDimensions(borderStyle, blockSize = 40) {
+    const actualBlockSize = blockSize - 2; // App.svelte uses blockSize - 2
+    let borderPixels = 1; // default for standard
+    
+    if (borderStyle === 'gold') borderPixels = 3;
+    else if (borderStyle === 'silver') borderPixels = 2;
+    
+    return {
+      width: actualBlockSize - (borderPixels * 2),
+      height: actualBlockSize - (borderPixels * 2)
+    };
+  }
+
+  // Calculate text wrapping and line breaks for SVG
+  function wrapTextForSVG(text, maxWidth, fontSize, fontFamily) {
+    if (!text) return [];
+    
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+    
+    // Create a temporary element to measure text width
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    context.font = `${fontSize}px ${fontFamily}`;
+    
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const metrics = context.measureText(testLine);
+      
+      if (metrics.width > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    
+    return lines;
+  }
+
+  // Fill all blocks with random colors, texts, and fonts
+  function fillAllBlocksRandomly() {
+    const sampleTexts = ['HI', 'LOVE', 'WOW', 'COOL', 'NICE', 'YES', 'FUN', 'STAR', 'HEART', 'SMILE', 'PEACE', 'DREAM', 'HOPE', 'JOY', 'LIFE', 'HAPPY', 'LUCK', 'WIN', 'BEST', 'TOP'];
+    const fontOptions = ['Arial', 'Georgia', 'Courier New', 'Comic Sans MS', 'Impact', 'Verdana', 'Times New Roman', 'Trebuchet MS'];
+    
+    blocks = blocks.map(block => {
+      const randomColor = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+      const randomText = sampleTexts[Math.floor(Math.random() * sampleTexts.length)];
+      const randomFont = fontOptions[Math.floor(Math.random() * fontOptions.length)];
+      
+      return {
+        ...block,
+        sold: true,
+        owner: 'Test User',
+        message: 'Random test block',
+        color: randomColor,
+        text: randomText,
+        font: randomFont
+      };
+    });
+  }
+
   // Generate all blocks
   let blocks = [];
 
@@ -76,6 +182,7 @@
   let fixedMinZoom = FIXED_MIN_ZOOM;
   let showPurchaseForm = false;
   let selectedBlock = null;
+  let purchaseBlock = null;
   let soldSlots = [];
   let mousePosition = { x: 0, y: 0 };
   let isDragging = false;
@@ -92,7 +199,14 @@
         blocks = blocks.map(block => {
           const soldSlot = soldSlots.find(s => s.slot_number === block.id);
           if (soldSlot) {
-            return { ...block, sold: true, owner: soldSlot.owner_name, message: soldSlot.owner_message };
+            return { 
+              ...block, 
+              sold: true, 
+              owner: soldSlot.owner_name, 
+              message: soldSlot.owner_message,
+              color: soldSlot.owner_color || '#FFD700',
+              text: soldSlot.owner_text || (block.id % 1000).toString()
+            };
           }
           return block;
         });
@@ -253,7 +367,14 @@
     
     // Only open if it was a very small movement (less than 3px)
     if (dragDistance < 3) {
-      selectedBlock = block;
+      // Directly open purchase form for available blocks
+      if (!block.sold) {
+        purchaseBlock = block;
+        showPurchaseForm = true;
+      } else {
+        // Show owner info for sold blocks
+        selectedBlock = block;
+      }
     }
   }
 
@@ -273,17 +394,23 @@
   function closePurchaseForm() {
     showPurchaseForm = false;
     selectedBlock = null;
+    purchaseBlock = null;
   }
 
   function handlePurchaseSuccess(event) {
-    // Update the block in the local state to show it's sold
-    const blockIndex = blocks.findIndex(b => b.id === event.detail.slotId);
+    const { slotId, owner, message, color, text, font } = event.detail;
+    
+    // Update the block in the local state
+    const blockIndex = blocks.findIndex(block => block.id === slotId);
     if (blockIndex !== -1) {
       blocks[blockIndex] = {
         ...blocks[blockIndex],
         sold: true,
-        owner: event.detail.owner,
-        message: event.detail.message
+        owner: owner,
+        message: message,
+        color: color || '#FFD700',
+        text: text || (slotId % 1000).toString(),
+        font: font || 'Arial'
       };
     }
     // Reload sold slots to get latest data
@@ -340,6 +467,9 @@
     <button on:click={resetView} class="control-btn">
       <span>⟲</span> Reset View
     </button>
+    <button on:click={fillAllBlocksRandomly} class="control-btn fill-btn">
+      <span>🎨</span> Fill All Blocks
+    </button>
   </div>
 
   <!-- Random Profile Viewer Button -->
@@ -349,8 +479,8 @@
     </button>
   </div>
 
-  <!-- Block Modal -->
-  {#if selectedBlock}
+  <!-- Block Modal - Only for sold blocks -->
+  {#if selectedBlock && selectedBlock.sold}
     <div class="block-modal-backdrop" on:click|self={() => selectedBlock = null}>
       <div class="block-modal">
         <div class="modal-header">
@@ -358,39 +488,127 @@
           <button class="close-btn" on:click={() => selectedBlock = null}>✕</button>
         </div>
         
-        <div class="modal-content">
-          <div class="block-info">
-            <div class="price-display">{formatPrice(selectedBlock.price)}</div>
-            <div class="location">Row {selectedBlock.row}, Position {selectedBlock.col + 1}</div>
-            {#if selectedBlock.id === 5050}
-              <div class="special-badge">⭐ Top Block - Most Valuable!</div>
+        <div class="modal-body">
+          <div class="owner-section">
+            <div class="premium-header">
+              <div class="crown-icon">👑</div>
+              <h3>Premium Owner</h3>
+            </div>
+            
+            {#if selectedBlock.imageThumb || selectedBlock.imageUrl}
+              <div class="owner-image-container">
+                <div class="image-frame">
+                  <img 
+                    src={selectedBlock.imageThumb || selectedBlock.imageUrl} 
+                    alt={`${selectedBlock.owner}'s profile`}
+                    on:error={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.nextElementSibling.style.display = 'flex';
+                    }}
+                  />
+                  <div class="default-avatar" style="display: none;">
+                    {selectedBlock.owner?.charAt(0).toUpperCase() || '?'}
+                  </div>
+                </div>
+                <div class="image-glow"></div>
+              </div>
+            {:else}
+              <div class="owner-image-container">
+                <div class="image-frame">
+                  <div class="default-avatar">
+                    {selectedBlock.owner?.charAt(0).toUpperCase() || '?'}
+                  </div>
+                </div>
+                <div class="image-glow"></div>
+              </div>
             {/if}
-          </div>
-          
-          {#if selectedBlock.sold}
-            <div class="owner-section">
-              <h3>👤 Owner Information</h3>
-              <div class="owner-name">{selectedBlock.owner}</div>
+            
+            <div class="owner-info">
+              <div class="owner-name-wrapper">
+                <div class="owner-name">{selectedBlock.owner}</div>
+                <div class="verification-badge">✓ Verified Owner</div>
+              </div>
+              
               {#if selectedBlock.message}
-                <div class="owner-message">💬 {selectedBlock.message}</div>
+                <div class="owner-message-container">
+                  <div class="message-icon">💬</div>
+                  <div class="owner-message">"{selectedBlock.message}"</div>
+                </div>
               {/if}
-              <div class="purchased-badge">✅ Purchased</div>
+              
+              {#if selectedBlock.link}
+                <div class="owner-link-container">
+                  <div class="link-icon">🔗</div>
+                  <a href={selectedBlock.link} target="_blank" rel="noopener noreferrer" class="owner-link">
+                    {selectedBlock.link.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]}
+                  </a>
+                </div>
+              {/if}
+              
+              <div class="block-details">
+                <div class="detail-row">
+                  <span class="detail-label">Block ID:</span>
+                  <span class="detail-value gold">#{selectedBlock.id}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Tier:</span>
+                  <span class="detail-value {getBorderStyle(Math.ceil(selectedBlock.id / 51))}">
+                    {getBorderStyle(Math.ceil(selectedBlock.id / 51)).toUpperCase()}
+                  </span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Row:</span>
+                  <span class="detail-value">{Math.ceil(selectedBlock.id / 51)}</span>
+                </div>
+                {#if selectedBlock.text}
+                  <div class="detail-row">
+                    <span class="detail-label">Display Text:</span>
+                    <span class="detail-value">"{selectedBlock.text}"</span>
+                  </div>
+                {/if}
+                {#if selectedBlock.font}
+                  <div class="detail-row">
+                    <span class="detail-label">Font:</span>
+                    <span class="detail-value">{selectedBlock.font}</span>
+                  </div>
+                {/if}
+                {#if selectedBlock.color}
+                  <div class="detail-row">
+                    <span class="detail-label">Color:</span>
+                    <div class="color-display-wrapper">
+                      <div class="color-dot" style="background-color: {selectedBlock.color}"></div>
+                      <span class="detail-value">{selectedBlock.color}</span>
+                    </div>
+                  </div>
+                {/if}
+              </div>
+              
+              <div class="premium-badges">
+                <div class="purchased-badge premium">
+                  <span class="badge-icon">⭐</span>
+                  Premium Block Owner
+                </div>
+                <div class="status-badge">
+                  <span class="status-dot"></span>
+                  Active Since 2024
+                </div>
+              </div>
             </div>
-          {:else}
-            <div class="purchase-section">
-              <h3>🏆 Purchase This Block</h3>
-              <PurchaseForm 
-                slotId={selectedBlock.id} 
-                price={selectedBlock.price}
-                apiUrl={API_URL}
-                on:success={handlePurchaseSuccess}
-                on:close={() => selectedBlock = null}
-              />
-            </div>
-          {/if}
+          </div>
         </div>
       </div>
     </div>
+  {/if}
+
+  <!-- Purchase Form Modal -->
+  {#if showPurchaseForm && purchaseBlock}
+    <PurchaseForm 
+      apiUrl={API_URL}
+      slotId={purchaseBlock.id}
+      price={purchaseBlock.price}
+      on:success={handlePurchaseSuccess}
+      on:close={closePurchaseForm}
+    />
   {/if}
 
   <!-- Instructions -->
@@ -458,7 +676,7 @@
           y={block.y}
           width={blockSize - 2}
           height={blockSize - 2}
-          fill={block.fillColor}
+          fill={block.sold && block.color ? block.color : block.fillColor}
           class="block {block.borderStyle}"
           class:hovered={hoveredBlock?.id === block.id}
           class:sold={block.sold}
@@ -467,6 +685,35 @@
           on:click={(e) => handleBlockClick(block, e)}
           on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBlockClick(block, e); }}
         />
+        
+        <!-- Display text on sold blocks with wrapping -->
+        {#if block.sold && block.text}
+          {@const fontSize = calculateTextSize(block.text)}
+          {@const fontFamily = (block.font || 'Arial') + ', sans-serif'}
+          {@const borderStyle = getBorderStyle(Math.ceil(block.id / 51))}
+          {@const innerDimensions = getInnerDimensions(borderStyle)}
+          {@const lines = wrapTextForSVG(block.text, innerDimensions.width, fontSize, fontFamily)}
+          {@const lineHeight = fontSize * 1.2}
+          {@const adjustedLineHeight = Math.min(lineHeight, innerDimensions.height / lines.length)}
+          {@const startY = block.y + (blockSize / 2) - ((lines.length - 1) * adjustedLineHeight / 2)}
+          
+          {#each lines as line, i}
+            <text
+              x={block.x + (blockSize / 2)}
+              y={startY + (i * adjustedLineHeight)}
+              text-anchor="middle"
+              dominant-baseline="middle"
+              fill="white"
+              font-size={fontSize}
+              font-weight="bold"
+              font-family={fontFamily}
+              style="text-shadow: 0 0 3px rgba(0, 0, 0, 0.8); pointer-events: none;"
+              class="block-text"
+            >
+              {line}
+            </text>
+          {/each}
+        {/if}
       </g>
     {/each}
   </svg>
@@ -559,8 +806,7 @@
   }
 
   .block.sold {
-    opacity: 0.6;
-    fill: #2a2a3a !important;
+    opacity: 0.8;
     cursor: not-allowed;
   }
 
@@ -643,6 +889,18 @@
     background: rgba(40, 40, 60, 0.9);
     border-color: #666;
     color: #fff;
+  }
+
+  .control-btn.fill-btn {
+    border-color: #FF6B6B;
+    color: #FF6B6B;
+  }
+
+  .control-btn.fill-btn:hover {
+    background: rgba(255, 107, 107, 0.1);
+    border-color: #FF7675;
+    color: #FF7675;
+    box-shadow: 0 0 15px rgba(255, 107, 107, 0.3);
   }
 
   .control-btn.gold {
@@ -829,12 +1087,15 @@
     background: var(--bg-panel);
     border: 1px solid var(--border);
     width: 90%;
-    max-width: 500px;
-    border-radius: 16px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+    max-width: 600px;
+    border-radius: 20px;
+    box-shadow: 
+      0 25px 60px rgba(0,0,0,0.8),
+      0 0 0 1px rgba(255, 215, 0, 0.2),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.1);
     overflow: hidden;
     position: relative;
-    animation: slideUp 0.3s ease-out;
+    animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .modal-header {
@@ -907,29 +1168,267 @@
   .owner-section h3 {
     margin-top: 0;
     color: white;
-    margin-bottom: 15px;
+    margin-bottom: 20px;
+  }
+
+  /* Premium Profile Panel Styles */
+  .premium-header {
+    text-align: center;
+    margin-bottom: 25px;
+    position: relative;
+  }
+
+  .crown-icon {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .owner-image-container {
+    position: relative;
+    width: 150px;
+    height: 150px;
+    margin: 0 auto 20px;
+  }
+
+  .image-frame {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 4px solid transparent;
+    background: linear-gradient(45deg, #FFD700, #FFA500, #FFD700);
+    padding: 3px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .image-frame img,
+  .default-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #1e1e2d;
+  }
+
+  .image-glow {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    right: -10px;
+    bottom: -10px;
+    background: radial-gradient(circle, rgba(255, 215, 0, 0.3) 0%, transparent 70%);
+    border-radius: 50%;
+    z-index: 1;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.1); }
+  }
+
+  .owner-info {
+    text-align: center;
+  }
+
+  .owner-name-wrapper {
+    margin-bottom: 20px;
   }
 
   .owner-name {
-    font-size: 1.2rem;
+    font-size: 1.8rem;
     color: white;
-    margin-bottom: 10px;
+    font-weight: bold;
+    margin-bottom: 5px;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  }
+
+  .verification-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    border: 1px solid #4CAF50;
+  }
+
+  .owner-message-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 15px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 215, 0, 0.2);
+  }
+
+  .message-icon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
   }
 
   .owner-message {
-    color: #aaa;
-    margin-bottom: 10px;
+    color: #ddd;
     font-style: italic;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    text-align: left;
   }
 
-  .purchased-badge {
-    background: rgba(76, 175, 80, 0.2);
+  .owner-link-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    justify-content: center;
+  }
+
+  .link-icon {
+    font-size: 1.2rem;
+  }
+
+  .owner-link {
+    color: #4ECDC4;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border-bottom: 1px solid transparent;
+  }
+
+  .owner-link:hover {
+    color: #45B7D1;
+    border-bottom-color: #45B7D1;
+  }
+
+  .block-details {
+    background: linear-gradient(135deg, rgba(30, 30, 45, 0.8), rgba(20, 20, 30, 0.8));
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 215, 0, 0.1);
+  }
+
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .detail-row:last-child {
+    border-bottom: none;
+  }
+
+  .detail-label {
+    color: #888;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  .detail-value {
+    color: white;
+    font-weight: bold;
+    font-size: 0.9rem;
+  }
+
+  .detail-value.gold {
+    color: #FFD700;
+    text-shadow: 0 0 5px rgba(255, 215, 0, 0.3);
+  }
+
+  .detail-value.gold {
+    color: #FFD700;
+  }
+
+  .detail-value.silver {
+    color: #C0C0C0;
+  }
+
+  .detail-value.standard {
+    color: #888;
+  }
+
+  .color-display-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .color-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .premium-badges {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .purchased-badge.premium {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.1));
+    color: #FFD700;
+    padding: 12px 20px;
+    border-radius: 25px;
+    border: 2px solid #FFD700;
+    font-size: 1rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+    animation: shimmer-badge 3s ease-in-out infinite;
+  }
+
+  @keyframes shimmer-badge {
+    0%, 100% { box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3); }
+    50% { box-shadow: 0 6px 25px rgba(255, 215, 0, 0.5); }
+  }
+
+  .badge-icon {
+    font-size: 1.1rem;
+  }
+
+  .status-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: rgba(76, 175, 80, 0.1);
     color: #4CAF50;
     padding: 8px 16px;
     border-radius: 20px;
     border: 1px solid #4CAF50;
-    font-size: 0.9rem;
-    display: inline-block;
+    font-size: 0.85rem;
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4CAF50;
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
   }
 
   .purchase-section {
@@ -979,5 +1478,230 @@
   @keyframes slideUp {
     from { transform: translateY(20px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
+  }
+
+  /* Mobile Responsive Design */
+  @media (max-width: 768px) {
+    /* Header Responsive */
+    .header {
+      padding: 15px 20px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 1.8rem;
+      letter-spacing: 4px;
+      margin-bottom: 8px;
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      font-size: 0.8rem;
+      letter-spacing: 2px;
+    }
+
+    /* Controls Responsive */
+    .controls {
+      top: 15px;
+      right: 15px;
+      gap: 8px;
+    }
+
+    .control-btn {
+      padding: 8px 12px;
+      font-size: 0.8rem;
+      min-width: auto;
+    }
+
+    .center-controls {
+      bottom: 20px;
+      gap: 8px;
+    }
+
+    .center-controls .control-btn {
+      padding: 8px 16px;
+      font-size: 0.8rem;
+    }
+
+    /* Pyramid Container */
+    .pyramid-container {
+      height: calc(100vh - 120px);
+      margin-top: 120px;
+    }
+
+    /* Legend Responsive */
+    .legend {
+      top: 15px;
+      left: 15px;
+      gap: 10px;
+    }
+
+    .legend-box {
+      padding: 8px 12px;
+      font-size: 0.7rem;
+    }
+
+    /* Instructions Responsive */
+    .instructions {
+      bottom: 15px;
+      right: 15px;
+      gap: 15px;
+      font-size: 0.7rem;
+    }
+
+    /* Tooltip Responsive */
+    .tooltip {
+      right: 15px;
+      padding: 15px;
+      min-width: 150px;
+    }
+
+    .tooltip-price {
+      font-size: 1.4rem;
+    }
+
+    /* Modal Responsive */
+    .block-modal {
+      width: 95%;
+      max-width: 450px;
+    }
+
+    .modal-header {
+      padding: 15px;
+    }
+
+    .modal-header h2 {
+      font-size: 1.3rem;
+    }
+
+    .modal-body {
+      padding: 15px;
+    }
+
+    .owner-image-container {
+      width: 120px;
+      height: 120px;
+    }
+
+    .owner-name {
+      font-size: 1.5rem;
+    }
+
+    .block-details {
+      padding: 15px;
+    }
+
+    .selected-details {
+      flex-direction: column;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .price-display {
+      font-size: 1.3rem;
+    }
+  }
+
+  /* Small Mobile (under 480px) */
+  @media (max-width: 480px) {
+    /* Extra Small Header */
+    .header {
+      padding: 10px 15px;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      letter-spacing: 2px;
+      margin-bottom: 5px;
+    }
+
+    .subtitle {
+      font-size: 0.7rem;
+      letter-spacing: 1px;
+    }
+
+    /* Compact Controls */
+    .controls {
+      top: 10px;
+      right: 10px;
+      gap: 5px;
+    }
+
+    .control-btn {
+      padding: 6px 10px;
+      font-size: 0.7rem;
+    }
+
+    .center-controls {
+      bottom: 15px;
+      gap: 5px;
+    }
+
+    .center-controls .control-btn {
+      padding: 6px 12px;
+      font-size: 0.7rem;
+    }
+
+    /* Maximum Pyramid Space */
+    .pyramid-container {
+      height: calc(100vh - 100px);
+      margin-top: 100px;
+    }
+
+    /* Compact Legend */
+    .legend {
+      top: 10px;
+      left: 10px;
+      gap: 8px;
+    }
+
+    .legend-box {
+      padding: 6px 10px;
+      font-size: 0.65rem;
+    }
+
+    /* Hide Instructions on Small Screens */
+    .instructions {
+      display: none;
+    }
+
+    /* Smaller Modal */
+    .block-modal {
+      width: 98%;
+      max-width: 380px;
+    }
+
+    .modal-header {
+      padding: 12px;
+    }
+
+    .modal-header h2 {
+      font-size: 1.2rem;
+    }
+
+    .modal-body {
+      padding: 12px;
+    }
+
+    .owner-image-container {
+      width: 100px;
+      height: 100px;
+    }
+
+    .owner-name {
+      font-size: 1.3rem;
+    }
+
+    .block-details {
+      padding: 12px;
+    }
+
+    .crown-icon {
+      font-size: 1.5rem;
+    }
+
+    .tooltip {
+      display: none; /* Hide tooltip on very small screens */
+    }
   }
 </style>
