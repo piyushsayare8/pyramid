@@ -72,6 +72,9 @@
   let selectedBlock = null;
   let soldSlots = [];
   let mousePosition = { x: 0, y: 0 };
+  let isDragging = false;
+  let dragStartPos = { x: 0, y: 0 };
+  let dragStartTime = 0;
 
   async function loadSoldSlots() {
     try {
@@ -143,8 +146,41 @@
     }
   }
 
-  function handleBlockClick(block) {
-    selectedBlock = block;
+  function handleBlockClick(block, event) {
+    // Don't open block if we were dragging
+    if (isDragging) return;
+    
+    // Check if it was a quick click (not a drag)
+    const dragDistance = Math.sqrt(
+      Math.pow(event.clientX - dragStartPos.x, 2) + 
+      Math.pow(event.clientY - dragStartPos.y, 2)
+    );
+    const dragDuration = Date.now() - dragStartTime;
+    
+    // Only open block if click was quick and didn't move much
+    if (dragDistance < 5 && dragDuration < 200) {
+      selectedBlock = block;
+    }
+  }
+
+  function handleMouseDown(event) {
+    isDragging = false;
+    dragStartPos = { x: event.clientX, y: event.clientY };
+    dragStartTime = Date.now();
+  }
+
+  function handleMouseUp(event) {
+    // Check if this was actually a drag
+    const dragDistance = Math.sqrt(
+      Math.pow(event.clientX - dragStartPos.x, 2) + 
+      Math.pow(event.clientY - dragStartPos.y, 2)
+    );
+    const dragDuration = Date.now() - dragStartTime;
+    
+    // Consider it a drag if moved more than 5px or took longer than 200ms
+    if (dragDistance > 5 || dragDuration > 200) {
+      isDragging = true;
+    }
   }
 
   function closePurchaseForm() {
@@ -294,7 +330,7 @@
   </div>
 
   <!-- SVG Canvas -->
-  <div class="svg-container" on:mousemove={handleMouseMove}>
+  <div class="svg-container" on:mousemove={handleMouseMove} on:mousedown={handleMouseDown} on:mouseup={handleMouseUp}>
     <svg
       bind:this={svgElement}
       width={canvasWidth}
@@ -358,8 +394,8 @@
           class:sold={block.sold}
           role="button"
           tabindex="0"
-          on:click={() => handleBlockClick(block)}
-          on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBlockClick(block); }}
+          on:click={(e) => handleBlockClick(block, e)}
+          on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBlockClick(block, e); }}
         />
       </g>
     {/each}
