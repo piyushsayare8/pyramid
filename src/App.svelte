@@ -71,6 +71,7 @@
   let showPurchaseForm = false;
   let selectedBlock = null;
   let soldSlots = [];
+  let mousePosition = { x: 0, y: 0 };
 
   async function loadSoldSlots() {
     try {
@@ -127,17 +128,23 @@
     };
   });
 
-  function handleBlockHover(block) {
+  function handleBlockHover(block, event) {
     hoveredBlock = block;
+    mousePosition = { x: event.clientX, y: event.clientY };
   }
 
   function handleBlockLeave() {
     hoveredBlock = null;
   }
 
+  function handleMouseMove(event) {
+    if (hoveredBlock) {
+      mousePosition = { x: event.clientX, y: event.clientY };
+    }
+  }
+
   function handleBlockClick(block) {
     selectedBlock = block;
-    showPurchaseForm = true;
   }
 
   function closePurchaseForm() {
@@ -215,8 +222,8 @@
     <button on:click={zoomToKing} class="control-btn gold">
       <span>⭐</span> View Top Block
     </button>
-    <button on:click={() => { selectedBlock = blocks.find(b => b.id === 5050) || null; showPurchaseForm = true; }} class="control-btn premium">
-      <span>🏆</span> Own Top Block
+    <button on:click={() => { selectedBlock = blocks.find(b => b.id === 5050) || null; }} class="control-btn premium">
+      <span>🏆</span> View Top Block
     </button>
   </div>
 
@@ -236,15 +243,47 @@
     </div>
   </div>
 
-  <!-- Tooltip -->
-  {#if hoveredBlock}
-    <div class="tooltip">
-      <div class="tooltip-row">Block #{hoveredBlock.id}</div>
-      <div class="tooltip-price">{formatPrice(hoveredBlock.price)}</div>
-      <div class="tooltip-pos">Row {hoveredBlock.row}, Position {hoveredBlock.col + 1}</div>
-      {#if hoveredBlock.id === 5050}
-        <div class="tooltip-king">⭐ Top Block - $5,000</div>
-      {/if}
+  <!-- Block Modal -->
+  {#if selectedBlock}
+    <div class="block-modal-backdrop" on:click|self={() => selectedBlock = null}>
+      <div class="block-modal">
+        <div class="modal-header">
+          <h2>Block #{selectedBlock.id}</h2>
+          <button class="close-btn" on:click={() => selectedBlock = null}>✕</button>
+        </div>
+        
+        <div class="modal-content">
+          <div class="block-info">
+            <div class="price-display">{formatPrice(selectedBlock.price)}</div>
+            <div class="location">Row {selectedBlock.row}, Position {selectedBlock.col + 1}</div>
+            {#if selectedBlock.id === 5050}
+              <div class="special-badge">⭐ Top Block - Most Valuable!</div>
+            {/if}
+          </div>
+          
+          {#if selectedBlock.sold}
+            <div class="owner-section">
+              <h3>👤 Owner Information</h3>
+              <div class="owner-name">{selectedBlock.owner}</div>
+              {#if selectedBlock.message}
+                <div class="owner-message">💬 {selectedBlock.message}</div>
+              {/if}
+              <div class="purchased-badge">✅ Purchased</div>
+            </div>
+          {:else}
+            <div class="purchase-section">
+              <h3>🏆 Purchase This Block</h3>
+              <PurchaseForm 
+                slotId={selectedBlock.id} 
+                price={selectedBlock.price}
+                apiUrl={API_URL}
+                on:success={handlePurchaseSuccess}
+                on:close={() => selectedBlock = null}
+              />
+            </div>
+          {/if}
+        </div>
+      </div>
     </div>
   {/if}
 
@@ -255,13 +294,14 @@
   </div>
 
   <!-- SVG Canvas -->
-  <svg
-    bind:this={svgElement}
-    width={canvasWidth}
-    height={canvasHeight}
-    viewBox="0 0 {canvasWidth} {canvasHeight}"
-    class="pyramid-svg"
-  >
+  <div class="svg-container" on:mousemove={handleMouseMove}>
+    <svg
+      bind:this={svgElement}
+      width={canvasWidth}
+      height={canvasHeight}
+      viewBox="0 0 {canvasWidth} {canvasHeight}"
+      class="pyramid-svg"
+    >
     <!-- Gradient definitions -->
     <defs>
       <!-- King glow filter -->
@@ -301,7 +341,7 @@
     {#each blocks as block (block.id)}
       <g
         class="block-group"
-        on:mouseenter={() => handleBlockHover(block)}
+        on:mouseenter={(e) => handleBlockHover(block, e)}
         on:mouseleave={handleBlockLeave}
         role="button"
         tabindex="0"
@@ -324,18 +364,19 @@
       </g>
     {/each}
   </svg>
+  </div>
   
-  <!-- Purchase Form Modal -->
-  {#if showPurchaseForm && selectedBlock}
-    <PurchaseForm 
-      slotId={selectedBlock.id} 
-      price={selectedBlock.price}
-      apiUrl={API_URL}
-      on:success={handlePurchaseSuccess}
-      on:close={closePurchaseForm}
-    />
+  <!-- Floating Block Number Tooltip -->
+  {#if hoveredBlock}
+    <div 
+      class="floating-tooltip" 
+      style="left: {mousePosition.x + 15}px; top: {mousePosition.y - 30}px;"
+    >
+      Block #{hoveredBlock.id}
+    </div>
   {/if}
-</div>
+  
+  </div>
 
 <style>
   .pyramid-container {
@@ -344,6 +385,40 @@
     position: relative;
     overflow: hidden;
     background: linear-gradient(180deg, #0a0a0f 0%, #151520 50%, #0a0a0f 100%);
+  }
+
+  .svg-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }
+
+  /* Floating Tooltip */
+  .floating-tooltip {
+    position: fixed;
+    background: rgba(15, 15, 25, 0.95);
+    border: 1px solid #FFD700;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #FFD700;
+    font-size: 0.9rem;
+    font-weight: bold;
+    pointer-events: none;
+    z-index: 1000;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    animation: tooltipFadeIn 0.2s ease-out;
+  }
+
+  @keyframes tooltipFadeIn {
+    from { 
+      opacity: 0; 
+      transform: translateY(-5px); 
+    }
+    to { 
+      opacity: 1; 
+      transform: translateY(0); 
+    }
   }
 
   .pyramid-svg {
@@ -356,9 +431,10 @@
 
   /* Block styles */
   .block {
-    transition: fill 0.2s ease;
+    transition: all 0.2s ease;
     stroke-width: 1px;
     stroke: #333;
+    cursor: pointer;
   }
 
   .block.standard {
@@ -377,14 +453,14 @@
   }
 
   .block.sold {
-    opacity: 0.7;
+    opacity: 0.6;
     fill: #2a2a3a !important;
     cursor: not-allowed;
   }
 
-  .block.hovered {
+  .block.hovered:not(.sold) {
     fill: #3a3a5a !important;
-    filter: brightness(1.3);
+    filter: brightness(1.2);
   }
 
   .block-group {
@@ -471,11 +547,17 @@
     background: linear-gradient(135deg, rgba(255, 107, 107, 0.1), rgba(255, 107, 107, 0.05));
   }
 
-  .control-btn.premium:hover {
-    background: rgba(255, 107, 107, 0.2);
-    border-color: #FF8787;
-    color: #FF8787;
-    box-shadow: 0 0 15px rgba(255, 107, 107, 0.3);
+  .control-btn.purchase {
+    border-color: #4CAF50;
+    color: #4CAF50;
+    background: linear-gradient(135deg, rgba(76, 175, 80, 0.1), rgba(76, 175, 80, 0.05));
+  }
+
+  .control-btn.purchase:hover {
+    background: rgba(76, 175, 80, 0.2);
+    border-color: #66BB6A;
+    color: #66BB6A;
+    box-shadow: 0 0 15px rgba(76, 175, 80, 0.3);
   }
 
   /* Legend */
@@ -582,5 +664,177 @@
     display: flex;
     align-items: center;
     gap: 5px;
+  }
+
+  /* Unified Block Modal */
+  .block-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(5px);
+    z-index: 100;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  .block-modal {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    width: 90%;
+    max-width: 500px;
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+    overflow: hidden;
+    position: relative;
+    animation: slideUp 0.3s ease-out;
+  }
+
+  .modal-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: radial-gradient(circle at top, #1e1e2d 0%, var(--bg-panel) 100%);
+  }
+
+  .modal-header h2 {
+    margin: 0;
+    font-family: 'Georgia', serif;
+    font-size: 1.5rem;
+    color: white;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .close-btn:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .modal-content {
+    padding: 25px;
+  }
+
+  .block-info {
+    text-align: center;
+    margin-bottom: 25px;
+  }
+
+  .price-display {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #FFD700;
+    margin-bottom: 10px;
+  }
+
+  .location {
+    color: #888;
+    margin-bottom: 15px;
+  }
+
+  .special-badge {
+    background: rgba(255, 215, 0, 0.2);
+    color: #FFD700;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid #FFD700;
+    font-size: 0.9rem;
+    display: inline-block;
+  }
+
+  .owner-section {
+    text-align: center;
+  }
+
+  .owner-section h3 {
+    margin-top: 0;
+    color: white;
+    margin-bottom: 15px;
+  }
+
+  .owner-name {
+    font-size: 1.2rem;
+    color: white;
+    margin-bottom: 10px;
+  }
+
+  .owner-message {
+    color: #aaa;
+    margin-bottom: 10px;
+    font-style: italic;
+  }
+
+  .purchased-badge {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4CAF50;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid #4CAF50;
+    font-size: 0.9rem;
+    display: inline-block;
+  }
+
+  .purchase-section {
+    text-align: center;
+  }
+
+  .purchase-section h3 {
+    margin-top: 0;
+    color: white;
+    margin-bottom: 20px;
+  }
+
+  .selected-block-info {
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+    margin-top: 20px;
+  }
+
+  .selected-block-info h3 {
+    margin-top: 0;
+    color: white;
+  }
+
+  .selected-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .price-display {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #FFD700;
+  }
+
+  .location {
+    color: #888;
+  }
+
+  /* Animations */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
   }
 </style>

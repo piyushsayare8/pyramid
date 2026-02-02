@@ -223,7 +223,7 @@
     box-shadow: 0 20px 50px rgba(0,0,0,0.7);
     overflow: hidden;
     position: relative;
-    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: slideUp 0.3s ease-out;
   }
 
   /* --- HEADER --- */
