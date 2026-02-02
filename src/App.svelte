@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import panzoom from 'panzoom';
+  import PurchaseForm from './PurchaseForm.svelte';
 
   // Configuration
   const blockSize = 40;
@@ -9,43 +10,56 @@
   const canvasHeight = 6000;
   const centerX = canvasWidth / 2;
 
+  // API Configuration
+  const API_URL = import.meta.env.VITE_API_URL || 'https://pyramid-backend.piyushsayare8.workers.dev';
+
   // Generate all blocks
   let blocks = [];
-  let currentPrice = 5050;
 
-  // Get border style based on price
-  function getBorderStyle(price) {
-    if (price === 5050) return 'king'; // The King - special glow
-    if (price >= 4000) return 'gold';
-    if (price >= 1000) return 'silver';
-    return 'standard';
+  // Get border style based on row number
+  function getBorderStyle(row) {
+    if (row <= 45) return 'gold';      // Row 1-45 = gold
+    if (row <= 85) return 'silver';   // Row 46-85 = silver  
+    return 'standard';                 // Row 86-100 = standard
   }
 
-  // Get fill color based on price tier
-  function getFillColor(price) {
-    if (price === 5050) return '#1a1a2e'; // King - dark royal
-    if (price >= 4000) return '#2d2d44'; // Gold tier
-    if (price >= 1000) return '#252535'; // Silver tier
-    return '#1e1e28'; // Standard tier
+  // Get fill color based on row number
+  function getFillColor(row) {
+    if (row <= 45) return '#2d2d44'; // Row 1-45 = gold tier
+    if (row <= 85) return '#252535'; // Row 46-85 = silver tier
+    return '#1e1e28'; // Row 86-100 = standard tier
   }
 
-  // Generate the pyramid blocks
+  // Generate the pyramid blocks - Price decreases from top to bottom, Row 1 (1 block) at top = highest price
+  
+  // Start from the top (highest prices) and go down
+  let blockId = 5050; // Start with Block #5050 at the top
+  
   for (let row = 1; row <= totalRows; row++) {
     let rowWidth = row * blockSize;
     let startX = centerX - (rowWidth / 2);
 
     for (let col = 0; col < row; col++) {
+      // Price: Block #5050 (top) = $5,000, then decreasing by $0.50 per block
+      let price;
+      if (blockId === 5050) {
+        price = 5000; // The top block costs $5,000
+      } else {
+        price = 1 + (blockId - 1) * 0.5; // Block #1 = $1, Block #5049 = $4,999.50
+      }
+      
       blocks.push({
-        id: currentPrice,
+        id: blockId,
         x: startX + (col * blockSize),
-        y: (row - 1) * blockSize + 50, // Start from top with padding
+        y: (row - 1) * blockSize + 50, // Pyramid: Row 1 (1 block) at top, Row 100 (100 blocks) at bottom
         row: row,
         col: col,
-        price: currentPrice,
-        borderStyle: getBorderStyle(currentPrice),
-        fillColor: getFillColor(currentPrice)
+        price: price,
+        borderStyle: getBorderStyle(row),
+        fillColor: getFillColor(row)
       });
-      currentPrice--;
+      
+      blockId--;
     }
   }
 
@@ -54,8 +68,33 @@
   let panzoomInstance;
   let hoveredBlock = null;
   let initialScale = 1;
+  let showPurchaseForm = false;
+  let selectedBlock = null;
+  let soldSlots = [];
+
+  async function loadSoldSlots() {
+    try {
+      const response = await fetch(`${API_URL}/api/grid`);
+      if (response.ok) {
+        const data = await response.json();
+        soldSlots = data;
+        // Mark blocks as sold
+        blocks = blocks.map(block => {
+          const soldSlot = soldSlots.find(s => s.slot_number === block.id);
+          if (soldSlot) {
+            return { ...block, sold: true, owner: soldSlot.owner_name, message: soldSlot.owner_message };
+          }
+          return block;
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load sold slots:', error);
+    }
+  }
 
   onMount(() => {
+    // Load sold slots from backend
+    loadSoldSlots();
     // Calculate initial scale to fit pyramid on screen
     const containerRect = containerElement.getBoundingClientRect();
     const pyramidHeight = totalRows * blockSize + 100;
@@ -96,6 +135,32 @@
     hoveredBlock = null;
   }
 
+  function handleBlockClick(block) {
+    selectedBlock = block;
+    showPurchaseForm = true;
+  }
+
+  function closePurchaseForm() {
+    showPurchaseForm = false;
+    selectedBlock = null;
+  }
+
+  function handlePurchaseSuccess(event) {
+    // Update the block in the local state to show it's sold
+    const blockIndex = blocks.findIndex(b => b.id === event.detail.slotId);
+    if (blockIndex !== -1) {
+      blocks[blockIndex] = {
+        ...blocks[blockIndex],
+        sold: true,
+        owner: event.detail.owner,
+        message: event.detail.message
+      };
+    }
+    // Reload sold slots to get latest data
+    loadSoldSlots();
+    closePurchaseForm();
+  }
+
   function formatPrice(price) {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -121,14 +186,14 @@
   function zoomToKing() {
     if (panzoomInstance) {
       const containerRect = containerElement.getBoundingClientRect();
-      const kingX = centerX;
-      const kingY = 75;
+      const topX = centerX;
+      const topY = 75;
       
       panzoomInstance.zoomAbs(0, 0, 3);
       setTimeout(() => {
         panzoomInstance.moveTo(
-          containerRect.width / 2 - kingX * 3,
-          containerRect.height / 2 - kingY * 3
+          containerRect.width / 2 - topX * 3,
+          containerRect.height / 2 - topY * 3
         );
       }, 50);
     }
@@ -148,27 +213,26 @@
       <span>⟲</span> Reset View
     </button>
     <button on:click={zoomToKing} class="control-btn gold">
-      <span>👑</span> View The King
+      <span>⭐</span> View Top Block
+    </button>
+    <button on:click={() => { selectedBlock = blocks.find(b => b.id === 5050) || null; showPurchaseForm = true; }} class="control-btn premium">
+      <span>🏆</span> Own Top Block
     </button>
   </div>
 
   <!-- Legend -->
   <div class="legend">
     <div class="legend-item">
-      <div class="legend-box king"></div>
-      <span>The King ($5,050)</span>
-    </div>
-    <div class="legend-item">
       <div class="legend-box gold"></div>
-      <span>Gold Tier ($4,000-$5,049)</span>
+      <span>Gold Tier (Rows 1-45)</span>
     </div>
     <div class="legend-item">
       <div class="legend-box silver"></div>
-      <span>Silver Tier ($1,000-$3,999)</span>
+      <span>Silver Tier (Rows 46-85)</span>
     </div>
     <div class="legend-item">
       <div class="legend-box standard"></div>
-      <span>Standard ($1-$999)</span>
+      <span>Standard Tier (Rows 86-100)</span>
     </div>
   </div>
 
@@ -178,8 +242,8 @@
       <div class="tooltip-row">Block #{hoveredBlock.id}</div>
       <div class="tooltip-price">{formatPrice(hoveredBlock.price)}</div>
       <div class="tooltip-pos">Row {hoveredBlock.row}, Position {hoveredBlock.col + 1}</div>
-      {#if hoveredBlock.price === 5050}
-        <div class="tooltip-king">👑 THE KING</div>
+      {#if hoveredBlock.id === 5050}
+        <div class="tooltip-king">⭐ Top Block - $5,000</div>
       {/if}
     </div>
   {/if}
@@ -251,20 +315,26 @@
           fill={block.fillColor}
           class="block {block.borderStyle}"
           class:hovered={hoveredBlock?.id === block.id}
+          class:sold={block.sold}
+          role="button"
+          tabindex="0"
+          on:click={() => handleBlockClick(block)}
+          on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBlockClick(block); }}
         />
-        
-        <!-- King crown emoji -->
-        {#if block.price === 5050}
-          <text
-            x={block.x + blockSize / 2}
-            y={block.y + blockSize / 2 + 6}
-            text-anchor="middle"
-            class="king-crown"
-          >👑</text>
-        {/if}
       </g>
     {/each}
   </svg>
+  
+  <!-- Purchase Form Modal -->
+  {#if showPurchaseForm && selectedBlock}
+    <PurchaseForm 
+      slotId={selectedBlock.id} 
+      price={selectedBlock.price}
+      apiUrl={API_URL}
+      on:success={handlePurchaseSuccess}
+      on:close={closePurchaseForm}
+    />
+  {/if}
 </div>
 
 <style>
@@ -306,11 +376,10 @@
     stroke-width: 3px;
   }
 
-  .block.king {
-    stroke: url(#kingGradient);
-    stroke-width: 4px;
-    filter: url(#kingGlow);
-    fill: #1a1a2e;
+  .block.sold {
+    opacity: 0.7;
+    fill: #2a2a3a !important;
+    cursor: not-allowed;
   }
 
   .block.hovered {
@@ -396,6 +465,19 @@
     box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
   }
 
+  .control-btn.premium {
+    border-color: #FF6B6B;
+    color: #FF6B6B;
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.1), rgba(255, 107, 107, 0.05));
+  }
+
+  .control-btn.premium:hover {
+    background: rgba(255, 107, 107, 0.2);
+    border-color: #FF8787;
+    color: #FF8787;
+    box-shadow: 0 0 15px rgba(255, 107, 107, 0.3);
+  }
+
   /* Legend */
   .legend {
     position: absolute;
@@ -425,12 +507,6 @@
     width: 24px;
     height: 24px;
     border-radius: 4px;
-  }
-
-  .legend-box.king {
-    background: #1a1a2e;
-    border: 3px solid #FFD700;
-    box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
   }
 
   .legend-box.gold {

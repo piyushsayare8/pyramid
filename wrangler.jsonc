@@ -1,0 +1,24 @@
+{
+	"name": "pyramid-backend",
+	"main": "src/index.ts",
+	"compatibility_date": "2024-09-23",
+	// 1. Database Connection (D1)
+	"d1_databases": [
+		{
+			"binding": "PyramidDB",
+			"database_name": "pyramid-db",
+			"database_id": "046e1206-02b5-4454-81e6-085bdfb67dc5"
+		}
+	],
+	// 2. Storage Connection (R2)
+	"r2_buckets": [
+		{
+			"binding": "HistoryPyramid",
+			"bucket_name": "pyramid-history-bucket"
+		}
+	],
+	// 3. Monitoring
+	"observability": {
+		"enabled": true
+	}
+}
