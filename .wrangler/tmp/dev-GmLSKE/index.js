@@ -380,32 +380,33 @@ var hrtime = /* @__PURE__ */ Object.assign(/* @__PURE__ */ __name(function hrtim
 import { EventEmitter } from "node:events";
 
 // node_modules/unenv/dist/runtime/node/internal/tty/read-stream.mjs
-var ReadStream = class {
+import { Socket } from "node:net";
+var ReadStream = class extends Socket {
   static {
     __name(this, "ReadStream");
   }
   fd;
-  isRaw = false;
-  isTTY = false;
   constructor(fd) {
+    super();
     this.fd = fd;
   }
+  isRaw = false;
   setRawMode(mode) {
     this.isRaw = mode;
     return this;
   }
+  isTTY = false;
 };
 
 // node_modules/unenv/dist/runtime/node/internal/tty/write-stream.mjs
-var WriteStream = class {
+import { Socket as Socket2 } from "node:net";
+var WriteStream = class extends Socket2 {
   static {
     __name(this, "WriteStream");
   }
   fd;
-  columns = 80;
-  rows = 24;
-  isTTY = false;
   constructor(fd) {
+    super();
     this.fd = fd;
   }
   clearLine(dir3, callback) {
@@ -433,21 +434,10 @@ var WriteStream = class {
   getWindowSize() {
     return [this.columns, this.rows];
   }
-  write(str, encoding, cb) {
-    if (str instanceof Uint8Array) {
-      str = new TextDecoder().decode(str);
-    }
-    try {
-      console.log(str);
-    } catch {
-    }
-    cb && typeof cb === "function" && cb();
-    return false;
-  }
+  columns = 80;
+  rows = 24;
+  isTTY = false;
 };
-
-// node_modules/unenv/dist/runtime/node/internal/process/node-version.mjs
-var NODE_VERSION = "22.14.0";
 
 // node_modules/unenv/dist/runtime/node/internal/process/process.mjs
 var Process = class _Process extends EventEmitter {
@@ -469,7 +459,6 @@ var Process = class _Process extends EventEmitter {
       }
     }
   }
-  // --- event emitter ---
   emitWarning(warning, type, code) {
     console.warn(`${code ? `[${code}] ` : ""}${type ? `${type}: ` : ""}${warning}`);
   }
@@ -479,7 +468,6 @@ var Process = class _Process extends EventEmitter {
   listeners(eventName) {
     return super.listeners(eventName);
   }
-  // --- stdio (lazy initializers) ---
   #stdin;
   #stdout;
   #stderr;
@@ -492,7 +480,6 @@ var Process = class _Process extends EventEmitter {
   get stderr() {
     return this.#stderr ??= new WriteStream(2);
   }
-  // --- cwd ---
   #cwd = "/";
   chdir(cwd2) {
     this.#cwd = cwd2;
@@ -500,7 +487,6 @@ var Process = class _Process extends EventEmitter {
   cwd() {
     return this.#cwd;
   }
-  // --- dummy props and getters ---
   arch = "";
   platform = "";
   argv = [];
@@ -511,10 +497,10 @@ var Process = class _Process extends EventEmitter {
   pid = 200;
   ppid = 100;
   get version() {
-    return `v${NODE_VERSION}`;
+    return "";
   }
   get versions() {
-    return { node: NODE_VERSION };
+    return {};
   }
   get allowedNodeEnvironmentFlags() {
     return /* @__PURE__ */ new Set();
@@ -558,12 +544,10 @@ var Process = class _Process extends EventEmitter {
   resourceUsage() {
     return {};
   }
-  // --- noop methods ---
   ref() {
   }
   unref() {
   }
-  // --- unimplemented methods ---
   umask() {
     throw createNotImplementedError("process.umask");
   }
@@ -618,7 +602,6 @@ var Process = class _Process extends EventEmitter {
   binding() {
     throw createNotImplementedError("process.binding");
   }
-  // --- attached interfaces ---
   permission = { has: /* @__PURE__ */ notImplemented("process.permission.has") };
   report = {
     directory: "",
@@ -643,10 +626,8 @@ var Process = class _Process extends EventEmitter {
     heapTotal: 0,
     heapUsed: 0
   }), { rss: /* @__PURE__ */ __name(() => 0, "rss") });
-  // --- undefined props ---
   mainModule = void 0;
   domain = void 0;
-  // optional
   send = void 0;
   exitCode = void 0;
   channel = void 0;
@@ -660,7 +641,6 @@ var Process = class _Process extends EventEmitter {
   setgid = void 0;
   setgroups = void 0;
   setuid = void 0;
-  // internals
   _events = void 0;
   _eventsCount = void 0;
   _exiting = void 0;
@@ -687,149 +667,119 @@ var Process = class _Process extends EventEmitter {
 // node_modules/@cloudflare/unenv-preset/dist/runtime/node/process.mjs
 var globalProcess = globalThis["process"];
 var getBuiltinModule = globalProcess.getBuiltinModule;
-var workerdProcess = getBuiltinModule("node:process");
-var isWorkerdProcessV2 = globalThis.Cloudflare.compatibilityFlags.enable_nodejs_process_v2;
+var { exit, platform, nextTick } = getBuiltinModule(
+  "node:process"
+);
 var unenvProcess = new Process({
   env: globalProcess.env,
-  // `hrtime` is only available from workerd process v2
-  hrtime: isWorkerdProcessV2 ? workerdProcess.hrtime : hrtime,
-  // `nextTick` is available from workerd process v1
-  nextTick: workerdProcess.nextTick
-});
-var { exit, features, platform } = workerdProcess;
-var {
-  // Always implemented by workerd
-  env,
-  // Only implemented in workerd v2
-  hrtime: hrtime3,
-  // Always implemented by workerd
+  hrtime,
   nextTick
-} = unenvProcess;
+});
 var {
-  _channel,
-  _disconnect,
-  _events,
-  _eventsCount,
-  _handleQueue,
-  _maxListeners,
-  _pendingMessage,
-  _send,
-  assert: assert2,
-  disconnect,
-  mainModule
-} = unenvProcess;
-var {
-  // @ts-expect-error `_debugEnd` is missing typings
-  _debugEnd,
-  // @ts-expect-error `_debugProcess` is missing typings
-  _debugProcess,
-  // @ts-expect-error `_exiting` is missing typings
-  _exiting,
-  // @ts-expect-error `_fatalException` is missing typings
-  _fatalException,
-  // @ts-expect-error `_getActiveHandles` is missing typings
-  _getActiveHandles,
-  // @ts-expect-error `_getActiveRequests` is missing typings
-  _getActiveRequests,
-  // @ts-expect-error `_kill` is missing typings
-  _kill,
-  // @ts-expect-error `_linkedBinding` is missing typings
-  _linkedBinding,
-  // @ts-expect-error `_preload_modules` is missing typings
-  _preload_modules,
-  // @ts-expect-error `_rawDebug` is missing typings
-  _rawDebug,
-  // @ts-expect-error `_startProfilerIdleNotifier` is missing typings
-  _startProfilerIdleNotifier,
-  // @ts-expect-error `_stopProfilerIdleNotifier` is missing typings
-  _stopProfilerIdleNotifier,
-  // @ts-expect-error `_tickCallback` is missing typings
-  _tickCallback,
   abort,
   addListener,
   allowedNodeEnvironmentFlags,
+  hasUncaughtExceptionCaptureCallback,
+  setUncaughtExceptionCaptureCallback,
+  loadEnvFile,
+  sourceMapsEnabled,
   arch,
   argv,
   argv0,
-  availableMemory,
-  // @ts-expect-error `binding` is missing typings
-  binding,
-  channel,
   chdir,
   config,
   connected,
   constrainedMemory,
+  availableMemory,
   cpuUsage,
   cwd,
   debugPort,
   dlopen,
-  // @ts-expect-error `domain` is missing typings
-  domain,
+  disconnect,
   emit,
   emitWarning,
+  env,
   eventNames,
   execArgv,
   execPath,
-  exitCode,
   finalization,
+  features,
   getActiveResourcesInfo,
-  getegid,
-  geteuid,
-  getgid,
-  getgroups,
   getMaxListeners,
-  getuid,
-  hasUncaughtExceptionCaptureCallback,
-  // @ts-expect-error `initgroups` is missing typings
-  initgroups,
+  hrtime: hrtime3,
   kill,
-  listenerCount,
   listeners,
-  loadEnvFile,
+  listenerCount,
   memoryUsage,
-  // @ts-expect-error `moduleLoadList` is missing typings
-  moduleLoadList,
-  off,
   on,
+  off,
   once,
-  // @ts-expect-error `openStdin` is missing typings
-  openStdin,
-  permission,
   pid,
   ppid,
   prependListener,
   prependOnceListener,
   rawListeners,
-  // @ts-expect-error `reallyExit` is missing typings
-  reallyExit,
-  ref,
   release,
   removeAllListeners,
   removeListener,
   report,
   resourceUsage,
+  setMaxListeners,
+  setSourceMapsEnabled,
+  stderr,
+  stdin,
+  stdout,
+  title,
+  throwDeprecation,
+  traceDeprecation,
+  umask,
+  uptime,
+  version,
+  versions,
+  domain,
+  initgroups,
+  moduleLoadList,
+  reallyExit,
+  openStdin,
+  assert: assert2,
+  binding,
   send,
+  exitCode,
+  channel,
+  getegid,
+  geteuid,
+  getgid,
+  getgroups,
+  getuid,
   setegid,
   seteuid,
   setgid,
   setgroups,
-  setMaxListeners,
-  setSourceMapsEnabled,
   setuid,
-  setUncaughtExceptionCaptureCallback,
-  sourceMapsEnabled,
-  stderr,
-  stdin,
-  stdout,
-  throwDeprecation,
-  title,
-  traceDeprecation,
-  umask,
-  unref,
-  uptime,
-  version,
-  versions
-} = isWorkerdProcessV2 ? workerdProcess : unenvProcess;
+  permission,
+  mainModule,
+  _events,
+  _eventsCount,
+  _exiting,
+  _maxListeners,
+  _debugEnd,
+  _debugProcess,
+  _fatalException,
+  _getActiveHandles,
+  _getActiveRequests,
+  _kill,
+  _preload_modules,
+  _rawDebug,
+  _startProfilerIdleNotifier,
+  _stopProfilerIdleNotifier,
+  _tickCallback,
+  _disconnect,
+  _handleQueue,
+  _pendingMessage,
+  _channel,
+  _send,
+  _linkedBinding
+} = unenvProcess;
 var _process = {
   abort,
   addListener,
