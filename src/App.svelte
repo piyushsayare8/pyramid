@@ -43,18 +43,19 @@
     '#00CEC9', // Turquoise
   ];
 
-  // Calculate text size based on content length (matching PurchaseForm)
-  function calculateTextSize(text, maxChars = 50) {
-    if (!text) return 12;
+  // Calculate text size based on content length (updated for 80 char limit)
+  function calculateTextSize(text, maxChars = 80) {
+    if (!text) return 10;
     const length = text.length;
-    if (length <= 5) return 12;
-    if (length <= 10) return 11;
-    if (length <= 15) return 10;
-    if (length <= 20) return 9;
-    if (length <= 25) return 8;
-    if (length <= 35) return 7;
-    if (length <= 45) return 6;
-    return 5;
+    if (length <= 5) return 10;
+    if (length <= 10) return 9;
+    if (length <= 15) return 8;
+    if (length <= 20) return 7;
+    if (length <= 30) return 6;
+    if (length <= 40) return 5;
+    if (length <= 50) return 4;
+    if (length <= 65) return 3;
+    return 2;
   }
 
   // Calculate inner content area (excluding borders) - matching PurchaseForm logic
@@ -71,10 +72,11 @@
     };
   }
 
-  // Calculate text wrapping and line breaks for SVG
+  // Calculate text wrapping and line breaks for SVG (enhanced for better centering)
   function wrapTextForSVG(text, maxWidth, fontSize, fontFamily) {
     if (!text) return [];
     
+    // Handle very long text by breaking at character level if needed
     const words = text.split(' ');
     const lines = [];
     let currentLine = '';
@@ -85,14 +87,39 @@
     context.font = `${fontSize}px ${fontFamily}`;
     
     for (const word of words) {
-      const testLine = currentLine ? `${currentLine} ${word}` : word;
-      const metrics = context.measureText(testLine);
-      
-      if (metrics.width > maxWidth && currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
+      // If single word is too long, break it down
+      if (word.length > 15) {
+        // Push current line if exists
+        if (currentLine) {
+          lines.push(currentLine);
+          currentLine = '';
+        }
+        
+        // Break long word into smaller chunks
+        let remainingWord = word;
+        while (remainingWord.length > 0) {
+          let chunk = remainingWord;
+          let chunkLength = remainingWord.length;
+          
+          // Find the largest chunk that fits
+          while (chunkLength > 5 && context.measureText(chunk).width > maxWidth) {
+            chunkLength = Math.floor(chunkLength * 0.8);
+            chunk = remainingWord.substring(0, chunkLength);
+          }
+          
+          lines.push(chunk);
+          remainingWord = remainingWord.substring(chunkLength);
+        }
       } else {
-        currentLine = testLine;
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const metrics = context.measureText(testLine);
+        
+        if (metrics.width > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
       }
     }
     
@@ -686,23 +713,28 @@
           on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleBlockClick(block, e); }}
         />
         
-        <!-- Display text on sold blocks with wrapping -->
+        <!-- Display text on sold blocks with enhanced wrapping and centering -->
         {#if block.sold && block.text}
           {@const fontSize = calculateTextSize(block.text)}
           {@const fontFamily = (block.font || 'Arial') + ', sans-serif'}
           {@const borderStyle = getBorderStyle(Math.ceil(block.id / 51))}
           {@const innerDimensions = getInnerDimensions(borderStyle)}
-          {@const lines = wrapTextForSVG(block.text, innerDimensions.width, fontSize, fontFamily)}
-          {@const lineHeight = fontSize * 1.2}
-          {@const adjustedLineHeight = Math.min(lineHeight, innerDimensions.height / lines.length)}
-          {@const startY = block.y + (blockSize / 2) - ((lines.length - 1) * adjustedLineHeight / 2)}
+          {@const padding = 2} // Add small padding for better fit
+          {@const maxWidth = innerDimensions.width - (padding * 2)}
+          {@const lines = wrapTextForSVG(block.text, maxWidth, fontSize, fontFamily)}
+          {@const lineHeight = fontSize * 1.1} // Tighter line height for better fit
+          {@const maxLines = Math.floor(innerDimensions.height / lineHeight)}
+          {@const displayLines = lines.slice(0, maxLines)}
+          {@const adjustedLineHeight = Math.min(lineHeight, innerDimensions.height / displayLines.length)}
+          {@const totalTextHeight = displayLines.length * adjustedLineHeight}
+          {@const startY = block.y + (blockSize / 2) - (totalTextHeight / 2) + (adjustedLineHeight / 2)}
           
-          {#each lines as line, i}
+          {#each displayLines as line, i}
             <text
               x={block.x + (blockSize / 2)}
               y={startY + (i * adjustedLineHeight)}
               text-anchor="middle"
-              dominant-baseline="middle"
+              dominant-baseline="central"
               fill="white"
               font-size={fontSize}
               font-weight="bold"
@@ -713,6 +745,23 @@
               {line}
             </text>
           {/each}
+          
+          <!-- Show indicator if text was truncated -->
+          {#if lines.length > maxLines}
+            <text
+              x={block.x + (blockSize / 2)}
+              y={block.y + blockSize - 5}
+              text-anchor="middle"
+              dominant-baseline="central"
+              fill="rgba(255, 255, 255, 0.7)"
+              font-size="8"
+              font-weight="bold"
+              font-family="Arial, sans-serif"
+              style="text-shadow: 0 0 2px rgba(0, 0, 0, 0.8); pointer-events: none;"
+            >
+              ...
+            </text>
+          {/if}
         {/if}
       </g>
     {/each}

@@ -34,7 +34,7 @@
   let errorMessage = '';
 
   const MAX_MSG_CHARS = 50; 
-  const MAX_TEXT_CHARS = 50;
+  const MAX_TEXT_CHARS = 80;
 
   // Font options for users to choose from
   const fontOptions = [
@@ -95,18 +95,19 @@
     return '1px';
   }
 
-  // Calculate text size based on content length
-  function calculateTextSize(text, maxChars = 50) {
-    if (!text) return 12;
+  // Calculate text size based on content length (updated for 80 char limit)
+  function calculateTextSize(text, maxChars = 80) {
+    if (!text) return 10;
     const length = text.length;
-    if (length <= 5) return 12;
-    if (length <= 10) return 11;
-    if (length <= 15) return 10;
-    if (length <= 20) return 9;
-    if (length <= 25) return 8;
-    if (length <= 35) return 7;
-    if (length <= 45) return 6;
-    return 5;
+    if (length <= 5) return 10;
+    if (length <= 10) return 9;
+    if (length <= 15) return 8;
+    if (length <= 20) return 7;
+    if (length <= 30) return 6;
+    if (length <= 40) return 5;
+    if (length <= 50) return 4;
+    if (length <= 65) return 3;
+    return 2;
   }
 
   // Calculate inner content area (excluding borders)
