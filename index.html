@@ -116,11 +116,10 @@
     const PYRAMID_WIDTH = TOTAL_ROWS * BLOCK_SIZE; 
     const PYRAMID_HEIGHT = TOTAL_ROWS * BLOCK_SIZE; 
     
-    // "Safe Zone" Padding: Space to lift the pyramid over the bottom button, but no more.
-    const BOTTOM_SAFE_ZONE = 120; 
-    const TOP_HEADER_ZONE = 100;
+    // SAFE ZONES (Invisible Walls)
+    const BOTTOM_SAFE_ZONE = 120; // 120px space at bottom
+    const TOP_HEADER_ZONE = 100;  // 100px space at top
     
-    // --- API & KEYS ---
     const API_URL = 'https://pyramid-backend.piyushsayare8.workers.dev';
     const RAZORPAY_KEY_ID = 'rzp_test_YOUR_KEY_HERE'; 
     const TEST_MODE = true; 
@@ -133,8 +132,8 @@
     let currentBlock = null;
     let dragStartPos = { x: 0, y: 0 };
     let minZoomLevel = 0.1;
+    let textures = {}; // Store global textures
     
-    // Form State
     let formData = { name: '', message: '', link: '', color: '#FFD700', text: '', font: 'Arial', imageUrl: '' };
     const COLORS = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8'];
     const FONTS = ['Arial', 'Georgia', 'Courier New', 'Comic Sans MS', 'Impact', 'Verdana'];
@@ -151,12 +150,13 @@
         });
         document.getElementById('canvas-container').appendChild(app.canvas);
 
-        const textures = createTextures(app);
+        // Generate Both Sets of Textures (Dark & White)
+        textures = createTextures(app);
         
         container = new PIXI.Container();
         app.stage.addChild(container);
         
-        buildGrid(textures);
+        buildGrid();
         
         calculateMinZoom();
         setupInteraction();
@@ -175,25 +175,33 @@
     }
 
     function createTextures(app) {
-        const makeRect = (color, stroke, width) => {
-            const g = new PIXI.Graphics().rect(0, 0, BLOCK_SIZE-GAP, BLOCK_SIZE-GAP).fill(color).stroke({ width: width, color: stroke });
+        const makeRect = (fillColor, strokeColor, width) => {
+            const g = new PIXI.Graphics()
+                .rect(0, 0, BLOCK_SIZE-GAP, BLOCK_SIZE-GAP)
+                .fill(fillColor)
+                .stroke({ width: width, color: strokeColor });
             return app.renderer.generateTexture(g);
         };
+
         return {
+            // UNSOLD Textures (Dark Backgrounds)
             gold: makeRect(0x2d2d44, 0xFFD700, 3),
             silver: makeRect(0x252535, 0xC0C0C0, 2),
-            standard: makeRect(0x1e1e28, 0x444444, 1)
+            standard: makeRect(0x1e1e28, 0x444444, 1),
+
+            // SOLD Textures (White Backgrounds for Accurate Tinting)
+            gold_sold: makeRect(0xFFFFFF, 0xFFD700, 3),
+            silver_sold: makeRect(0xFFFFFF, 0xC0C0C0, 2),
+            standard_sold: makeRect(0xFFFFFF, 0x444444, 1)
         };
     }
 
-    function buildGrid(textures) {
+    function buildGrid() {
         let blockId = TOTAL_BLOCKS;
-        // Start exactly at 0 to make math perfect
         const startY = 0; 
 
         for (let row = 1; row <= TOTAL_ROWS; row++) {
             const startX = -(row * BLOCK_SIZE) / 2; 
-            // Shift up by one block size so Row 1 is at Y=0
             const yPos = (row - 1) * BLOCK_SIZE;
 
             for (let col = 0; col < row; col++) {
@@ -202,6 +210,7 @@
                 if (row <= 45) type = 'gold';
                 else if (row <= 85) type = 'silver';
 
+                // Default: Use Unsold (Dark) Texture
                 const slot = new PIXI.Sprite(textures[type]);
                 slot.x = startX + (col * BLOCK_SIZE);
                 slot.y = yPos;
@@ -224,10 +233,44 @@
         }
     }
 
-    // --- 4. INTERACTION LOGIC (The "Invisible Wall") ---
+    // --- 4. VISUAL UPDATE LOGIC ---
+    function updateSlotVisuals(localData, serverData) {
+        localData.sold = true; 
+        localData.ownerData = serverData;
+        
+        // 1. Switch to "Sold" Texture (White Base)
+        // This ensures White * Tint = Accurate Color
+        const soldTextureKey = localData.tier + '_sold';
+        localData.sprite.texture = textures[soldTextureKey];
+
+        // 2. Apply Accurate Tint
+        localData.sprite.tint = serverData.owner_color.replace('#', '0x');
+        
+        // 3. Add Text
+        if (serverData.owner_text) {
+            // Remove old text if exists
+            if (localData.sprite.children.length > 0) localData.sprite.removeChildren();
+
+            const style = new PIXI.TextStyle({ 
+                fontFamily: 'Arial', 
+                fontSize: 10, 
+                fontWeight: 'bold', 
+                fill: '#ffffff', 
+                dropShadow: true, 
+                dropShadowDistance: 1, 
+                align: 'center' 
+            });
+            const text = new PIXI.Text(serverData.owner_text, style);
+            text.anchor.set(0.5); 
+            text.x = (BLOCK_SIZE - GAP) / 2; 
+            text.y = (BLOCK_SIZE - GAP) / 2;
+            localData.sprite.addChild(text);
+        }
+    }
+
+    // --- 5. INTERACTION LOGIC (Invisible Wall) ---
     
     function calculateMinZoom() {
-        // Calculate Scale to fit everything + 100px padding
         const scaleX = app.screen.width / (PYRAMID_WIDTH + 200); 
         const scaleY = app.screen.height / (PYRAMID_HEIGHT + 300);
         minZoomLevel = Math.min(scaleX, scaleY);
@@ -235,36 +278,29 @@
 
     function constrainPyramid() {
         // 1. Zoom Clamp
-        if (container.scale.x < minZoomLevel) {
-            container.scale.set(minZoomLevel);
-        }
+        if (container.scale.x < minZoomLevel) container.scale.set(minZoomLevel);
 
         const pyWidth = PYRAMID_WIDTH * container.scale.x;
         const pyHeight = PYRAMID_HEIGHT * container.scale.y;
 
-        // 2. Horizontal Center Lock
+        // 2. Horizontal Wall
         if (pyWidth < app.screen.width) {
             container.x = app.screen.width / 2;
         } else {
-            // Horizontal Wall
             const minX = app.screen.width - (pyWidth / 2) - 100;
             const maxX = (pyWidth / 2) + 100;
             if (container.x < minX) container.x = minX;
             if (container.x > maxX) container.x = maxX;
         }
 
-        // 3. Vertical Wall (The Magic Logic)
+        // 3. Vertical Invisible Wall
         if (pyHeight < app.screen.height) {
-            // If smaller than screen, center perfectly
             container.y = (app.screen.height - pyHeight) / 2;
         } else {
-            // If larger, clamp strictly
-            
-            // Wall 1: Top of Pyramid cannot go below Header (TOP_HEADER_ZONE)
+            // Top Wall (Header)
             const maxY = TOP_HEADER_ZONE; 
             
-            // Wall 2: Bottom of Pyramid cannot go above Screen Bottom (minus safe zone)
-            // This prevents "going to black space"
+            // Bottom Wall (Prevent Void)
             const minY = app.screen.height - pyHeight - BOTTOM_SAFE_ZONE;
             
             if (container.y < minY) container.y = minY;
@@ -298,7 +334,6 @@
             const mouseX = e.clientX;
             const mouseY = e.clientY;
 
-            // Anchor zoom to mouse pointer
             const worldPos = {
                 x: (mouseX - container.x) / container.scale.x,
                 y: (mouseY - container.y) / container.scale.y
@@ -308,7 +343,6 @@
             const clampedScale = Math.min(Math.max(newScale, minZoomLevel), 4.0);
             container.scale.set(clampedScale);
 
-            // Re-calculate position
             const newScreenPos = {
                 x: worldPos.x * container.scale.x + container.x,
                 y: worldPos.y * container.scale.y + container.y
@@ -322,7 +356,7 @@
         }, { passive: false });
     }
 
-    // --- 5. EVENTS & MODALS ---
+    // --- 6. MODALS & FORMS ---
     function onHover(e, slot, data) {
         if(isDragging) return;
         slot.alpha = 0.8;
@@ -505,17 +539,6 @@
             closeModal();
             alert(`🎉 Congratulations! Block #${currentBlock.id} is yours forever.`);
         } catch (e) { alert("Error: " + e.message); }
-    }
-
-    function updateSlotVisuals(localData, serverData) {
-        localData.sold = true; localData.ownerData = serverData;
-        localData.sprite.tint = serverData.owner_color.replace('#', '0x');
-        if (serverData.owner_text) {
-            const style = new PIXI.TextStyle({ fontFamily: 'Arial', fontSize: 10, fontWeight: 'bold', fill: '#ffffff', dropShadow: true, dropShadowDistance: 1, align: 'center' });
-            const text = new PIXI.Text(serverData.owner_text, style);
-            text.anchor.set(0.5); text.x = (BLOCK_SIZE - GAP) / 2; text.y = (BLOCK_SIZE - GAP) / 2;
-            localData.sprite.addChild(text);
-        }
     }
 
     async function loadData() {
