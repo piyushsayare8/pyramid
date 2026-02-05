@@ -123,16 +123,27 @@
     const API_URL = 'https://pyramid-backend.piyushsayare8.workers.dev';
     const RAZORPAY_KEY_ID = 'rzp_test_YOUR_KEY_HERE'; 
     const TEST_MODE = true; 
+    
+    // OPTIMIZATION: Reduce text resolution on mobile to prevent crashes
+    const isMobile = window.innerWidth < 800;
+    const TEXT_RESOLUTION = isMobile ? 1.2 : 2.0;
 
     // --- 2. STATE ---
     let app, container;
     let blocksData = new Map();
+    // Optimization: Spatial lookup Grid [row][col] -> data
+    let gridLookup = []; 
+    let hoveredBlock = null;
+
     let isDragging = false;
     let dragStart = { x: 0, y: 0 };
     let currentBlock = null;
-    let dragStartPos = { x: 0, y: 0 };
     let minZoomLevel = 0.1;
-    let textures = {}; // Store global textures
+    let textures = {}; 
+    
+    // --- OPTIMIZATION STATE ---
+    let isProcessing = false; // Lock: Prevents overlapping simulations/fetches
+    let textTextureCache = new Map(); // Cache: Reuses textures for identical text
     
     let formData = { name: '', message: '', link: '', color: '#FFD700', text: '', font: 'Arial', imageUrl: '' };
     const COLORS = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8'];
@@ -150,16 +161,19 @@
         });
         document.getElementById('canvas-container').appendChild(app.canvas);
 
-        // Generate Both Sets of Textures (Dark & White)
         textures = createTextures(app);
         
         container = new PIXI.Container();
+        // Optimization: Container handles events, not individual sprites (Saves 40,000 listeners)
+        container.eventMode = 'static'; 
         app.stage.addChild(container);
         
         buildGrid();
         
         calculateMinZoom();
         setupInteraction();
+        
+        // Start loading real data immediately
         loadData();
         
         resetView();
@@ -184,12 +198,9 @@
         };
 
         return {
-            // UNSOLD Textures (Dark Backgrounds)
             gold: makeRect(0x2d2d44, 0xFFD700, 3),
             silver: makeRect(0x252535, 0xC0C0C0, 2),
             standard: makeRect(0x1e1e28, 0x444444, 1),
-
-            // SOLD Textures (White Backgrounds for Accurate Tinting)
             gold_sold: makeRect(0xFFFFFF, 0xFFD700, 3),
             silver_sold: makeRect(0xFFFFFF, 0xC0C0C0, 2),
             standard_sold: makeRect(0xFFFFFF, 0x444444, 1)
@@ -198,34 +209,30 @@
 
     function buildGrid() {
         let blockId = TOTAL_BLOCKS;
-        const startY = 0; 
+        
+        // Initialize Grid Lookup Array
+        gridLookup = new Array(TOTAL_ROWS + 1).fill(null).map(() => []);
 
         for (let row = 1; row <= TOTAL_ROWS; row++) {
             const startX = -(row * BLOCK_SIZE) / 2; 
             const yPos = (row - 1) * BLOCK_SIZE;
 
             for (let col = 0; col < row; col++) {
-                
                 let type = 'standard';
                 if (row <= 45) type = 'gold';
                 else if (row <= 85) type = 'silver';
 
-                // Default: Use Unsold (Dark) Texture
                 const slot = new PIXI.Sprite(textures[type]);
                 slot.x = startX + (col * BLOCK_SIZE);
                 slot.y = yPos;
                 
                 let price = blockId === TOTAL_BLOCKS ? 5000 : 1 + (blockId - 1) * 0.5;
 
-                const data = { id: blockId, price, tier: type, row, sold: false, sprite: slot };
+                const data = { id: blockId, price, tier: type, row, col, sold: false, sprite: slot };
+                
+                // Store in both Map (for ID access) and Grid (for click access)
                 blocksData.set(blockId, data);
-
-                slot.eventMode = 'static';
-                slot.cursor = 'pointer';
-                slot.on('pointerover', (e) => onHover(e, slot, data));
-                slot.on('pointerout', () => onHoverOut(slot));
-                slot.on('pointerdown', (e) => app.dragStartPos = {x: e.global.x, y: e.global.y}); 
-                slot.on('pointerup', (e) => onClick(e, data));
+                gridLookup[row][col] = data;
 
                 container.addChild(slot);
                 blockId--;
@@ -233,43 +240,78 @@
         }
     }
 
-    // --- 4. VISUAL UPDATE LOGIC ---
+    // --- 4. OPTIMIZED VISUAL ENGINE (The "Engine Room") ---
     function updateSlotVisuals(localData, serverData) {
         localData.sold = true; 
         localData.ownerData = serverData;
         
-        // 1. Switch to "Sold" Texture (White Base)
-        // This ensures White * Tint = Accurate Color
         const soldTextureKey = localData.tier + '_sold';
         localData.sprite.texture = textures[soldTextureKey];
-
-        // 2. Apply Accurate Tint
         localData.sprite.tint = serverData.owner_color.replace('#', '0x');
         
-        // 3. Add Text
-        if (serverData.owner_text) {
-            // Remove old text if exists
-            if (localData.sprite.children.length > 0) localData.sprite.removeChildren();
+        // Remove existing text to prevent leaks
+        if (localData.sprite.children.length > 0) {
+            localData.sprite.removeChildren();
+        }
 
-            const style = new PIXI.TextStyle({ 
-                fontFamily: 'Arial', 
-                fontSize: 10, 
-                fontWeight: 'bold', 
-                fill: '#ffffff', 
-                dropShadow: true, 
-                dropShadowDistance: 1, 
-                align: 'center' 
-            });
-            const text = new PIXI.Text(serverData.owner_text, style);
-            text.anchor.set(0.5); 
-            text.x = (BLOCK_SIZE - GAP) / 2; 
-            text.y = (BLOCK_SIZE - GAP) / 2;
-            localData.sprite.addChild(text);
+        if (serverData.owner_text) {
+            const textStr = serverData.owner_text.substring(0, 80);
+            
+            // --- CRITICAL PERFORMANCE UPGRADE: TEXTURE CACHING ---
+            // 1. Check if we have already drawn this EXACT word.
+            // 2. If yes, reuse the GPU texture. (0ms cost)
+            // 3. If no, create it once and save it. (5ms cost)
+            
+            let targetTexture = textTextureCache.get(textStr);
+
+            if (!targetTexture) {
+                // Generate Texture (CPU Heavy - Done only once per unique phrase)
+                const VIRTUAL_FONT_SIZE = 48; 
+                const APPROX_CHAR_WIDTH = VIRTUAL_FONT_SIZE * 0.7; 
+                const idealSquareSide = Math.sqrt(textStr.length) * APPROX_CHAR_WIDTH;
+                const MIN_WIDTH = VIRTUAL_FONT_SIZE * 5; 
+                const targetWrapWidth = Math.max(idealSquareSide, MIN_WIDTH);
+
+                const style = new PIXI.TextStyle({ 
+                    fontFamily: 'Arial', fontSize: VIRTUAL_FONT_SIZE, fontWeight: '900', 
+                    fill: '#ffffff', stroke: { color: '#000000', width: 6 }, 
+                    dropShadow: true, dropShadowColor: '#000000', dropShadowBlur: 3, dropShadowDistance: 2,
+                    align: 'center', wordWrap: true, wordWrapWidth: targetWrapWidth, lineHeight: VIRTUAL_FONT_SIZE * 1.1, padding: 10
+                });
+
+                const tempText = new PIXI.Text({ text: textStr, style });
+                tempText.resolution = TEXT_RESOLUTION; // Optimized resolution
+                
+                targetTexture = app.renderer.generateTexture(tempText);
+                
+                // Limit Cache Size to prevent memory overflow (keep last 1000 unique phrases)
+                if(textTextureCache.size > 1000) {
+                    const firstKey = textTextureCache.keys().next().value;
+                    textTextureCache.delete(firstKey); 
+                }
+                textTextureCache.set(textStr, targetTexture);
+            }
+
+            // Create Sprite from Texture (GPU Light)
+            const textSprite = new PIXI.Sprite(targetTexture);
+            textSprite.anchor.set(0.5);
+
+            // Calculate scaling to fit the box
+            const BOX_SIZE = BLOCK_SIZE - GAP; 
+            const SAFE_ZONE = 34; 
+            const scaleX = SAFE_ZONE / textSprite.width;
+            const scaleY = SAFE_ZONE / textSprite.height;
+            const finalScale = Math.min(scaleX, scaleY); 
+
+            textSprite.scale.set(finalScale);
+            textSprite.x = BOX_SIZE / 2; 
+            textSprite.y = BOX_SIZE / 2;
+            
+            localData.sprite.addChild(textSprite);
         }
     }
 
-    // --- 5. INTERACTION LOGIC (Invisible Wall) ---
-    
+    // --- 5. INTERACTION LOGIC (Spatial Hashing) ---
     function calculateMinZoom() {
         const scaleX = app.screen.width / (PYRAMID_WIDTH + 200); 
         const scaleY = app.screen.height / (PYRAMID_HEIGHT + 300);
@@ -277,13 +319,11 @@
     }
 
     function constrainPyramid() {
-        // 1. Zoom Clamp
         if (container.scale.x < minZoomLevel) container.scale.set(minZoomLevel);
 
         const pyWidth = PYRAMID_WIDTH * container.scale.x;
         const pyHeight = PYRAMID_HEIGHT * container.scale.y;
 
-        // 2. Horizontal Wall
         if (pyWidth < app.screen.width) {
             container.x = app.screen.width / 2;
         } else {
@@ -293,41 +333,85 @@
             if (container.x > maxX) container.x = maxX;
         }
 
-        // 3. Vertical Invisible Wall
         if (pyHeight < app.screen.height) {
             container.y = (app.screen.height - pyHeight) / 2;
         } else {
-            // Top Wall (Header)
             const maxY = TOP_HEADER_ZONE; 
-            
-            // Bottom Wall (Prevent Void)
             const minY = app.screen.height - pyHeight - BOTTOM_SAFE_ZONE;
-            
             if (container.y < minY) container.y = minY;
             if (container.y > maxY) container.y = maxY;
         }
+    }
+
+    // O(1) Lookup - No Loops
+    function getBlockAtGlobalPos(globalX, globalY) {
+        const localPoint = container.toLocal({x: globalX, y: globalY});
+        
+        // Grid Math
+        const r = Math.floor(localPoint.y / BLOCK_SIZE) + 1;
+        if (r < 1 || r > TOTAL_ROWS) return null;
+        
+        const rowWidth = r * BLOCK_SIZE;
+        const rowStartX = -rowWidth / 2;
+        const c = Math.floor((localPoint.x - rowStartX) / BLOCK_SIZE);
+        if (c < 0 || c >= r) return null;
+        
+        return gridLookup[r] ? gridLookup[r][c] : null;
     }
 
     function setupInteraction() {
         app.stage.eventMode = 'static';
         app.stage.hitArea = app.screen;
         
+        // Pan Logic
         app.stage.on('pointerdown', (e) => {
             isDragging = true;
             dragStart = { x: e.global.x - container.x, y: e.global.y - container.y };
+            app.dragStartPos = { x: e.global.x, y: e.global.y }; 
         });
         
         app.stage.on('pointermove', (e) => {
+            const globalX = e.global.x;
+            const globalY = e.global.y;
+
             if(isDragging) {
-                container.x = e.global.x - dragStart.x;
-                container.y = e.global.y - dragStart.y;
+                container.x = globalX - dragStart.x;
+                container.y = globalY - dragStart.y;
                 constrainPyramid();
+                return; 
+            }
+
+            const targetBlock = getBlockAtGlobalPos(globalX, globalY);
+
+            if (targetBlock !== hoveredBlock) {
+                if (hoveredBlock) onHoverOut(hoveredBlock);
+                if (targetBlock) onHover(globalX, globalY, targetBlock);
+                hoveredBlock = targetBlock;
+            } else if (targetBlock) {
+                updateTooltipPos(globalX, globalY);
             }
         });
         
-        app.stage.on('pointerup', () => isDragging = false);
+        app.stage.on('pointerup', (e) => {
+            if (isDragging) {
+                isDragging = false;
+                
+                const dx = e.global.x - (app.dragStartPos?.x || 0);
+                const dy = e.global.y - (app.dragStartPos?.y || 0);
+                
+                if (Math.sqrt(dx*dx + dy*dy) < 5) {
+                   const targetBlock = getBlockAtGlobalPos(e.global.x, e.global.y);
+                   if (targetBlock) {
+                       currentBlock = targetBlock;
+                       openModal();
+                   }
+                }
+            }
+        });
+        
         app.stage.on('pointerupoutside', () => isDragging = false);
 
+        // Wheel Zoom
         document.getElementById('canvas-container').addEventListener('wheel', (e) => {
             e.preventDefault();
             const zoomSpeed = 0.001;
@@ -352,35 +436,30 @@
             container.y -= (newScreenPos.y - mouseY);
             
             constrainPyramid();
-
         }, { passive: false });
     }
 
-    // --- 6. MODALS & FORMS ---
-    function onHover(e, slot, data) {
-        if(isDragging) return;
-        slot.alpha = 0.8;
+    // --- 6. VISUAL FEEDBACK (Tooltip) ---
+    function onHover(gx, gy, data) {
+        data.sprite.alpha = 0.8;
         const tooltip = document.getElementById('tooltip');
         tooltip.style.display = 'block';
         tooltip.textContent = data.sold ? `${data.ownerData.owner_name} (#${data.id})` : `Block #${data.id} - $${data.price.toFixed(2)}`;
-        tooltip.style.left = (e.global.x + 15) + 'px';
-        tooltip.style.top = (e.global.y - 30) + 'px';
+        updateTooltipPos(gx, gy);
     }
 
-    function onHoverOut(slot) {
-        slot.alpha = 1.0;
+    function updateTooltipPos(gx, gy) {
+        const tooltip = document.getElementById('tooltip');
+        tooltip.style.left = (gx + 15) + 'px';
+        tooltip.style.top = (gy - 30) + 'px';
+    }
+
+    function onHoverOut(data) {
+        if(data && data.sprite) data.sprite.alpha = 1.0;
         document.getElementById('tooltip').style.display = 'none';
     }
 
-    function onClick(e, data) {
-        const dx = e.global.x - (app.dragStartPos?.x || 0);
-        const dy = e.global.y - (app.dragStartPos?.y || 0);
-        if(Math.sqrt(dx*dx + dy*dy) > 5) return; 
-        
-        currentBlock = data;
-        openModal();
-    }
-
+    // --- 7. MODALS & FORMS ---
     window.openModal = () => {
         const modal = document.getElementById('modal-backdrop');
         const content = document.getElementById('modal-content');
@@ -431,8 +510,8 @@
                 </div>
                 <div class="col-right">
                     <div class="input-group">
-                        <label>Block Text (Max 5 chars)</label>
-                        <input type="text" maxlength="5" placeholder="HI" oninput="updateForm('text', this.value)">
+                        <label>Block Text (Max 80 chars)</label>
+                        <textarea maxlength="80" placeholder="HI" oninput="updateForm('text', this.value)" style="width:100%; height:80px; background:rgba(10,10,15,0.5); border:2px solid #333; color:white; padding:10px; border-radius:8px;"></textarea>
                     </div>
                     <div class="input-group">
                         <label>Font</label>
@@ -450,7 +529,7 @@
                     <div class="preview-container">
                         <label>Preview</label>
                         <div id="block-preview" class="preview-block" style="background-color: #FFD700; border: 3px solid #FFD700;">
-                            <span id="preview-text" style="font-family: Arial">123</span>
+                            <span id="preview-text" style="font-family: Arial; font-size:12px; text-align:center; overflow:hidden;">123</span>
                         </div>
                     </div>
                 </div>
@@ -497,7 +576,12 @@
             document.getElementById('block-preview').style.backgroundColor = value;
             document.getElementById('block-preview').style.borderColor = value;
         }
-        if (field === 'text') document.getElementById('preview-text').textContent = value || (currentBlock.id % 1000);
+        if (field === 'text') {
+            const t = document.getElementById('preview-text');
+            t.textContent = value || (currentBlock.id % 1000);
+            if (value.length > 20) t.style.fontSize = "8px";
+            else t.style.fontSize = "12px";
+        }
         if (field === 'font') document.getElementById('preview-text').style.fontFamily = value;
     };
 
@@ -541,25 +625,85 @@
         } catch (e) { alert("Error: " + e.message); }
     }
 
+    // --- OPTIMIZED: CLOUDFLARE/SERVER DATA LOADING ---
     async function loadData() {
+        if(isProcessing) return; // Prevent double loads
+        isProcessing = true;
+        
         try {
             const res = await fetch(`${API_URL}/api/grid`);
             if (!res.ok) throw new Error();
+            
             const soldSlots = await res.json();
-            soldSlots.forEach(slot => { const d = blocksData.get(slot.slot_number); if (d) updateSlotVisuals(d, slot); });
-        } catch (e) { console.log("Simulating offline mode"); }
+            
+            // Chunking: Process 40 items per frame (Safe for production)
+            let index = 0;
+            const batchSize = 40;
+
+            function processBatch() {
+                const limit = Math.min(index + batchSize, soldSlots.length);
+                for (let i = index; i < limit; i++) {
+                    const slotData = soldSlots[i];
+                    const localBlock = blocksData.get(slotData.slot_number);
+                    if (localBlock) {
+                        updateSlotVisuals(localBlock, slotData);
+                    }
+                }
+                index += batchSize;
+                
+                if (index < soldSlots.length) {
+                    requestAnimationFrame(processBatch);
+                } else {
+                    isProcessing = false; // Release lock
+                }
+            }
+            processBatch();
+            
+        } catch (e) { 
+            console.log("Simulating offline mode / Error loading data"); 
+            isProcessing = false;
+        }
     }
 
     window.resetView = () => {
         calculateMinZoom();
         container.scale.set(minZoomLevel);
-        constrainPyramid(); // Snap to center
+        constrainPyramid();
     };
 
+    // --- OPTIMIZED: SIMULATION MODE (Safe & Fast) ---
     window.fillRandom = () => {
+        if (isProcessing) return; // Block multiple clicks
+        isProcessing = true;
+
+        const candidates = [];
         blocksData.forEach(d => {
-            if(!d.sold && Math.random() > 0.95) updateSlotVisuals(d, { owner_name: "Sim", owner_color: COLORS[Math.floor(Math.random()*COLORS.length)], owner_text: "SIM" });
+            if(!d.sold && Math.random() > 0.95) candidates.push(d);
         });
+
+        let index = 0;
+        const batchSize = 50; 
+
+        function processBatch() {
+            const limit = Math.min(index + batchSize, candidates.length);
+            for (let i = index; i < limit; i++) {
+                const d = candidates[i];
+                const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+                updateSlotVisuals(d, { 
+                    owner_name: "Sim", 
+                    owner_color: randomColor, 
+                    owner_text: "My name is piyush and i am here to rule" 
+                });
+            }
+            index += batchSize;
+            
+            if (index < candidates.length) {
+                requestAnimationFrame(processBatch);
+            } else {
+                isProcessing = false; // Unlock
+            }
+        }
+        processBatch();
     };
     
     window.viewRandom = () => {
