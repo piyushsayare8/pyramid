@@ -5,30 +5,23 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "build": "vite build",
-    "preview": "vite preview",
-    "deploy": "wrangler deploy",
-    "deploy-frontend": "vite build && wrangler pages deploy dist --project-name=pyramid-5050"
-  },
-  "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260131.0",
-    "@sveltejs/vite-plugin-svelte": "^3.1.0",
-    "svelte": "^4.2.12",
-    "vite": "^5.2.0",
-    "wrangler": "^4.62.0"
+    "deploy": "wrangler pages deploy . --project-name=pyramid-5050"
   },
   "dependencies": {
     "hono": "^4.6.0",
-    "panzoom": "^9.4.3",
     "pixi.js": "^8.16.0"
   },
-  "description": "",
-  "main": "vite.config.js",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260131.0",
+    "wrangler": "^4.62.0"
+  },
+  "description": "The History Pyramid - 5,050 Blocks of Digital History",
+  "main": "index.html",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/piyushsayare8/pyramid.git"
   },
-  "keywords": [],
+  "keywords": ["pyramid", "nft", "digital", "history", "pixijs"],
   "author": "",
   "license": "ISC",
   "bugs": {
