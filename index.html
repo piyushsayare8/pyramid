@@ -1,29 +1,506 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>The Pyramid - 3,003 Blocks of History</title>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The History Pyramid | 11,325 Blocks</title>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      html, body {
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background: #0a0a0f;
-      }
-      #app {
-        width: 100%;
-        height: 100%;
-      }
+        /* --- 1. CORE LAYOUT --- */
+        body { margin: 0; overflow: hidden; background: #0a0a0f; font-family: 'Arial', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        
+        /* --- 2. UI OVERLAYS (Copied & Optimized from App.svelte) --- */
+        .ui-layer { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .interactive { pointer-events: auto; }
+
+        /* Header */
+        .header { position: absolute; top: 20px; left: 20px; text-align: left; }
+        .header h1 { font-family: 'Georgia', serif; font-size: 2.5rem; color: #FFD700; margin: 0; text-shadow: 0 0 20px rgba(255, 215, 0, 0.5); letter-spacing: 4px; }
+        .subtitle { font-size: 1rem; color: #888; text-transform: uppercase; letter-spacing: 4px; margin-top: 5px; }
+
+        /* Controls */
+        .controls { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
+        .btn { background: rgba(20,20,30,0.9); border: 1px solid #444; color: #ccc; padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 0.9rem; }
+        .btn:hover { border-color: #FFD700; color: #FFD700; background: rgba(255, 215, 0, 0.1); }
+        .btn-fill { border-color: #FF6B6B; color: #FF6B6B; }
+        .btn-fill:hover { background: rgba(255, 107, 107, 0.1); box-shadow: 0 0 15px rgba(255, 107, 107, 0.3); }
+
+        /* Center Button */
+        .center-controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); }
+        .profile-btn { background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.05)); border: 2px solid #FFD700; color: #FFD700; padding: 10px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 0 15px rgba(255,215,0,0.2); }
+        .profile-btn:hover { transform: translateX(-50%) translateY(-2px); box-shadow: 0 0 25px rgba(255,215,0,0.4); }
+
+        /* Floating Tooltip */
+        .tooltip { 
+            position: absolute; display: none; padding: 8px 12px; 
+            background: rgba(15, 15, 25, 0.95); border: 1px solid #FFD700; 
+            border-radius: 8px; color: #FFD700; font-weight: bold; 
+            font-size: 0.9rem; pointer-events: none; z-index: 20; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5); transform: translateY(-100%);
+        }
+
+        /* --- 3. MODAL (Exact Replica of Svelte Modal) --- */
+        .modal-backdrop { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px); z-index: 100; 
+            justify-content: center; align-items: center; 
+        }
+        .modal { 
+            background: #151520; border: 1px solid #444; width: 90%; max-width: 500px; 
+            border-radius: 20px; overflow: hidden; box-shadow: 0 25px 60px rgba(0,0,0,0.8);
+            animation: slideUp 0.3s ease-out; position: relative;
+        }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        .modal-header { padding: 20px; background: linear-gradient(to bottom, #1e1e2d, #151520); border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h2 { margin: 0; color: white; font-family: 'Georgia', serif; }
+        .close-icon { color: #888; cursor: pointer; font-size: 1.5rem; background: none; border: none; }
+        .close-icon:hover { color: white; }
+
+        .modal-body { padding: 25px; color: white; text-align: center; }
+        
+        /* Modal Content Styles */
+        .price-tag { font-size: 2.5rem; color: #FFD700; font-weight: bold; margin: 10px 0; text-shadow: 0 0 10px rgba(255,215,0,0.3); }
+        .detail-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 0.95rem; }
+        .detail-label { color: #888; }
+        .detail-value { font-weight: bold; }
+        .gold-text { color: #FFD700; }
+        .silver-text { color: #C0C0C0; }
+        
+        .purchase-btn { width: 100%; margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #4CAF50, #45a049); border: none; border-radius: 12px; color: white; font-weight: bold; font-size: 1.1rem; cursor: pointer; }
+        .purchase-btn:hover { filter: brightness(1.1); box-shadow: 0 0 20px rgba(76, 175, 80, 0.3); }
+
+        /* Owner Profile Styles */
+        .owner-avatar { width: 120px; height: 120px; border-radius: 50%; border: 3px solid #FFD700; margin: 0 auto 15px; background: #333; overflow: hidden; position: relative; }
+        .owner-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .crown { font-size: 2rem; margin-bottom: 10px; animation: float 3s infinite ease-in-out; }
+        @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+        .message-box { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; border-left: 3px solid #FFD700; text-align: left; margin: 15px 0; font-style: italic; color: #ddd; }
+        
+        /* Instructions */
+        .instructions { position: absolute; bottom: 20px; right: 20px; color: #555; font-size: 0.8rem; display: flex; gap: 15px; }
+        
+        /* Loading Overlay */
+        #loader { position: fixed; top:0; left:0; width:100%; height:100%; background: #0a0a0f; z-index: 999; display: flex; justify-content: center; align-items: center; color: #FFD700; font-family: Georgia; font-size: 1.5rem; transition: opacity 0.5s; }
     </style>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+</head>
+<body>
+
+    <div id="loader">Building Pyramid...</div>
+
+    <div id="canvas-container"></div>
+
+    <div class="ui-layer">
+        <div class="header interactive">
+            <h1>THE PYRAMID</h1>
+            <div class="subtitle">11,325 Blocks of History</div>
+        </div>
+
+        <div class="controls interactive">
+            <button class="btn" onclick="resetView()">⟲ Reset</button>
+            <button class="btn btn-fill" onclick="fillRandom()">🎨 Simulation Mode</button>
+        </div>
+
+        <div class="center-controls interactive">
+            <button class="profile-btn" onclick="viewRandom()">👤 View Random Profile</button>
+        </div>
+
+        <div class="instructions">
+            <span>🖱️ Scroll to zoom</span>
+            <span>✋ Drag to pan</span>
+        </div>
+    </div>
+
+    <div id="tooltip" class="tooltip">Block #5050</div>
+
+    <div id="modal-backdrop" class="modal-backdrop interactive" onclick="closeModal(event)">
+        <div class="modal" id="modal-content">
+            </div>
+    </div>
+
+<script type="module">
+    import * as PIXI from './node_modules/pixi.js/dist/pixi.mjs';
+    
+    // --- CONFIGURATION ---
+    const TOTAL_ROWS = 150;
+    const BLOCK_SIZE = 40;
+    const GAP = 2; // Matches Svelte "block size - 2" visual
+    const API_URL = 'https://pyramid-backend.piyushsayare8.workers.dev/api/grid';
+    
+    // --- STATE ---
+    let app, container;
+    let blocksData = new Map(); // Stores data by ID
+    let isDragging = false;
+    let dragStart = { x: 0, y: 0 };
+    let viewX = 0, viewY = 0, viewScale = 0.5;
+
+    // --- COLOR PALETTE (Source: App.svelte) ---
+    const COLORS = [
+        '#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', 
+        '#FECA57', '#B983FF', '#FD79A8', '#A29BFE', '#6C5CE7',
+        '#00B894', '#E17055', '#74B9FF', '#A29BFE', '#FF7675'
+    ];
+
+    // --- INITIALIZATION ---
+    async function init() {
+        try {
+            console.log('🚀 Initializing History Pyramid...');
+            
+            // 1. Setup PixiJS (God Tier Config)
+            console.log('📱 Setting up PixiJS Application...');
+            app = new PIXI.Application();
+            await app.init({
+                resizeTo: window,
+                backgroundColor: 0x0a0a0f, // Dark background
+                resolution: window.devicePixelRatio || 2, // Retina Sharpness
+                autoDensity: true,
+                antialias: true
+            });
+            document.getElementById('canvas-container').appendChild(app.canvas);
+            console.log('✅ PixiJS canvas added to DOM');
+
+            // 2. Create GPU Textures (Gold/Silver/Standard Borders)
+            console.log('🎨 Creating GPU textures...');
+            const textures = createTextures(app);
+            console.log('✅ Textures created');
+
+            // 3. Build Pyramid
+            console.log('🔺 Building pyramid grid...');
+            container = new PIXI.Container();
+            app.stage.addChild(container);
+            
+            buildGrid(textures);
+            console.log('✅ Pyramid built with 11,325 blocks');
+
+            // 4. Setup Interaction
+            console.log('🖱️ Setting up interactions...');
+            setupInteraction();
+            console.log('✅ Interactions ready');
+
+            // 5. Fetch Data (with fallback)
+            console.log('🌐 Loading data...');
+            loadData();
+
+            // 6. Center Camera
+            console.log('📷 Centering camera...');
+            resetView();
+
+            // Remove Loader
+            console.log('🎉 Pyramid ready!');
+            document.getElementById('loader').style.opacity = '0';
+            setTimeout(() => document.getElementById('loader').remove(), 500);
+        } catch (error) {
+            console.error('❌ Failed to initialize pyramid:', error);
+            document.getElementById('loader').innerHTML = 'Error loading pyramid. Check console for details.';
+        }
+    }
+
+    function createTextures(app) {
+        // We create 3 square textures programmatically to avoid loading images
+        const makeRect = (color, strokeColor, strokeWidth) => {
+            const g = new PIXI.Graphics();
+            g.rect(0, 0, BLOCK_SIZE - GAP, BLOCK_SIZE - GAP);
+            g.fill(color);
+            g.stroke({ width: strokeWidth, color: strokeColor });
+            return app.renderer.generateTexture(g);
+        };
+
+        return {
+            gold: makeRect(0x2d2d44, 0xFFD700, 3),    // Gold Tier
+            silver: makeRect(0x252535, 0xC0C0C0, 2),  // Silver Tier
+            standard: makeRect(0x1e1e28, 0x444444, 1) // Standard Tier
+        };
+    }
+
+    function buildGrid(textures) {
+        let blockId = 11325; // Start top (150 rows = 11,325 blocks)
+        const startY = 100;
+
+        for (let row = 1; row <= TOTAL_ROWS; row++) {
+            const rowWidth = row * BLOCK_SIZE;
+            const startX = -rowWidth / 2; // Center horizontally at 0
+
+            for (let col = 0; col < row; col++) {
+                // Determine Tier
+                let type = 'standard';
+                if (row <= 45) type = 'gold';
+                else if (row <= 85) type = 'silver';
+
+                // Create Sprite
+                const slot = new PIXI.Sprite(textures[type]);
+                slot.x = startX + (col * BLOCK_SIZE);
+                slot.y = startY + (row * BLOCK_SIZE);
+                
+                // Meta Data
+                slot.blockId = blockId;
+                slot.originalTint = 0xFFFFFF; // Store for hover reset
+                
+                // Calculate Price: Bottom to top - $0.1 at bottom, increasing upwards
+                const price = blockId === 11325 ? 5000 : 0.1 + (blockId - 1) * 0.1;
+                
+                // Store Data Logic
+                const data = {
+                    id: blockId,
+                    price: price,
+                    tier: type,
+                    row: row,
+                    sold: false,
+                    sprite: slot
+                };
+                blocksData.set(blockId, data);
+
+                // Interaction
+                slot.eventMode = 'static';
+                slot.cursor = 'pointer';
+                
+                // Events
+                slot.on('pointerover', (e) => onHover(e, slot, data));
+                slot.on('pointerout', () => onHoverOut(slot));
+                slot.on('pointerdown', (e) => onDown(e)); // For dragging check
+                slot.on('pointerup', (e) => onClick(e, data));
+
+                container.addChild(slot);
+                blockId--;
+            }
+        }
+    }
+
+    // --- DATA HANDLING ---
+    async function loadData() {
+        try {
+            const res = await fetch(API_URL);
+            if (!res.ok) throw new Error("Offline");
+            const soldSlots = await res.json();
+            
+            soldSlots.forEach(slot => {
+                const localData = blocksData.get(slot.slot_number);
+                if (localData) {
+                    updateSlotVisuals(localData, slot);
+                }
+            });
+        } catch (e) {
+            console.log("Backend offline, ready for simulation mode.");
+        }
+    }
+
+    function updateSlotVisuals(localData, serverData) {
+        localData.sold = true;
+        localData.ownerData = serverData;
+        
+        // Update Color
+        const color = serverData.owner_color || COLORS[0];
+        localData.sprite.tint = color.replace('#', '0x');
+        localData.originalTint = localData.sprite.tint; // Update base tint
+        
+        // Add Text (Optimized)
+        if (serverData.owner_text) {
+            // Check if text already exists to avoid dupes
+            if(localData.sprite.children.length > 0) return;
+
+            const style = new PIXI.TextStyle({
+                fontFamily: 'Arial',
+                fontSize: 10, // Small to fit
+                fontWeight: 'bold',
+                fill: '#ffffff',
+                dropShadow: true,
+                dropShadowDistance: 1,
+                wordWrap: true,
+                wordWrapWidth: BLOCK_SIZE - 4,
+                align: 'center'
+            });
+            const text = new PIXI.Text(serverData.owner_text, style);
+            text.anchor.set(0.5);
+            text.x = (BLOCK_SIZE - GAP) / 2;
+            text.y = (BLOCK_SIZE - GAP) / 2;
+            localData.sprite.addChild(text);
+        }
+    }
+
+    // --- INTERACTION LOGIC (The Google Maps Feel) ---
+    function setupInteraction() {
+        app.stage.eventMode = 'static';
+        app.stage.hitArea = app.screen;
+
+        // Panning
+        app.stage.on('pointerdown', (e) => {
+            isDragging = true;
+            dragStart = { x: e.global.x - container.x, y: e.global.y - container.y };
+            // Record start for click detection (if moved > 3px, cancel click)
+            app.dragStartPos = { x: e.global.x, y: e.global.y };
+        });
+
+        app.stage.on('pointermove', (e) => {
+            if (!isDragging) return;
+            container.x = e.global.x - dragStart.x;
+            container.y = e.global.y - dragStart.y;
+        });
+
+        app.stage.on('pointerup', () => { isDragging = false; });
+        app.stage.on('pointerupoutside', () => { isDragging = false; });
+
+        // Zooming (Wheel)
+        const canvas = document.getElementById('canvas-container');
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomSpeed = 0.001;
+            const newScale = container.scale.x - (e.deltaY * zoomSpeed);
+            
+            // Clamp Zoom (Min 0.1, Max 3.0)
+            const clamped = Math.min(Math.max(newScale, 0.1), 3.0);
+            
+            // Zoom towards mouse pointer logic could go here, 
+            // but for simplicity we zoom center or just scale
+            container.scale.set(clamped);
+        }, { passive: false });
+    }
+
+    // --- EVENT HANDLERS ---
+    function onHover(e, slot, data) {
+        if (isDragging) return;
+        slot.alpha = 0.8; // Simple hover effect
+        
+        // Move Tooltip
+        const tooltip = document.getElementById('tooltip');
+        tooltip.style.display = 'block';
+        tooltip.textContent = data.sold ? `${data.ownerData.owner_name} (#${data.id})` : `Block #${data.id}`;
+        tooltip.style.left = (e.global.x + 15) + 'px';
+        tooltip.style.top = (e.global.y - 30) + 'px';
+    }
+
+    function onHoverOut(slot) {
+        slot.alpha = 1.0;
+        document.getElementById('tooltip').style.display = 'none';
+    }
+
+    function onDown(e) {
+        // Just record time/pos for click logic
+    }
+
+    function onClick(e, data) {
+        // Check if it was a drag or a click
+        const dx = e.global.x - app.dragStartPos.x;
+        const dy = e.global.y - app.dragStartPos.y;
+        if (Math.sqrt(dx*dx + dy*dy) > 5) return; // Was a drag
+
+        openModal(data);
+    }
+
+    // --- UI FUNCTIONS ---
+    window.openModal = (data) => {
+        const modal = document.getElementById('modal-backdrop');
+        const content = document.getElementById('modal-content');
+        modal.style.display = 'flex';
+
+        if (data.sold) {
+            // Render Profile
+            const od = data.ownerData;
+            content.innerHTML = `
+                <div class="modal-header">
+                    <h2>Block #${data.id}</h2>
+                    <button class="close-icon" onclick="closeModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="crown">👑</div>
+                    <h3>Premium Owner</h3>
+                    
+                    <div class="owner-avatar">
+                        ${od.imageThumb ? `<img src="${od.imageThumb}">` : `<div style="height:100%;background:#444;display:flex;align-items:center;justify-content:center;font-size:3rem;color:#888;">?</div>`}
+                    </div>
+
+                    <h2 style="margin:0">${od.owner_name}</h2>
+                    ${od.message ? `<div class="message-box">"${od.message}"</div>` : ''}
+                    
+                    <div class="detail-row">
+                        <span class="detail-label">Tier</span>
+                        <span class="detail-value ${data.tier === 'gold' ? 'gold-text' : ''}">${data.tier.toUpperCase()}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Value</span>
+                        <span class="detail-value">$${data.price.toFixed(2)}</span>
+                    </div>
+                    
+                    ${od.link ? `<a href="${od.link}" target="_blank" style="display:block;margin-top:20px;color:#4ECDC4;text-decoration:none;">🔗 Visit Website</a>` : ''}
+                </div>
+            `;
+        } else {
+            // Render Purchase
+            content.innerHTML = `
+                <div class="modal-header">
+                    <h2>Purchase Block #${data.id}</h2>
+                    <button class="close-icon" onclick="closeModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="price-tag">$${data.price.toFixed(2)}</div>
+                    <p style="color:#888; margin-bottom: 20px;">Become a part of history.</p>
+                    
+                    <div class="detail-row">
+                        <span class="detail-label">Tier</span>
+                        <span class="detail-value ${data.tier === 'gold' ? 'gold-text' : ''}">${data.tier.toUpperCase()}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Location</span>
+                        <span class="detail-value">Row ${data.row}</span>
+                    </div>
+
+                    <button class="purchase-btn">Buy Now (Simulation)</button>
+                </div>
+            `;
+        }
+    };
+
+    window.closeModal = (e) => {
+        if (!e || e.target.id === 'modal-backdrop' || e.target.classList.contains('close-icon')) {
+            document.getElementById('modal-backdrop').style.display = 'none';
+        }
+    };
+
+    window.resetView = () => {
+        // Center the camera
+        const cx = app.screen.width / 2;
+        const cy = 100; // Padding top
+        container.position.set(cx, cy);
+        container.scale.set(0.5); // Initial zoom
+    };
+
+    window.fillRandom = () => {
+        // Simulation Mode: Fill empty slots with random data
+        const sampleTexts = ['HELLO', 'WORLD', 'PIXI', 'FAST', 'COOL', 'GOLD'];
+        blocksData.forEach((data) => {
+            if (!data.sold && Math.random() > 0.5) {
+                updateSlotVisuals(data, {
+                    owner_name: "SimUser",
+                    owner_color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                    owner_text: sampleTexts[Math.floor(Math.random() * sampleTexts.length)],
+                    message: "Simulation Mode Active"
+                });
+            }
+        });
+    };
+
+    window.viewRandom = () => {
+        const soldIds = [];
+        blocksData.forEach((data, id) => { if(data.sold) soldIds.push(id); });
+        
+        if (soldIds.length === 0) {
+            alert("No profiles sold yet! Click 'Simulation Mode' to generate some.");
+            return;
+        }
+        
+        const randomId = soldIds[Math.floor(Math.random() * soldIds.length)];
+        const data = blocksData.get(randomId);
+        
+        // Pan to block
+        container.scale.set(1.5);
+        container.x = (app.screen.width / 2) - (data.sprite.x * 1.5);
+        container.y = (app.screen.height / 2) - (data.sprite.y * 1.5);
+        
+        // Open Modal
+        setTimeout(() => openModal(data), 300);
+    };
+
+    // --- RUN ---
+    init();
+
+</script>
+</body>
 </html>
