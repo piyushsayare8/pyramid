@@ -9,135 +9,74 @@
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
     <style>
-        /* --- CORE VARIABLES --- */
-        :root {
-            --bg-dark: #0a0a0f;
-            --bg-panel: #151520;
-            --border: #333;
-            --gold: #FFD700;
-            --text-main: #fff;
-            --text-muted: #888;
-        }
-
-        /* --- 1. CORE LAYOUT --- */
+        /* --- CSS STYLES --- */
+        :root { --bg-dark: #0a0a0f; --bg-panel: #151520; --border: #333; --gold: #FFD700; }
         body { margin: 0; overflow: hidden; background: #0a0a0f; font-family: 'Arial', sans-serif; color: white; }
-        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
-        
-        /* --- 2. UI OVERLAYS --- */
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: grab; }
+        #canvas-container:active { cursor: grabbing; }
         .ui-layer { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         .interactive { pointer-events: auto; }
-
-        /* Header */
+        
+        /* UI Elements */
         .header { position: absolute; top: 20px; left: 20px; text-align: left; }
         .header h1 { font-family: 'Georgia', serif; font-size: 2.5rem; color: #FFD700; margin: 0; text-shadow: 0 0 20px rgba(255, 215, 0, 0.5); letter-spacing: 4px; }
         .subtitle { font-size: 1rem; color: #888; text-transform: uppercase; letter-spacing: 4px; margin-top: 5px; }
-
-        /* Controls */
+        
         .controls { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
         .btn { background: rgba(20,20,30,0.9); border: 1px solid #444; color: #ccc; padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 0.9rem; }
         .btn:hover { border-color: #FFD700; color: #FFD700; background: rgba(255, 215, 0, 0.1); }
         .btn-fill { border-color: #FF6B6B; color: #FF6B6B; }
         .btn-fill:hover { background: rgba(255, 107, 107, 0.1); box-shadow: 0 0 15px rgba(255, 107, 107, 0.3); }
-
-        /* Center Button */
+        
         .center-controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); }
         .profile-btn { background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.05)); border: 2px solid #FFD700; color: #FFD700; padding: 10px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 0 15px rgba(255,215,0,0.2); }
         .profile-btn:hover { transform: translateX(-50%) translateY(-2px); box-shadow: 0 0 25px rgba(255,215,0,0.4); }
-
-        /* Tooltip */
-        .tooltip { 
-            position: absolute; display: none; padding: 8px 12px; 
-            background: rgba(15, 15, 25, 0.95); border: 1px solid #FFD700; 
-            border-radius: 8px; color: #FFD700; font-weight: bold; 
-            font-size: 0.9rem; pointer-events: none; z-index: 20; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5); transform: translateY(-100%);
-        }
-
-        /* --- 3. MODAL (Unified) --- */
-        .modal-backdrop { 
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px); z-index: 100; 
-            justify-content: center; align-items: center; 
-        }
         
-        .modal { 
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            border: 2px solid transparent; width: 95%; max-width: 900px; max-height: 90vh;
-            border-radius: 24px; overflow: hidden; position: relative;
-            box-shadow: 0 25px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(255, 215, 0, 0.1);
-            animation: slideUp 0.3s ease-out; display: flex; flex-direction: column;
-        }
-
+        .tooltip { position: absolute; display: none; padding: 8px 12px; background: rgba(15, 15, 25, 0.95); border: 1px solid #FFD700; border-radius: 8px; color: #FFD700; font-weight: bold; font-size: 0.9rem; pointer-events: none; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.5); transform: translateY(-100%); }
+        
+        /* Modal */
+        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px); z-index: 100; justify-content: center; align-items: center; }
+        .modal { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border: 2px solid transparent; width: 95%; max-width: 900px; max-height: 90vh; border-radius: 24px; overflow: hidden; position: relative; box-shadow: 0 25px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(255, 215, 0, 0.1); animation: slideUp 0.3s ease-out; display: flex; flex-direction: column; }
         .modal-header { padding: 20px; background: rgba(0,0,0,0.2); border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
         .modal-header h2 { margin: 0; font-family: 'Georgia', serif; font-size: 1.5rem; }
         .price-tag { background: rgba(255, 215, 0, 0.1); color: var(--gold); padding: 5px 15px; border-radius: 20px; border: 1px solid var(--gold); font-weight: bold; }
         .close-icon { color: #888; cursor: pointer; font-size: 1.5rem; background: none; border: none; }
         
-        /* Modal Body (Scrollable) */
         .modal-body { padding: 25px; overflow-y: auto; display: flex; gap: 30px; color: white; }
         .col-left { flex: 1.2; display: flex; flex-direction: column; gap: 20px; }
         .col-right { flex: 1; display: flex; flex-direction: column; gap: 20px; border-left: 1px solid #333; padding-left: 20px; }
-
-        /* Form Inputs */
-        .input-group label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
-        .input-group input, .input-group select { 
-            width: 100%; background: rgba(10, 10, 15, 0.5); border: 2px solid #333; 
-            color: white; padding: 12px; border-radius: 8px; font-size: 1rem; box-sizing: border-box; 
-        }
+        
+        /* Inputs & Form */
+        .input-group label { display: block; font-size: 0.8rem; color: #888; margin-bottom: 6px; text-transform: uppercase; }
+        .input-group input, .input-group select { width: 100%; background: rgba(10, 10, 15, 0.5); border: 2px solid #333; color: white; padding: 12px; border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
         .input-group input:focus { border-color: var(--gold); outline: none; }
         
-        /* Color Picker */
         .color-selector { display: flex; gap: 10px; align-items: center; }
         .color-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 10px; }
         .color-btn { width: 24px; height: 24px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; }
         .color-btn:hover { transform: scale(1.1); border-color: white; }
-
-        /* Image Upload */
-        .image-upload-box { 
-            border: 2px dashed #444; padding: 20px; border-radius: 10px; text-align: center; 
-            cursor: pointer; transition: 0.2s; background: rgba(255,255,255,0.02); 
-        }
+        
+        .image-upload-box { border: 2px dashed #444; padding: 20px; border-radius: 10px; text-align: center; cursor: pointer; transition: 0.2s; background: rgba(255,255,255,0.02); }
         .image-upload-box:hover { border-color: var(--gold); background: rgba(255,215,0,0.05); }
-
-        /* Preview Box */
-        .preview-container { 
-            background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; 
-            display: flex; flex-direction: column; align-items: center; gap: 10px; 
-        }
-        .preview-block { 
-            width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; 
-            font-weight: bold; color: white; text-shadow: 0 0 3px black; position: relative; overflow: hidden;
-            transition: all 0.2s;
-        }
-
-        /* Modal Footer */
+        
+        .preview-container { background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .preview-block { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; text-shadow: 0 0 3px black; position: relative; overflow: hidden; transition: all 0.2s; }
+        
         .modal-footer { padding: 20px; border-top: 1px solid #333; display: flex; justify-content: flex-end; gap: 15px; }
-        .confirm-btn { 
-            background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: bold; 
-            padding: 12px 30px; border-radius: 10px; border: none; cursor: pointer; font-size: 1rem; 
-        }
+        .confirm-btn { background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: bold; padding: 12px 30px; border-radius: 10px; border: none; cursor: pointer; font-size: 1rem; }
         .confirm-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(255,215,0,0.4); }
-
-        /* Animations */
+        
         @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        
-        /* Loading Overlay */
         #loader { position: fixed; top:0; left:0; width:100%; height:100%; background: #0a0a0f; z-index: 999; display: flex; justify-content: center; align-items: center; color: #FFD700; font-family: Georgia; font-size: 1.5rem; transition: opacity 0.5s; }
-
-        /* Mobile Fixes */
-        @media (max-width: 700px) {
-            .modal-body { flex-direction: column; }
-            .col-right { border-left: none; padding-left: 0; border-top: 1px solid #333; padding-top: 20px; }
-        }
         
+        @media (max-width: 700px) { .modal-body { flex-direction: column; } .col-right { border-left: none; padding-left: 0; border-top: 1px solid #333; padding-top: 20px; } }
         .owner-avatar { width: 120px; height: 120px; border-radius: 50%; border: 3px solid #FFD700; margin: 0 auto 15px; background: #333; overflow: hidden; }
         .owner-avatar img { width: 100%; height: 100%; object-fit: cover; }
     </style>
 </head>
 <body>
 
-    <div id="loader">Building Pyramid...</div>
-
+    <div id="loader">Building 11,325 Blocks...</div>
     <div id="canvas-container"></div>
 
     <div class="ui-layer">
@@ -163,8 +102,7 @@
     <div id="tooltip" class="tooltip">Block #5050</div>
 
     <div id="modal-backdrop" class="modal-backdrop interactive" onclick="closeModal(event)">
-        <div class="modal" id="modal-content">
-            </div>
+        <div class="modal" id="modal-content"></div>
     </div>
 
 <script type="module">
@@ -172,36 +110,37 @@
     const TOTAL_ROWS = 150;
     const BLOCK_SIZE = 40;
     const GAP = 2;
-    const API_URL = 'https://pyramid-backend.piyushsayare8.workers.dev';
+    const TOTAL_BLOCKS = 11325; 
     
-    // ⚠️ RAZORPAY CONFIG
-    const RAZORPAY_KEY_ID = 'rzp_test_YOUR_KEY_HERE'; // Replace with your actual key
-    const TEST_MODE = true; // Set to false for real payments
+    // --- DIMENSIONS & PADDING ---
+    const PYRAMID_WIDTH = TOTAL_ROWS * BLOCK_SIZE; 
+    const PYRAMID_HEIGHT = TOTAL_ROWS * BLOCK_SIZE; 
+    
+    // "Safe Zone" Padding: Space to lift the pyramid over the bottom button, but no more.
+    const BOTTOM_SAFE_ZONE = 120; 
+    const TOP_HEADER_ZONE = 100;
+    
+    // --- API & KEYS ---
+    const API_URL = 'https://pyramid-backend.piyushsayare8.workers.dev';
+    const RAZORPAY_KEY_ID = 'rzp_test_YOUR_KEY_HERE'; 
+    const TEST_MODE = true; 
 
     // --- 2. STATE ---
     let app, container;
     let blocksData = new Map();
     let isDragging = false;
     let dragStart = { x: 0, y: 0 };
-    let currentBlock = null; // Currently selected block for modal
+    let currentBlock = null;
+    let dragStartPos = { x: 0, y: 0 };
+    let minZoomLevel = 0.1;
     
     // Form State
-    let formData = {
-        name: '',
-        message: '',
-        link: '',
-        color: '#FFD700',
-        text: '',
-        font: 'Arial',
-        imageUrl: ''
-    };
-
+    let formData = { name: '', message: '', link: '', color: '#FFD700', text: '', font: 'Arial', imageUrl: '' };
     const COLORS = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8'];
     const FONTS = ['Arial', 'Georgia', 'Courier New', 'Comic Sans MS', 'Impact', 'Verdana'];
 
     // --- 3. PIXIJS ENGINE ---
     async function init() {
-        // Initialize Pixi
         app = new PIXI.Application();
         await app.init({
             resizeTo: window,
@@ -212,20 +151,25 @@
         });
         document.getElementById('canvas-container').appendChild(app.canvas);
 
-        // Generate Textures
         const textures = createTextures(app);
-
-        // Build Grid
+        
         container = new PIXI.Container();
         app.stage.addChild(container);
+        
         buildGrid(textures);
-
-        // Events
+        
+        calculateMinZoom();
         setupInteraction();
         loadData();
+        
         resetView();
 
-        // Hide Loader
+        window.addEventListener('resize', () => {
+            app.resize();
+            calculateMinZoom();
+            constrainPyramid();
+        });
+
         setTimeout(() => document.getElementById('loader').style.opacity = '0', 500);
         setTimeout(() => document.getElementById('loader').remove(), 1000);
     }
@@ -243,26 +187,35 @@
     }
 
     function buildGrid(textures) {
-        let blockId = 11325;
-        const startY = 100;
+        let blockId = TOTAL_BLOCKS;
+        // Start exactly at 0 to make math perfect
+        const startY = 0; 
+
         for (let row = 1; row <= TOTAL_ROWS; row++) {
-            const startX = -(row * BLOCK_SIZE) / 2;
+            const startX = -(row * BLOCK_SIZE) / 2; 
+            // Shift up by one block size so Row 1 is at Y=0
+            const yPos = (row - 1) * BLOCK_SIZE;
+
             for (let col = 0; col < row; col++) {
-                let type = row <= 45 ? 'gold' : row <= 85 ? 'silver' : 'standard';
+                
+                let type = 'standard';
+                if (row <= 45) type = 'gold';
+                else if (row <= 85) type = 'silver';
+
                 const slot = new PIXI.Sprite(textures[type]);
                 slot.x = startX + (col * BLOCK_SIZE);
-                slot.y = startY + (row * BLOCK_SIZE);
+                slot.y = yPos;
                 
-                const price = blockId === 11325 ? 5000 : 0.1 + (blockId - 1) * 0.1;
+                let price = blockId === TOTAL_BLOCKS ? 5000 : 1 + (blockId - 1) * 0.5;
+
                 const data = { id: blockId, price, tier: type, row, sold: false, sprite: slot };
                 blocksData.set(blockId, data);
 
-                // Interact
                 slot.eventMode = 'static';
                 slot.cursor = 'pointer';
                 slot.on('pointerover', (e) => onHover(e, slot, data));
                 slot.on('pointerout', () => onHoverOut(slot));
-                slot.on('pointerdown', (e) => app.dragStartPos = {x: e.global.x, y: e.global.y});
+                slot.on('pointerdown', (e) => app.dragStartPos = {x: e.global.x, y: e.global.y}); 
                 slot.on('pointerup', (e) => onClick(e, data));
 
                 container.addChild(slot);
@@ -271,7 +224,54 @@
         }
     }
 
-    // --- 4. INTERACTION & LOGIC ---
+    // --- 4. INTERACTION LOGIC (The "Invisible Wall") ---
+    
+    function calculateMinZoom() {
+        // Calculate Scale to fit everything + 100px padding
+        const scaleX = app.screen.width / (PYRAMID_WIDTH + 200); 
+        const scaleY = app.screen.height / (PYRAMID_HEIGHT + 300);
+        minZoomLevel = Math.min(scaleX, scaleY);
+    }
+
+    function constrainPyramid() {
+        // 1. Zoom Clamp
+        if (container.scale.x < minZoomLevel) {
+            container.scale.set(minZoomLevel);
+        }
+
+        const pyWidth = PYRAMID_WIDTH * container.scale.x;
+        const pyHeight = PYRAMID_HEIGHT * container.scale.y;
+
+        // 2. Horizontal Center Lock
+        if (pyWidth < app.screen.width) {
+            container.x = app.screen.width / 2;
+        } else {
+            // Horizontal Wall
+            const minX = app.screen.width - (pyWidth / 2) - 100;
+            const maxX = (pyWidth / 2) + 100;
+            if (container.x < minX) container.x = minX;
+            if (container.x > maxX) container.x = maxX;
+        }
+
+        // 3. Vertical Wall (The Magic Logic)
+        if (pyHeight < app.screen.height) {
+            // If smaller than screen, center perfectly
+            container.y = (app.screen.height - pyHeight) / 2;
+        } else {
+            // If larger, clamp strictly
+            
+            // Wall 1: Top of Pyramid cannot go below Header (TOP_HEADER_ZONE)
+            const maxY = TOP_HEADER_ZONE; 
+            
+            // Wall 2: Bottom of Pyramid cannot go above Screen Bottom (minus safe zone)
+            // This prevents "going to black space"
+            const minY = app.screen.height - pyHeight - BOTTOM_SAFE_ZONE;
+            
+            if (container.y < minY) container.y = minY;
+            if (container.y > maxY) container.y = maxY;
+        }
+    }
+
     function setupInteraction() {
         app.stage.eventMode = 'static';
         app.stage.hitArea = app.screen;
@@ -285,21 +285,44 @@
             if(isDragging) {
                 container.x = e.global.x - dragStart.x;
                 container.y = e.global.y - dragStart.y;
+                constrainPyramid();
             }
         });
         
         app.stage.on('pointerup', () => isDragging = false);
         app.stage.on('pointerupoutside', () => isDragging = false);
 
-        // Zoom
         document.getElementById('canvas-container').addEventListener('wheel', (e) => {
             e.preventDefault();
-            const scale = container.scale.x - (e.deltaY * 0.001);
-            const clamped = Math.min(Math.max(scale, 0.1), 3.0);
-            container.scale.set(clamped);
+            const zoomSpeed = 0.001;
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+
+            // Anchor zoom to mouse pointer
+            const worldPos = {
+                x: (mouseX - container.x) / container.scale.x,
+                y: (mouseY - container.y) / container.scale.y
+            };
+
+            const newScale = container.scale.x - (e.deltaY * zoomSpeed);
+            const clampedScale = Math.min(Math.max(newScale, minZoomLevel), 4.0);
+            container.scale.set(clampedScale);
+
+            // Re-calculate position
+            const newScreenPos = {
+                x: worldPos.x * container.scale.x + container.x,
+                y: worldPos.y * container.scale.y + container.y
+            };
+
+            container.x -= (newScreenPos.x - mouseX);
+            container.y -= (newScreenPos.y - mouseY);
+            
+            constrainPyramid();
+
         }, { passive: false });
     }
 
+    // --- 5. EVENTS & MODALS ---
     function onHover(e, slot, data) {
         if(isDragging) return;
         slot.alpha = 0.8;
@@ -318,22 +341,18 @@
     function onClick(e, data) {
         const dx = e.global.x - (app.dragStartPos?.x || 0);
         const dy = e.global.y - (app.dragStartPos?.y || 0);
-        if(Math.sqrt(dx*dx + dy*dy) > 5) return; // Ignore drag
+        if(Math.sqrt(dx*dx + dy*dy) > 5) return; 
         
         currentBlock = data;
         openModal();
     }
 
-    // --- 5. MODAL SYSTEM ---
     window.openModal = () => {
         const modal = document.getElementById('modal-backdrop');
         const content = document.getElementById('modal-content');
         modal.style.display = 'flex';
-        
-        if (currentBlock.sold) {
-            renderSoldProfile(content, currentBlock);
-        } else {
-            // Reset form
+        if (currentBlock.sold) renderSoldProfile(content, currentBlock);
+        else {
             formData = { name: '', message: '', link: '', color: '#FFD700', text: '', font: 'Arial', imageUrl: '' };
             renderPurchaseForm(content, currentBlock);
         }
@@ -345,7 +364,6 @@
         }
     };
 
-    // RENDER: PURCHASE FORM
     function renderPurchaseForm(container, block) {
         container.innerHTML = `
             <div class="modal-header">
@@ -353,55 +371,48 @@
                 <div class="price-tag">$${block.price.toFixed(2)}</div>
                 <button class="close-icon" onclick="closeModal()">✕</button>
             </div>
-            
             <div class="modal-body">
                 <div class="col-left">
                     <div class="input-group">
                         <label>Name / Alias</label>
-                        <input type="text" id="input-name" placeholder="Enter your name" maxlength="30" oninput="updateForm('name', this.value)">
+                        <input type="text" placeholder="Enter your name" maxlength="30" oninput="updateForm('name', this.value)">
                     </div>
                     <div class="input-group">
                         <label>Message</label>
-                        <input type="text" id="input-msg" placeholder="Make history..." maxlength="50" oninput="updateForm('message', this.value)">
+                        <input type="text" placeholder="Make history..." maxlength="50" oninput="updateForm('message', this.value)">
                     </div>
                     <div class="input-group">
                         <label>Link (Optional)</label>
-                        <input type="url" id="input-link" placeholder="https://twitter.com/..." oninput="updateForm('link', this.value)">
+                        <input type="url" placeholder="https://..." oninput="updateForm('link', this.value)">
                     </div>
-                    
                     <div class="input-group">
                         <label>Choose Color</label>
                         <div class="color-selector">
                             <input type="color" id="color-picker" value="#FFD700" oninput="updateForm('color', this.value)">
-                            <span id="color-val">#FFD700</span>
-                        </div>
-                        <div class="color-presets">
-                            ${COLORS.map(c => `<div class="color-btn" style="background:${c}" onclick="updateForm('color', '${c}')"></div>`).join('')}
+                            <div class="color-presets">
+                                ${COLORS.map(c => `<div class="color-btn" style="background:${c}" onclick="updateForm('color', '${c}')"></div>`).join('')}
+                            </div>
                         </div>
                     </div>
                 </div>
-
                 <div class="col-right">
                     <div class="input-group">
                         <label>Block Text (Max 5 chars)</label>
-                        <input type="text" id="input-text" maxlength="5" placeholder="HI" oninput="updateForm('text', this.value)">
+                        <input type="text" maxlength="5" placeholder="HI" oninput="updateForm('text', this.value)">
                     </div>
-                    
                     <div class="input-group">
                         <label>Font</label>
-                        <select id="input-font" onchange="updateForm('font', this.value)">
+                        <select onchange="updateForm('font', this.value)">
                             ${FONTS.map(f => `<option value="${f}">${f}</option>`).join('')}
                         </select>
                     </div>
-
                     <div class="input-group">
-                        <label>Profile Image</label>
+                         <label>Profile Image</label>
                         <input type="file" id="file-upload" hidden onchange="handleImageUpload(this)">
                         <div class="image-upload-box" onclick="document.getElementById('file-upload').click()">
                             <span id="upload-label">📷 Upload Image</span>
                         </div>
                     </div>
-
                     <div class="preview-container">
                         <label>Preview</label>
                         <div id="block-preview" class="preview-block" style="background-color: #FFD700; border: 3px solid #FFD700;">
@@ -410,14 +421,12 @@
                     </div>
                 </div>
             </div>
-
             <div class="modal-footer">
                 <button class="confirm-btn" onclick="initiatePurchase()">Buy & Mint</button>
             </div>
         `;
     }
 
-    // RENDER: SOLD PROFILE
     function renderSoldProfile(container, block) {
         const od = block.ownerData;
         container.innerHTML = `
@@ -427,14 +436,11 @@
             </div>
             <div class="modal-body" style="flex-direction:column; align-items:center; text-align:center;">
                 <div style="font-size:2rem; margin-bottom:10px;">👑</div>
-                
                 <div class="owner-avatar">
                     ${od.imageUrl ? `<img src="${od.imageUrl}">` : `<div style="height:100%; display:flex; align-items:center; justify-content:center; background:#444; font-size:2rem;">?</div>`}
                 </div>
-
                 <h2 style="margin:0">${od.owner_name}</h2>
                 ${od.message ? `<div style="background:rgba(255,255,255,0.05); padding:10px; border-left:3px solid gold; margin-top:10px;">"${od.message}"</div>` : ''}
-                
                 <div style="margin-top:20px; width:100%;">
                     <div style="display:flex; justify-content:space-between; border-bottom:1px solid #333; padding:10px;">
                         <span style="color:#888">Tier</span>
@@ -445,150 +451,69 @@
                         <span>$${block.price.toFixed(2)}</span>
                     </div>
                 </div>
-
                 ${od.link ? `<a href="${od.link}" target="_blank" style="display:block; margin-top:20px; color:#4ECDC4; text-decoration:none; padding:10px; border:1px solid #4ECDC4; border-radius:5px;">🔗 Visit Website</a>` : ''}
             </div>
         `;
     }
 
-    // --- 6. LOGIC HANDLERS ---
     window.updateForm = (field, value) => {
         formData[field] = value;
-        
-        // Update UI Helpers
         if (field === 'color') {
             document.getElementById('color-picker').value = value;
-            document.getElementById('color-val').textContent = value;
             document.getElementById('block-preview').style.backgroundColor = value;
-            document.getElementById('block-preview').style.borderColor = value; // Simplification for preview
+            document.getElementById('block-preview').style.borderColor = value;
         }
-        if (field === 'text') {
-            document.getElementById('preview-text').textContent = value || (currentBlock.id % 1000);
-        }
-        if (field === 'font') {
-            document.getElementById('preview-text').style.fontFamily = value;
-        }
+        if (field === 'text') document.getElementById('preview-text').textContent = value || (currentBlock.id % 1000);
+        if (field === 'font') document.getElementById('preview-text').style.fontFamily = value;
     };
 
     window.handleImageUpload = async (input) => {
         const file = input.files[0];
         if (!file) return;
-        
         document.getElementById('upload-label').textContent = "⏳ Uploading...";
-        
         if (TEST_MODE) {
-            // Fake upload
-            setTimeout(() => {
-                formData.imageUrl = `https://picsum.photos/seed/${Math.random()}/150/150`;
-                document.getElementById('upload-label').textContent = "✅ Image Set";
-            }, 1000);
+            setTimeout(() => { formData.imageUrl = `https://picsum.photos/seed/${Math.random()}/150/150`; document.getElementById('upload-label').textContent = "✅ Image Set"; }, 1000);
             return;
         }
-
-        const data = new FormData();
-        data.append('image', file);
+        const data = new FormData(); data.append('image', file);
         try {
             const res = await fetch(`${API_URL}/api/upload-image`, { method: 'POST', body: data });
             const json = await res.json();
-            if (json.success) {
-                formData.imageUrl = json.imageUrl;
-                document.getElementById('upload-label').textContent = "✅ Image Uploaded";
-            } else {
-                alert('Upload failed');
-            }
-        } catch (e) {
-            console.error(e);
-            alert('Upload error');
-        }
+            if (json.success) { formData.imageUrl = json.imageUrl; document.getElementById('upload-label').textContent = "✅ Image Uploaded"; }
+        } catch (e) { alert('Upload error'); }
     };
 
     window.initiatePurchase = () => {
         if (!formData.name) { alert("Please enter a name"); return; }
-        
-        if (TEST_MODE) {
-            finalizePurchase("test_payment_id_" + Date.now());
-            return;
-        }
-
+        if (TEST_MODE) { finalizePurchase("test_" + Date.now()); return; }
         const options = {
-            "key": RAZORPAY_KEY_ID,
-            "amount": currentBlock.price * 100, // Amount in paise
-            "currency": "USD",
-            "name": "The History Pyramid",
-            "description": `Block #${currentBlock.id}`,
-            "handler": function (response) {
-                finalizePurchase(response.razorpay_payment_id);
-            },
-            "prefill": { "name": formData.name },
-            "theme": { "color": "#FFD700" }
+            "key": RAZORPAY_KEY_ID, "amount": currentBlock.price * 100, "currency": "USD",
+            "name": "The History Pyramid", "description": `Block #${currentBlock.id}`,
+            "handler": (r) => finalizePurchase(r.razorpay_payment_id),
+            "prefill": { "name": formData.name }, "theme": { "color": "#FFD700" }
         };
-        const rzp = new Razorpay(options);
-        rzp.open();
+        new Razorpay(options).open();
     };
 
     async function finalizePurchase(paymentId) {
         document.querySelector('.confirm-btn').textContent = "Minting Block...";
-        
-        const payload = {
-            slotId: currentBlock.id,
-            user: formData.name,
-            message: formData.message,
-            color: formData.color,
-            text: formData.text,
-            paymentId: paymentId,
-            imageUrl: formData.imageUrl,
-            link: formData.link
-        };
-
+        const payload = { slotId: currentBlock.id, user: formData.name, message: formData.message, color: formData.color, text: formData.text, paymentId, imageUrl: formData.imageUrl, link: formData.link };
         try {
-            // 1. Backend Call (Mocked if local)
-            if (!TEST_MODE) {
-                await fetch(`${API_URL}/api/purchase`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-            }
-
-            // 2. Update Local State (Instant Feedback)
-            const serverData = {
-                owner_name: payload.user,
-                owner_color: payload.color,
-                owner_text: payload.text,
-                message: payload.message,
-                imageUrl: payload.imageUrl,
-                link: payload.link
-            };
-            
+            if (!TEST_MODE) await fetch(`${API_URL}/api/purchase`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const serverData = { owner_name: payload.user, owner_color: payload.color, owner_text: payload.text, message: payload.message, imageUrl: payload.imageUrl, link: payload.link };
             updateSlotVisuals(blocksData.get(currentBlock.id), serverData);
-            
-            // 3. Success UI
             closeModal();
             alert(`🎉 Congratulations! Block #${currentBlock.id} is yours forever.`);
-            
-        } catch (e) {
-            alert("Error finalizing purchase: " + e.message);
-        }
+        } catch (e) { alert("Error: " + e.message); }
     }
 
-    // --- 7. HELPERS ---
     function updateSlotVisuals(localData, serverData) {
-        localData.sold = true;
-        localData.ownerData = serverData;
-        
-        // Update Color
+        localData.sold = true; localData.ownerData = serverData;
         localData.sprite.tint = serverData.owner_color.replace('#', '0x');
-        
-        // Add Text
         if (serverData.owner_text) {
-            const style = new PIXI.TextStyle({
-                fontFamily: 'Arial', fontSize: 10, fontWeight: 'bold', fill: '#ffffff',
-                dropShadow: true, dropShadowDistance: 1, align: 'center'
-            });
+            const style = new PIXI.TextStyle({ fontFamily: 'Arial', fontSize: 10, fontWeight: 'bold', fill: '#ffffff', dropShadow: true, dropShadowDistance: 1, align: 'center' });
             const text = new PIXI.Text(serverData.owner_text, style);
-            text.anchor.set(0.5);
-            text.x = (BLOCK_SIZE - GAP) / 2;
-            text.y = (BLOCK_SIZE - GAP) / 2;
+            text.anchor.set(0.5); text.x = (BLOCK_SIZE - GAP) / 2; text.y = (BLOCK_SIZE - GAP) / 2;
             localData.sprite.addChild(text);
         }
     }
@@ -598,37 +523,26 @@
             const res = await fetch(`${API_URL}/api/grid`);
             if (!res.ok) throw new Error();
             const soldSlots = await res.json();
-            soldSlots.forEach(slot => {
-                const d = blocksData.get(slot.slot_number);
-                if (d) updateSlotVisuals(d, slot);
-            });
+            soldSlots.forEach(slot => { const d = blocksData.get(slot.slot_number); if (d) updateSlotVisuals(d, slot); });
         } catch (e) { console.log("Simulating offline mode"); }
     }
 
     window.resetView = () => {
-        container.position.set(app.screen.width / 2, 100);
-        container.scale.set(0.5);
+        calculateMinZoom();
+        container.scale.set(minZoomLevel);
+        constrainPyramid(); // Snap to center
     };
 
     window.fillRandom = () => {
         blocksData.forEach(d => {
-            if(!d.sold && Math.random() > 0.8) {
-                updateSlotVisuals(d, {
-                    owner_name: "Sim", owner_color: COLORS[Math.floor(Math.random()*COLORS.length)],
-                    owner_text: "SIM"
-                });
-            }
+            if(!d.sold && Math.random() > 0.95) updateSlotVisuals(d, { owner_name: "Sim", owner_color: COLORS[Math.floor(Math.random()*COLORS.length)], owner_text: "SIM" });
         });
     };
     
     window.viewRandom = () => {
          const sold = Array.from(blocksData.values()).filter(b => b.sold);
-         if(sold.length) {
-             currentBlock = sold[Math.floor(Math.random() * sold.length)];
-             openModal();
-         } else {
-             alert("No blocks sold yet!");
-         }
+         if(sold.length) { currentBlock = sold[Math.floor(Math.random() * sold.length)]; openModal(); }
+         else alert("No blocks sold yet!");
     };
 
     init();
