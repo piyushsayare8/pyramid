@@ -18,7 +18,21 @@
     "wrangler": "^4.62.0"
   },
   "dependencies": {
+    "hono": "^4.6.0",
     "panzoom": "^9.4.3",
-    "hono": "^4.6.0"
-  }
+    "pixi.js": "^8.16.0"
+  },
+  "description": "",
+  "main": "vite.config.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/piyushsayare8/pyramid.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/piyushsayare8/pyramid/issues"
+  },
+  "homepage": "https://github.com/piyushsayare8/pyramid#readme"
 }
