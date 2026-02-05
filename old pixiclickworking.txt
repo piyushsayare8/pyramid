@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -145,13 +146,6 @@
     let isProcessing = false; // Lock: Prevents overlapping simulations/fetches
     let textTextureCache = new Map(); // Cache: Reuses textures for identical text
     
-    // --- LOD & CULLING SYSTEM ---
-    let viewportCullingEnabled = true;
-    
-    // --- DIRTY QUEUE SYSTEM ---
-    let dirtyBlocks = new Set(); // Track blocks that need updates
-    let isProcessingDirtyQueue = false;
-    
     let formData = { name: '', message: '', link: '', color: '#FFD700', text: '', font: 'Arial', imageUrl: '' };
     const COLORS = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8'];
     const FONTS = ['Arial', 'Georgia', 'Courier New', 'Comic Sans MS', 'Impact', 'Verdana'];
@@ -170,42 +164,15 @@
 
         textures = createTextures(app);
         
-        // Install Bitmap Font
-        // FIX: Increased fontSize to 100 for high-quality downscaling
-        PIXI.BitmapFont.install({
-            name: 'PyramidFont',
-            style: {
-                fontFamily: 'Arial Black',
-                fontSize: 100, 
-                fontWeight: '900',
-                fill: '#ffffff',
-                stroke: { color: '#000000', width: 8 },
-                dropShadow: true,
-                dropShadowColor: '#000000',
-                dropShadowBlur: 4,
-                dropShadowDistance: 2,
-                align: 'center',
-                letterSpacing: 1
-            }
-        });
-        
         container = new PIXI.Container();
         // Optimization: Container handles events, not individual sprites (Saves 40,000 listeners)
         container.eventMode = 'static'; 
-        // Enhanced Culling Settings
-        container.cullable = true;
         app.stage.addChild(container);
         
         buildGrid();
         
         calculateMinZoom();
         setupInteraction();
-        
-        // Start viewport culling ticker with combined LOD
-        app.ticker.add(() => {
-            processDirtyQueue();
-            updateAllTextLOD();
-        });
         
         // Start loading real data immediately
         loadData();
@@ -259,11 +226,10 @@
                 const slot = new PIXI.Sprite(textures[type]);
                 slot.x = startX + (col * BLOCK_SIZE);
                 slot.y = yPos;
-                slot.cullable = true; // Enable enhanced culling
                 
                 let price = blockId === TOTAL_BLOCKS ? 5000 : 1 + (blockId - 1) * 0.5;
 
-                const data = { id: blockId, price, tier: type, row, col, sold: false, sprite: slot, textSprite: null, lastZoom: 1.0 };
+                const data = { id: blockId, price, tier: type, row, col, sold: false, sprite: slot };
                 
                 // Store in both Map (for ID access) and Grid (for click access)
                 blocksData.set(blockId, data);
@@ -285,136 +251,64 @@
         localData.sprite.tint = serverData.owner_color.replace('#', '0x');
         
         // Remove existing text to prevent leaks
-        if (localData.textSprite) {
-            localData.sprite.removeChild(localData.textSprite);
-            localData.textSprite = null;
+        if (localData.sprite.children.length > 0) {
+            localData.sprite.removeChildren();
         }
 
         if (serverData.owner_text) {
-            // FIX 1: Allow full length (100 chars)
-            const textStr = (serverData.owner_text || "").substring(0, 100);
+            const textStr = serverData.owner_text.substring(0, 80);
             
-            // FIX 2: Create a virtual text box that mimics a square.
-            // A 100 char string (10x10) requires a wide wrap width to form a square.
-            // Using 750px wrap width with 100px font roughly creates a square block.
-            const VIRTUAL_WRAP_WIDTH = 750; 
+            // --- CRITICAL PERFORMANCE UPGRADE: TEXTURE CACHING ---
+            // 1. Check if we have already drawn this EXACT word.
+            // 2. If yes, reuse the GPU texture. (0ms cost)
+            // 3. If no, create it once and save it. (5ms cost)
+            
+            let targetTexture = textTextureCache.get(textStr);
 
-            const bitmapText = new PIXI.BitmapText({
-                text: textStr,
-                style: { 
-                    fontFamily: 'PyramidFont', 
-                    fontSize: 100, 
-                    align: 'center', 
-                    letterSpacing: -2, // Tighten horizontal space
-                    wordWrap: true, 
-                    wordWrapWidth: VIRTUAL_WRAP_WIDTH, 
-                    lineHeight: 75 // Tighten vertical space for density
+            if (!targetTexture) {
+                // Generate Texture (CPU Heavy - Done only once per unique phrase)
+                const VIRTUAL_FONT_SIZE = 48; 
+                const APPROX_CHAR_WIDTH = VIRTUAL_FONT_SIZE * 0.7; 
+                const idealSquareSide = Math.sqrt(textStr.length) * APPROX_CHAR_WIDTH;
+                const MIN_WIDTH = VIRTUAL_FONT_SIZE * 5; 
+                const targetWrapWidth = Math.max(idealSquareSide, MIN_WIDTH);
+
+                const style = new PIXI.TextStyle({ 
+                    fontFamily: 'Arial', fontSize: VIRTUAL_FONT_SIZE, fontWeight: '900', 
+                    fill: '#ffffff', stroke: { color: '#000000', width: 6 }, 
+                    dropShadow: true, dropShadowColor: '#000000', dropShadowBlur: 3, dropShadowDistance: 2,
+                    align: 'center', wordWrap: true, wordWrapWidth: targetWrapWidth, lineHeight: VIRTUAL_FONT_SIZE * 1.1, padding: 10
+                });
+
+                const tempText = new PIXI.Text({ text: textStr, style });
+                tempText.resolution = TEXT_RESOLUTION; // Optimized resolution
+                
+                targetTexture = app.renderer.generateTexture(tempText);
+                
+                // Limit Cache Size to prevent memory overflow (keep last 1000 unique phrases)
+                if(textTextureCache.size > 1000) {
+                    const firstKey = textTextureCache.keys().next().value;
+                    textTextureCache.delete(firstKey); 
                 }
-            });
-            
-            bitmapText.anchor.set(0.5);
-            bitmapText.x = (BLOCK_SIZE - GAP) / 2;
-            bitmapText.y = (BLOCK_SIZE - GAP) / 2;
-            
-            // FIX 3: Scale logic - Fits whatever shape the text is into the square block
-            const safeZone = BLOCK_SIZE - GAP - 4; 
-            const scaleX = safeZone / bitmapText.width;
-            const scaleY = safeZone / bitmapText.height;
-            
-            // Use the smaller scale so it fits both dimensions
-            const finalScale = Math.min(scaleX, scaleY);
-            
-            bitmapText.scale.set(finalScale);
-            bitmapText.visible = false;
-            bitmapText.eventMode = 'none';
-            bitmapText.alpha = 0; 
-            
-            localData.textSprite = bitmapText;
-            localData.sprite.addChild(bitmapText);
-            
-            updateTextLOD(localData);
-        }
-        
-        markBlockDirty(localData);
-    }
-    
-    // --- LOD SYSTEM ---
-    function updateTextLOD(blockData) {
-        if (!blockData.textSprite) return;
-        
-        const currentZoom = container.scale.x;
-        
-        // Smooth fading between LOD_FADE_START and LOD_FADE_END
-        const LOD_FADE_START = 0.35;
-        const LOD_FADE_END = 0.60;
-        
-        let alpha = (currentZoom - LOD_FADE_START) / (LOD_FADE_END - LOD_FADE_START);
-        alpha = Math.max(0, Math.min(1, alpha));
-        
-        const isVisible = alpha > 0.01;
-        
-        blockData.textSprite.visible = isVisible;
-        if (isVisible) {
-            blockData.textSprite.alpha = alpha;
-        }
-        
-        blockData.lastZoom = currentZoom;
-    }
-    
-    function updateAllTextLOD() {
-        // Viewport culling + LOD combined
-        const zoom = container.scale.x;
-        const LOD_FADE_START = 0.35;
-        const LOD_FADE_END = 0.60;
-        
-        let alpha = (zoom - LOD_FADE_START) / (LOD_FADE_END - LOD_FADE_START);
-        alpha = Math.max(0, Math.min(1, alpha));
-        const isVisible = alpha > 0.01;
-        
-        // Viewport Culling logic
-        const screenTop = -container.y / zoom;
-        const screenBottom = (app.screen.height - container.y) / zoom;
-        const startRow = Math.max(1, Math.floor(screenTop / BLOCK_SIZE) - 2);
-        const endRow = Math.min(TOTAL_ROWS, Math.ceil(screenBottom / BLOCK_SIZE) + 2);
-        
-        for (let r = startRow; r <= endRow; r++) {
-            if (!gridLookup[r]) continue;
-            const rowData = gridLookup[r];
-            for (let c = 0; c < rowData.length; c++) {
-                const block = rowData[c];
-                if (block.sold && block.textSprite) {
-                    block.textSprite.visible = isVisible;
-                    if (isVisible) {
-                        block.textSprite.alpha = alpha;
-                    }
-                }
+                textTextureCache.set(textStr, targetTexture);
             }
-        }
-    }
-    
-    // --- DIRTY QUEUE SYSTEM ---
-    function processDirtyQueue() {
-        if (dirtyBlocks.size === 0) return;
-        
-        const MAX_PROCESS_PER_FRAME = 20;
-        let processed = 0;
-        
-        for (const blockId of dirtyBlocks) {
-            if (processed >= MAX_PROCESS_PER_FRAME) break;
+
+            // Create Sprite from Texture (GPU Light)
+            const textSprite = new PIXI.Sprite(targetTexture);
+            textSprite.anchor.set(0.5);
+
+            // Calculate scaling to fit the box
+            const BOX_SIZE = BLOCK_SIZE - GAP; 
+            const SAFE_ZONE = 34; 
+            const scaleX = SAFE_ZONE / textSprite.width;
+            const scaleY = SAFE_ZONE / textSprite.height;
+            const finalScale = Math.min(scaleX, scaleY); 
+
+            textSprite.scale.set(finalScale);
+            textSprite.x = BOX_SIZE / 2; 
+            textSprite.y = BOX_SIZE / 2;
             
-            dirtyBlocks.delete(blockId);
-            const blockData = blocksData.get(blockId);
-            if (blockData && blockData.ownerData) {
-                // Re-apply visual updates for dirty blocks
-                updateSlotVisuals(blockData, blockData.ownerData);
-            }
-            processed++;
-        }
-    }
-    
-    function markBlockDirty(blockData) {
-        if (blockData && blockData.id) {
-            dirtyBlocks.add(blockData.id);
+            localData.sprite.addChild(textSprite);
         }
     }
 
@@ -430,14 +324,6 @@
 
         const pyWidth = PYRAMID_WIDTH * container.scale.x;
         const pyHeight = PYRAMID_HEIGHT * container.scale.y;
-
-        // Update cullArea for enhanced GPU culling
-        container.cullArea = new PIXI.Rectangle(
-            -pyWidth / 2,
-            -pyHeight / 2,
-            pyWidth,
-            pyHeight
-        );
 
         if (pyWidth < app.screen.width) {
             container.x = app.screen.width / 2;
@@ -550,9 +436,6 @@
             container.x -= (newScreenPos.x - mouseX);
             container.y -= (newScreenPos.y - mouseY);
             
-            // Update LOD after zoom
-            updateAllTextLOD();
-            
             constrainPyramid();
         }, { passive: false });
     }
@@ -628,8 +511,8 @@
                 </div>
                 <div class="col-right">
                     <div class="input-group">
-                        <label>Block Text (Max 100 chars)</label>
-                        <textarea maxlength="100" placeholder="HI" oninput="updateForm('text', this.value)" style="width:100%; height:80px; background:rgba(10,10,15,0.5); border:2px solid #333; color:white; padding:10px; border-radius:8px;"></textarea>
+                        <label>Block Text (Max 80 chars)</label>
+                        <textarea maxlength="80" placeholder="HI" oninput="updateForm('text', this.value)" style="width:100%; height:80px; background:rgba(10,10,15,0.5); border:2px solid #333; color:white; padding:10px; border-radius:8px;"></textarea>
                     </div>
                     <div class="input-group">
                         <label>Font</label>
@@ -807,11 +690,10 @@
             for (let i = index; i < limit; i++) {
                 const d = candidates[i];
                 const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)];
-                // Using a 100-character test string
                 updateSlotVisuals(d, { 
                     owner_name: "Sim", 
                     owner_color: randomColor, 
-                    owner_text: "This is a test of exactly one hundred characters to make sure that everything fits perfectly in block" 
+                    owner_text: "My name is piyush and i am here to rule" 
                 });
             }
             index += batchSize;

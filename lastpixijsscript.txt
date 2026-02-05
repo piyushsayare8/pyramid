@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The History Pyramid | Zero Lag</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.x/dist/pixi.min.js"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+    <style>
+        /* --- CORE STYLING --- */
+        :root { --bg-dark: #0a0a0f; --gold: #FFD700; --gold-glow: rgba(255, 215, 0, 0.5); }
+        body { margin: 0; overflow: hidden; background: var(--bg-dark); font-family: 'Arial', sans-serif; color: white; -webkit-font-smoothing: antialiased; }
+        
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: grab; touch-action: none; }
+        #canvas-container:active { cursor: grabbing; }
+
+        /* UI Layers */
+        .ui-layer { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .interactive { pointer-events: auto; }
+        
+        .header { position: absolute; top: 20px; left: 20px; text-align: left; }
+        .header h1 { font-family: 'Georgia', serif; font-size: clamp(1.5rem, 4vw, 2.5rem); color: var(--gold); margin: 0; text-shadow: 0 0 20px var(--gold-glow); letter-spacing: 2px; }
+        .subtitle { font-size: 0.9rem; color: #888; text-transform: uppercase; letter-spacing: 3px; margin-top: 5px; }
+        
+        /* Buttons */
+        .controls { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
+        .btn { background: rgba(20,20,30,0.9); border: 1px solid #444; color: #ccc; padding: 10px 15px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 0.85rem; font-weight: bold; }
+        .btn:hover { border-color: var(--gold); color: var(--gold); background: rgba(255, 215, 0, 0.1); }
+        .btn-fill { border-color: #FF6B6B; color: #FF6B6B; }
+        .btn-fill:hover { background: rgba(255, 107, 107, 0.1); box-shadow: 0 0 15px rgba(255, 107, 107, 0.3); }
+        
+        .center-controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 300px; text-align: center; }
+        .profile-btn { width: 100%; background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.05)); border: 2px solid var(--gold); color: var(--gold); padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 0 15px rgba(255,215,0,0.2); backdrop-filter: blur(5px); text-transform: uppercase; letter-spacing: 1px; }
+        .profile-btn:hover { transform: translateY(-2px); box-shadow: 0 0 25px rgba(255,215,0,0.4); }
+        
+        .tooltip { position: absolute; display: none; padding: 8px 12px; background: rgba(15, 15, 25, 0.95); border: 1px solid var(--gold); border-radius: 6px; color: var(--gold); font-weight: bold; font-size: 0.8rem; pointer-events: none; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.5); transform: translateY(-100%); white-space: nowrap; }
+        
+        /* --- MODAL SYSTEM --- */
+        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); z-index: 100; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
+        .modal { background: #1a1a2e; border: 1px solid #333; width: 100%; max-width: 850px; max-height: 90vh; border-radius: 20px; overflow: hidden; position: relative; box-shadow: 0 25px 60px rgba(0,0,0,0.8); display: flex; flex-direction: column; animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        
+        @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        /* Premium Profile Styles */
+        .modal.premium-mode { background: linear-gradient(160deg, #0f0f16 0%, #161625 100%); border: 1px solid rgba(255, 215, 0, 0.3); box-shadow: 0 0 50px rgba(0,0,0,0.9); max-width: 450px; }
+        .profile-header-bg { height: 100px; background: linear-gradient(to bottom, rgba(255, 215, 0, 0.15), rgba(0,0,0,0)); display: flex; justify-content: flex-end; padding: 15px; }
+        .close-icon-floating { background: rgba(255,255,255,0.1); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        .close-icon-floating:hover { background: rgba(255, 0, 0, 0.6); }
+        .profile-content { padding: 0 30px 40px 30px; text-align: center; margin-top: -60px; }
+        .avatar-wrapper { width: 120px; height: 120px; margin: 0 auto 15px; position: relative; }
+        .avatar-ring { position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--gold); box-shadow: 0 0 20px var(--gold-glow); animation: pulseRing 3s infinite; }
+        .avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #222; border: 4px solid #1a1a2e; position: relative; z-index: 2; }
+        .profile-name { font-family: 'Georgia', serif; font-size: 2rem; color: white; margin: 0; text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        .block-badge { display: inline-block; background: rgba(255, 215, 0, 0.1); color: var(--gold); padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; margin-top: 8px; border: 1px solid rgba(255, 215, 0, 0.3); letter-spacing: 1px; }
+        .profile-message { font-style: italic; font-size: 1.1rem; color: #ccc; line-height: 1.5; background: rgba(255,255,255,0.03); padding: 20px; border-radius: 12px; border-left: 3px solid var(--gold); margin: 25px 0; text-align: left; }
+        .visit-link-btn { display: block; width: 100%; padding: 16px; border-radius: 12px; background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); color: #000; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; text-decoration: none; border: none; cursor: pointer; box-shadow: 0 5px 20px rgba(255, 215, 0, 0.3); transition: transform 0.2s; }
+        
+        /* Form Styles */
+        .modal-header { padding: 20px; background: rgba(0,0,0,0.2); border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h2 { margin: 0; font-family: 'Georgia', serif; font-size: 1.5rem; color: white; }
+        .price-tag { background: rgba(255, 215, 0, 0.1); color: var(--gold); padding: 5px 12px; border-radius: 20px; border: 1px solid var(--gold); font-weight: bold; font-size: 0.9rem; }
+        .modal-body { padding: 25px; overflow-y: auto; display: flex; gap: 30px; color: white; max-height: 60vh; }
+        .col-left, .col-right { flex: 1; display: flex; flex-direction: column; gap: 15px; }
+        .col-right { border-left: 1px solid #333; padding-left: 30px; }
+        .input-group label { display: block; font-size: 0.75rem; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+        .input-group input, .input-group select, .input-group textarea { width: 100%; background: rgba(10, 10, 15, 0.5); border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; font-size: 1rem; box-sizing: border-box; transition: 0.2s; }
+        .color-presets { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+        .color-btn { width: 28px; height: 28px; border-radius: 6px; cursor: pointer; border: 2px solid transparent; transition: 0.2s; }
+        .image-upload-box { border: 2px dashed #444; padding: 15px; border-radius: 10px; text-align: center; cursor: pointer; transition: 0.2s; background: rgba(255,255,255,0.02); display: flex; align-items: center; justify-content: center; min-height: 50px; }
+        .preview-container { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: auto; }
+        .preview-block { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; text-shadow: 0 0 3px black; border: 2px solid white; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        .modal-footer { padding: 20px; border-top: 1px solid #333; display: flex; justify-content: flex-end; gap: 15px; background: rgba(0,0,0,0.2); }
+        .confirm-btn { background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: bold; padding: 12px 30px; border-radius: 10px; border: none; cursor: pointer; font-size: 1rem; transition: 0.2s; }
+
+        #loader { position: fixed; top:0; left:0; width:100%; height:100%; background: #0a0a0f; z-index: 999; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #FFD700; transition: opacity 0.5s; }
+        .loader-text { font-family: 'Georgia', serif; font-size: 1.5rem; margin-top: 20px; animation: pulse 1.5s infinite; }
+        @keyframes pulseRing { 0% { transform: scale(1); opacity: 0.5; } 100% { transform: scale(1.3); opacity: 0; } }
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+
+        @media (max-width: 768px) { .modal-body { flex-direction: column; } .col-right { border-left: none; padding-left: 0; border-top: 1px solid #333; padding-top: 20px; } .controls { top: 10px; right: 10px; } .header { top: 10px; left: 10px; } .subtitle { display: none; } }
+    </style>
+</head>
+<body>
+
+    <div id="loader">
+        <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 22h20L12 2z"></path>
+            <path d="M2 22L12 12"></path>
+            <path d="M12 12l10 10"></path>
+        </svg>
+        <div class="loader-text">Initializing Zero-Lag Engine...</div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div class="ui-layer">
+        <div class="header interactive">
+            <h1>THE PYRAMID</h1>
+            <div class="subtitle">11,325 Blocks of History</div>
+        </div>
+        <div class="controls interactive">
+            <button class="btn" onclick="resetView()">⟲ Reset</button>
+            <button class="btn btn-fill" onclick="simulationMode()">🎨 Fill All (Stress Test)</button>
+        </div>
+        <div class="center-controls interactive">
+            <button class="profile-btn" onclick="viewRandom()">👤 View Random</button>
+        </div>
+    </div>
+
+    <div id="tooltip" class="tooltip"></div>
+
+    <div id="modal-backdrop" class="modal-backdrop interactive" onclick="closeModal(event)">
+        <div class="modal" id="modal-content"></div>
+    </div>
+
+<script type="module">
+    // ==========================================
+    // 1. CONFIGURATION
+    // ==========================================
+    const CONFIG = {
+        TOTAL_ROWS: 150,
+        BLOCK_SIZE: 40,
+        GAP: 2,
+        TOTAL_BLOCKS: 11325,
+        // SMOOTH ZOOM CONFIG: Fade in start/end points
+        LOD_FADE_START: 0.35,  // Text starts appearing (faintly)
+        LOD_FADE_END: 0.60,    // Text becomes fully solid
+        BLOCKS_PER_FRAME: 500,    
+        API_URL: 'https://your-worker-url.workers.dev', 
+        RAZORPAY_KEY: 'rzp_test_YOUR_KEY_HERE',
+        TEST_MODE: true 
+    };
+
+    const PYRAMID_DIMS = { WIDTH: CONFIG.TOTAL_ROWS * CONFIG.BLOCK_SIZE, HEIGHT: CONFIG.TOTAL_ROWS * CONFIG.BLOCK_SIZE };
+    const COLORS = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8'];
+    const FONTS = ['Arial', 'Georgia', 'Courier New', 'Impact', 'Verdana'];
+
+    // ==========================================
+    // 2. STATE
+    // ==========================================
+    let app, container;
+    let textures = {}; 
+    let blocksData = new Map();
+    let gridLookup = [];
+    let dirtyBlocks = new Set();
+
+    let state = {
+        isDragging: false,
+        dragStart: { x: 0, y: 0 },
+        appDragStart: { x: 0, y: 0 },
+        hoveredBlock: null,
+        currentBlock: null,
+        minZoom: 0.1
+    };
+
+    let formData = resetFormData();
+
+    // ==========================================
+    // 3. INIT ENGINE
+    // ==========================================
+    async function init() {
+        app = new PIXI.Application();
+        await app.init({
+            resizeTo: window,
+            backgroundColor: 0x0a0a0f,
+            resolution: window.devicePixelRatio || 2,
+            autoDensity: true,
+            antialias: false,
+            powerPreference: 'high-performance'
+        });
+        document.getElementById('canvas-container').appendChild(app.canvas);
+
+        // INSTALL BITMAP FONT
+        PIXI.BitmapFont.install({
+            name: 'PyramidFont',
+            style: {
+                fontFamily: 'Arial',
+                fontSize: 64, 
+                fontWeight: '900',
+                fill: '#ffffff',
+                stroke: { color: '#000000', width: 6 },
+                align: 'center'
+            }
+        });
+
+        textures = createTextures(app);
+        
+        container = new PIXI.Container();
+        container.eventMode = 'static'; 
+        app.stage.addChild(container);
+        
+        buildGrid(); 
+        calculateMinZoom();
+        setupInteraction();
+        resetView();
+        
+        loadData();
+
+        // THE RENDER LOOP
+        app.ticker.add(() => {
+            processDirtyQueue();      
+            updateTextVisibility();   
+        });
+
+        setTimeout(() => document.getElementById('loader').remove(), 600);
+    }
+
+    // ==========================================
+    // 4. GRID BUILDING
+    // ==========================================
+    function createTextures(app) {
+        const makeRect = (fill, stroke, strokeWidth) => {
+            const g = new PIXI.Graphics()
+                .rect(0, 0, CONFIG.BLOCK_SIZE - CONFIG.GAP, CONFIG.BLOCK_SIZE - CONFIG.GAP)
+                .fill(fill)
+                .stroke({ width: strokeWidth, color: stroke });
+            return app.renderer.generateTexture(g);
+        };
+        return {
+            gold: makeRect(0x2d2d44, 0xFFD700, 3),    
+            silver: makeRect(0x252535, 0xC0C0C0, 2),  
+            standard: makeRect(0x1e1e28, 0x444444, 1),
+            sold: makeRect(0xFFFFFF, 0xFFD700, 3)     
+        };
+    }
+
+    function buildGrid() {
+        let blockId = CONFIG.TOTAL_BLOCKS;
+        gridLookup = new Array(CONFIG.TOTAL_ROWS + 1).fill(null).map(() => []);
+
+        for (let row = 1; row <= CONFIG.TOTAL_ROWS; row++) {
+            const startX = -(row * CONFIG.BLOCK_SIZE) / 2; 
+            const yPos = (row - 1) * CONFIG.BLOCK_SIZE;
+
+            for (let col = 0; col < row; col++) {
+                let type = 'standard';
+                if (row <= 45) type = 'gold';
+                else if (row <= 85) type = 'silver';
+
+                const slot = new PIXI.Sprite(textures[type]);
+                slot.x = startX + (col * CONFIG.BLOCK_SIZE);
+                slot.y = yPos;
+                slot.cullable = true; 
+
+                let price = blockId === CONFIG.TOTAL_BLOCKS ? 5000 : 1 + (blockId - 1) * 0.5;
+
+                const data = { 
+                    id: blockId, 
+                    price, 
+                    tier: type, 
+                    row, col, 
+                    sold: false, 
+                    sprite: slot, 
+                    ownerData: null,
+                    textObj: null 
+                };
+                
+                blocksData.set(blockId, data);
+                gridLookup[row][col] = data;
+
+                container.addChild(slot);
+                blockId--;
+            }
+        }
+    }
+
+    // ==========================================
+    // 5. ASSEMBLY LINE (QUEUE)
+    // ==========================================
+    function processDirtyQueue() {
+        if (dirtyBlocks.size === 0) return;
+
+        let processed = 0;
+        for (const block of dirtyBlocks) {
+            if (block.sold) {
+                block.sprite.texture = textures.sold;
+                block.sprite.tint = block.ownerData.owner_color.replace('#', '0x');
+                
+                if (!block.textObj) {
+                    const textStr = (block.ownerData.owner_text || "HI").substring(0, 10);
+                    
+                    const text = new PIXI.BitmapText({
+                        text: textStr,
+                        style: { fontFamily: 'PyramidFont', fontSize: 64, align: 'center' }
+                    });
+                    
+                    text.anchor.set(0.5);
+                    text.x = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
+                    text.y = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
+                    const scaleFactor = (CONFIG.BLOCK_SIZE - 10) / text.width;
+                    text.scale.set(Math.min(scaleFactor, 0.25)); 
+                    
+                    text.visible = false; 
+                    text.eventMode = 'none'; 
+                    text.alpha = 0; // Start invisible
+                    
+                    block.sprite.addChild(text);
+                    block.textObj = text;
+                } else {
+                    block.textObj.text = (block.ownerData.owner_text || "HI").substring(0, 10);
+                }
+            } else {
+                block.sprite.texture = textures[block.tier];
+                block.sprite.tint = 0xFFFFFF;
+                if(block.textObj) block.textObj.visible = false;
+            }
+            
+            dirtyBlocks.delete(block);
+            processed++;
+            if (processed >= CONFIG.BLOCKS_PER_FRAME) break; 
+        }
+    }
+
+    // ==========================================
+    // 6. VISIBILITY TOGGLER (SMOOTH FADE)
+    // ==========================================
+    function updateTextVisibility() {
+        // 1. Calculate Opacity based on Zoom
+        const zoom = container.scale.x;
+        
+        // Linear Interpolation: (Current - Start) / (End - Start)
+        let alpha = (zoom - CONFIG.LOD_FADE_START) / (CONFIG.LOD_FADE_END - CONFIG.LOD_FADE_START);
+        
+        // Clamp between 0.0 and 1.0
+        alpha = Math.max(0, Math.min(1, alpha));
+
+        // Optimization: If invisible, don't render at all
+        const isVisible = alpha > 0.01;
+
+        // Viewport Culling logic
+        const screenTop = -container.y / zoom;
+        const screenBottom = (app.screen.height - container.y) / zoom;
+        const startRow = Math.max(1, Math.floor(screenTop / CONFIG.BLOCK_SIZE) - 2);
+        const endRow = Math.min(CONFIG.TOTAL_ROWS, Math.ceil(screenBottom / CONFIG.BLOCK_SIZE) + 2);
+
+        // Loop visible rows
+        for (let r = startRow; r <= endRow; r++) {
+            if (!gridLookup[r]) continue;
+            const rowData = gridLookup[r];
+            for (let c = 0; c < rowData.length; c++) {
+                const block = rowData[c];
+                
+                // Only update if text object exists
+                if (block.sold && block.textObj) {
+                    block.textObj.visible = isVisible;
+                    
+                    // Only apply alpha change if visible (saves CPU)
+                    if (isVisible) {
+                        block.textObj.alpha = alpha; 
+                    }
+                }
+            }
+        }
+    }
+
+    // ==========================================
+    // 7. INTERACTION
+    // ==========================================
+    function setupInteraction() {
+        app.stage.hitArea = app.screen;
+        
+        app.stage.on('pointerdown', (e) => {
+            state.isDragging = true;
+            state.dragStart = { x: e.global.x - container.x, y: e.global.y - container.y };
+            state.appDragStart = { x: e.global.x, y: e.global.y };
+        });
+        
+        app.stage.on('pointermove', (e) => {
+            const globalX = e.global.x;
+            const globalY = e.global.y;
+
+            if(state.isDragging) {
+                container.x = globalX - state.dragStart.x;
+                container.y = globalY - state.dragStart.y;
+                constrainPyramid(); 
+                return; 
+            }
+
+            // Hover Logic
+            const localPoint = container.toLocal({x: globalX, y: globalY});
+            const r = Math.floor(localPoint.y / CONFIG.BLOCK_SIZE) + 1;
+            
+            if (r >= 1 && r <= CONFIG.TOTAL_ROWS && gridLookup[r]) {
+                const rowWidth = r * CONFIG.BLOCK_SIZE;
+                const c = Math.floor((localPoint.x - (-rowWidth/2)) / CONFIG.BLOCK_SIZE);
+                const block = gridLookup[r][c];
+                
+                if (block !== state.hoveredBlock) {
+                    if (state.hoveredBlock) state.hoveredBlock.sprite.alpha = 1.0;
+                    if (block) {
+                        block.sprite.alpha = 0.6; 
+                        showTooltip(block, globalX, globalY);
+                    } else { hideTooltip(); }
+                    state.hoveredBlock = block;
+                }
+                if (state.hoveredBlock) moveTooltip(globalX, globalY);
+            } else {
+                if (state.hoveredBlock) state.hoveredBlock.sprite.alpha = 1.0;
+                state.hoveredBlock = null;
+                hideTooltip();
+            }
+        });
+        
+        app.stage.on('pointerup', (e) => {
+            if (state.isDragging) {
+                state.isDragging = false;
+                const dx = e.global.x - state.appDragStart.x;
+                const dy = e.global.y - state.appDragStart.y;
+                if (Math.sqrt(dx*dx + dy*dy) < 5 && state.hoveredBlock) {
+                    state.currentBlock = state.hoveredBlock;
+                    openModal();
+                }
+            }
+        });
+
+        // Wheel Zoom
+        document.getElementById('canvas-container').addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomSpeed = 0.0015;
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+
+            const worldPos = {
+                x: (mouseX - container.x) / container.scale.x,
+                y: (mouseY - container.y) / container.scale.y
+            };
+
+            const newScale = Math.min(Math.max(container.scale.x - (e.deltaY * zoomSpeed), state.minZoom), 5.0);
+            container.scale.set(newScale);
+
+            const newScreenPos = {
+                x: worldPos.x * container.scale.x + container.x,
+                y: worldPos.y * container.scale.y + container.y
+            };
+
+            container.x -= (newScreenPos.x - mouseX);
+            container.y -= (newScreenPos.y - mouseY);
+            constrainPyramid();
+        }, { passive: false });
+    }
+
+    function constrainPyramid() {
+        const pyWidth = PYRAMID_DIMS.WIDTH * container.scale.x;
+        const pyHeight = PYRAMID_DIMS.HEIGHT * container.scale.y;
+        
+        if (pyWidth < app.screen.width) container.x = app.screen.width / 2;
+        else {
+            const minX = app.screen.width - (pyWidth / 2) - 100;
+            const maxX = (pyWidth / 2) + 100;
+            container.x = Math.max(minX, Math.min(container.x, maxX));
+        }
+        const minY = app.screen.height - pyHeight - 200;
+        const maxY = 200;
+        container.y = Math.max(minY, Math.min(container.y, maxY));
+    }
+
+    function calculateMinZoom() {
+        const scaleX = app.screen.width / (PYRAMID_DIMS.WIDTH + 100); 
+        const scaleY = app.screen.height / (PYRAMID_DIMS.HEIGHT + 200);
+        state.minZoom = Math.min(scaleX, scaleY);
+    }
+
+    // ==========================================
+    // 8. DATA LOADING
+    // ==========================================
+    async function loadData() {
+        try {
+            let soldSlots = [];
+            if (CONFIG.TEST_MODE) { console.log("TEST MODE: Skipping API Fetch"); } 
+            else {
+                 const res = await fetch(`${CONFIG.API_URL}/api/grid`);
+                 if (res.ok) soldSlots = await res.json();
+            }
+            soldSlots.forEach(slotData => {
+                const block = blocksData.get(slotData.slot_number);
+                if (block) updateBlockData(block, slotData);
+            });
+        } catch (e) { console.error("Data Load Error:", e); }
+    }
+
+    function updateBlockData(block, serverData) {
+        block.sold = true;
+        block.ownerData = serverData;
+        dirtyBlocks.add(block);
+    }
+
+    // ==========================================
+    // 9. UI & MODAL LOGIC
+    // ==========================================
+    window.openModal = () => {
+        const modal = document.getElementById('modal-backdrop');
+        const content = document.getElementById('modal-content');
+        modal.style.display = 'flex';
+        content.classList.remove('premium-mode');
+        
+        if (state.currentBlock.sold) {
+            content.classList.add('premium-mode'); 
+            renderSoldProfile(content, state.currentBlock);
+        } else {
+            formData = resetFormData();
+            renderPurchaseForm(content, state.currentBlock);
+        }
+    };
+
+    window.closeModal = (e) => {
+        if (!e || e.target.id === 'modal-backdrop' || e.target.classList.contains('close-icon') || e.target.classList.contains('close-icon-floating')) {
+            document.getElementById('modal-backdrop').style.display = 'none';
+        }
+    };
+
+    function resetFormData() {
+        return { name: '', message: '', link: '', color: '#FFD700', text: '', font: 'Arial', imageUrl: '' };
+    }
+
+    // --- HTML RENDERERS ---
+    function renderPurchaseForm(container, block) {
+        container.innerHTML = `
+            <div class="modal-header">
+                <h2>Claim Block <span style="color:${COLORS[0]}">#${block.id}</span></h2>
+                <div class="price-tag">$${block.price.toFixed(2)}</div>
+                <button class="close-icon" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="col-left">
+                    <div class="input-group">
+                        <label>Name / Alias</label>
+                        <input type="text" placeholder="Your Name" maxlength="30" oninput="updateForm('name', this.value)">
+                    </div>
+                    <div class="input-group">
+                        <label>Message</label>
+                        <input type="text" placeholder="Your message..." maxlength="50" oninput="updateForm('message', this.value)">
+                    </div>
+                    <div class="input-group">
+                        <label>Link (Optional)</label>
+                        <input type="url" placeholder="https://..." oninput="updateForm('link', this.value)">
+                    </div>
+                    <div class="input-group">
+                        <label>Color</label>
+                        <div class="color-selector">
+                            <input type="color" id="color-picker" value="#FFD700" oninput="updateForm('color', this.value)" style="height:40px; cursor:pointer;">
+                            <div class="color-presets">
+                                ${COLORS.map(c => `<div class="color-btn" style="background:${c}" onclick="updateForm('color', '${c}')"></div>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-right">
+                    <div class="input-group">
+                        <label>Block Text (Max 20)</label>
+                        <textarea maxlength="20" placeholder="HI" oninput="updateForm('text', this.value)" style="height:60px; font-weight:bold;"></textarea>
+                    </div>
+                    <div class="input-group">
+                        <label>Font</label>
+                        <select onchange="updateForm('font', this.value)">
+                            ${FONTS.map(f => `<option value="${f}">${f}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <input type="file" id="file-upload" hidden onchange="handleImageUpload(this)">
+                        <div class="image-upload-box" onclick="document.getElementById('file-upload').click()">
+                            <span id="upload-label">📷 Upload Image</span>
+                        </div>
+                    </div>
+                    <div class="preview-container">
+                        <label style="font-size:10px; opacity:0.7;">PREVIEW</label>
+                        <div id="block-preview" class="preview-block" style="background-color: #FFD700; border-color: #FFD700;">
+                            <span id="preview-text" style="font-family: Arial; font-size:14px; text-align:center;">HI</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="confirm-btn" onclick="initiatePurchase()">Mint Block</button>
+            </div>
+        `;
+    }
+
+    function renderSoldProfile(container, block) {
+        const od = block.ownerData;
+        const imageSrc = od.imageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(od.owner_name)}&background=random&size=128`;
+        
+        container.innerHTML = `
+            <div class="profile-header-bg">
+                <button class="close-icon-floating" onclick="closeModal()">✕</button>
+            </div>
+            <div class="profile-content">
+                <div class="avatar-wrapper">
+                    <div class="avatar-ring"></div>
+                    <img src="${imageSrc}" class="avatar-img" alt="Owner">
+                </div>
+                <h2 class="profile-name">${od.owner_name}</h2>
+                <div class="block-badge">BLOCK #${block.id}</div>
+                ${od.message ? `<div class="profile-message">"${od.message}"</div>` : ''}
+                ${od.link ? `<a href="${od.link}" target="_blank" class="visit-link-btn">Visit Link 🔗</a>` : ''}
+            </div>
+        `;
+    }
+
+    // --- FORM HANDLERS ---
+    window.updateForm = (field, value) => {
+        formData[field] = value;
+        if (field === 'color') {
+            document.getElementById('color-picker').value = value;
+            const el = document.getElementById('block-preview');
+            el.style.backgroundColor = value;
+            el.style.borderColor = value;
+        }
+        if (field === 'text') {
+            const el = document.getElementById('preview-text');
+            el.textContent = value || "HI";
+            el.style.fontSize = value.length > 5 ? "10px" : "14px";
+        }
+        if (field === 'font') {
+            document.getElementById('preview-text').style.fontFamily = value;
+        }
+    };
+
+    window.handleImageUpload = async (input) => {
+        const file = input.files[0];
+        if (!file) return;
+        const label = document.getElementById('upload-label');
+        label.textContent = "⏳ Uploading...";
+        
+        if (CONFIG.TEST_MODE) {
+            setTimeout(() => { 
+                formData.imageUrl = `https://picsum.photos/seed/${Math.random()}/200/200`; 
+                label.textContent = "✅ Image Set"; 
+            }, 800);
+            return;
+        }
+
+        const data = new FormData(); 
+        data.append('image', file);
+        try {
+            const res = await fetch(`${CONFIG.API_URL}/api/upload-image`, { method: 'POST', body: data });
+            const json = await res.json();
+            if (json.success) { 
+                formData.imageUrl = json.imageUrl; 
+                label.textContent = "✅ Uploaded"; 
+            } else { throw new Error("Upload Failed"); }
+        } catch (e) { 
+            alert('Upload error. Try a smaller image.'); 
+            label.textContent = "❌ Error";
+        }
+    };
+
+    window.initiatePurchase = () => {
+        if (!formData.name) { alert("Please enter a name"); return; }
+        
+        if (CONFIG.TEST_MODE) { 
+            finalizePurchase("test_txn_" + Date.now()); 
+            return; 
+        }
+
+        const options = {
+            "key": CONFIG.RAZORPAY_KEY, 
+            "amount": state.currentBlock.price * 100, 
+            "currency": "USD",
+            "name": "History Pyramid", 
+            "description": `Block #${state.currentBlock.id}`,
+            "handler": (r) => finalizePurchase(r.razorpay_payment_id),
+            "prefill": { "name": formData.name }, 
+            "theme": { "color": "#FFD700" }
+        };
+        const rzp = new Razorpay(options);
+        rzp.on('payment.failed', (r) => alert("Payment Failed: " + r.error.description));
+        rzp.open();
+    };
+
+    async function finalizePurchase(paymentId) {
+        document.querySelector('.confirm-btn').textContent = "Minting...";
+        
+        const payload = { 
+            slotId: state.currentBlock.id, 
+            user: formData.name, 
+            message: formData.message, 
+            color: formData.color, 
+            text: formData.text, 
+            font: formData.font,
+            paymentId, 
+            imageUrl: formData.imageUrl, 
+            link: formData.link 
+        };
+
+        try {
+            if (!CONFIG.TEST_MODE) {
+                const res = await fetch(`${CONFIG.API_URL}/api/purchase`, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify(payload) 
+                });
+                if(!res.ok) throw new Error("Server Error");
+            }
+            
+            const serverData = { 
+                owner_name: payload.user, 
+                owner_color: payload.color, 
+                owner_text: payload.text, 
+                message: payload.message, 
+                imageUrl: payload.imageUrl, 
+                link: payload.link,
+                font: payload.font
+            };
+            
+            updateBlockData(blocksData.get(state.currentBlock.id), serverData);
+            closeModal();
+            setTimeout(() => alert(`🎉 Block #${state.currentBlock.id} Minted!`), 100);
+            
+        } catch (e) { 
+            alert("Minting Error: " + e.message); 
+            document.querySelector('.confirm-btn').textContent = "Try Again";
+        }
+    }
+
+    // --- TOOLTIPS ---
+    function showTooltip(block, x, y) {
+        const t = document.getElementById('tooltip');
+        t.style.display = 'block';
+        t.textContent = block.sold 
+            ? `${block.ownerData.owner_name}` 
+            : `#${block.id} • $${block.price.toFixed(2)}`;
+        moveTooltip(x, y);
+    }
+    function moveTooltip(x, y) {
+        const t = document.getElementById('tooltip');
+        t.style.left = (x + 15) + 'px';
+        t.style.top = (y - 35) + 'px';
+    }
+    function hideTooltip() {
+        document.getElementById('tooltip').style.display = 'none';
+    }
+
+    // --- UTILS ---
+    window.resetView = () => {
+        calculateMinZoom();
+        container.scale.set(state.minZoom);
+        constrainPyramid();
+    };
+
+    window.simulationMode = () => {
+        if(!confirm("Simulate filling 11,325 blocks? (Stress Test)")) return;
+        
+        blocksData.forEach(block => {
+            if(!block.sold) {
+                updateBlockData(block, {
+                    owner_name: "Sim User",
+                    owner_color: COLORS[Math.floor(Math.random()*COLORS.length)],
+                    owner_text: block.id.toString(),
+                    message: "Stress test message.",
+                    imageUrl: null,
+                    font: 'Arial'
+                });
+            }
+        });
+    };
+    
+    window.viewRandom = () => {
+        const sold = Array.from(blocksData.values()).filter(b => b.sold);
+        if(sold.length === 0) { alert("No sold blocks yet! Try Simulation Mode."); return; }
+        state.currentBlock = sold[Math.floor(Math.random() * sold.length)];
+        openModal();
+    };
+
+    // START ENGINE
+    init();
+
+</script>
+</body>
+</html>
