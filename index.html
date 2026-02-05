@@ -10,7 +10,7 @@
 
     <style>
         /* --- CSS STYLES --- */
-        :root { --bg-dark: #0a0a0f; --bg-panel: #151520; --border: #333; --gold: #FFD700; }
+        :root { --bg-dark: #0a0a0f; --bg-panel: #151520; --border: #333; --gold: #FFD700; --gold-glow: rgba(255, 215, 0, 0.5); }
         body { margin: 0; overflow: hidden; background: #0a0a0f; font-family: 'Arial', sans-serif; color: white; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: grab; }
         #canvas-container:active { cursor: grabbing; }
@@ -19,7 +19,7 @@
         
         /* UI Elements */
         .header { position: absolute; top: 20px; left: 20px; text-align: left; }
-        .header h1 { font-family: 'Georgia', serif; font-size: 2.5rem; color: #FFD700; margin: 0; text-shadow: 0 0 20px rgba(255, 215, 0, 0.5); letter-spacing: 4px; }
+        .header h1 { font-family: 'Georgia', serif; font-size: 2.5rem; color: #FFD700; margin: 0; text-shadow: 0 0 20px var(--gold-glow); letter-spacing: 4px; }
         .subtitle { font-size: 1rem; color: #888; text-transform: uppercase; letter-spacing: 4px; margin-top: 5px; }
         
         .controls { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
@@ -29,49 +29,132 @@
         .btn-fill:hover { background: rgba(255, 107, 107, 0.1); box-shadow: 0 0 15px rgba(255, 107, 107, 0.3); }
         
         .center-controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); }
-        .profile-btn { background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.05)); border: 2px solid #FFD700; color: #FFD700; padding: 10px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 0 15px rgba(255,215,0,0.2); }
+        .profile-btn { background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.05)); border: 2px solid #FFD700; color: #FFD700; padding: 10px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 0 15px rgba(255,215,0,0.2); backdrop-filter: blur(5px); }
         .profile-btn:hover { transform: translateX(-50%) translateY(-2px); box-shadow: 0 0 25px rgba(255,215,0,0.4); }
         
         .tooltip { position: absolute; display: none; padding: 8px 12px; background: rgba(15, 15, 25, 0.95); border: 1px solid #FFD700; border-radius: 8px; color: #FFD700; font-weight: bold; font-size: 0.9rem; pointer-events: none; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.5); transform: translateY(-100%); }
         
-        /* Modal */
-        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px); z-index: 100; justify-content: center; align-items: center; }
-        .modal { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border: 2px solid transparent; width: 95%; max-width: 900px; max-height: 90vh; border-radius: 24px; overflow: hidden; position: relative; box-shadow: 0 25px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(255, 215, 0, 0.1); animation: slideUp 0.3s ease-out; display: flex; flex-direction: column; }
+        /* Modal General */
+        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); z-index: 100; justify-content: center; align-items: center; }
+        .modal { background: #1a1a2e; border: 1px solid #333; width: 95%; max-width: 900px; max-height: 90vh; border-radius: 24px; overflow: hidden; position: relative; box-shadow: 0 25px 60px rgba(0,0,0,0.8); animation: slideUp 0.3s ease-out; display: flex; flex-direction: column; }
+        
+        /* --- NEW PREMIUM PROFILE STYLES --- */
+        .modal.premium-mode {
+            background: linear-gradient(160deg, #0f0f16 0%, #161625 100%);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            box-shadow: 0 0 50px rgba(0,0,0,0.9), 0 0 0 1px rgba(255, 215, 0, 0.1);
+            max-width: 500px; /* Slimmer for profile view */
+        }
+        
+        .profile-header-bg {
+            height: 120px;
+            background: linear-gradient(to bottom, rgba(255, 215, 0, 0.15), rgba(0,0,0,0));
+            position: relative;
+            display: flex;
+            justify-content: flex-end;
+            padding: 20px;
+        }
+
+        .close-icon-floating {
+            background: rgba(255,255,255,0.1); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; transition: 0.2s;
+        }
+        .close-icon-floating:hover { background: rgba(255, 0, 0, 0.4); transform: rotate(90deg); }
+
+        .profile-content {
+            padding: 0 30px 40px 30px;
+            text-align: center;
+            margin-top: -70px; /* Pull up into header */
+        }
+
+        .avatar-wrapper {
+            width: 130px; height: 130px; margin: 0 auto 20px;
+            position: relative;
+        }
+        
+        .avatar-ring {
+            position: absolute; top: -5px; left: -5px; right: -5px; bottom: -5px;
+            border-radius: 50%;
+            border: 2px solid var(--gold);
+            box-shadow: 0 0 20px var(--gold-glow);
+            animation: pulseRing 3s infinite;
+        }
+        
+        .avatar-img {
+            width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+            background: #222; border: 4px solid #1a1a2e;
+            position: relative; z-index: 2;
+        }
+
+        .profile-name {
+            font-family: 'Georgia', serif; font-size: 2.2rem; color: white; margin: 0;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+        
+        .block-badge {
+            display: inline-block; background: rgba(255, 215, 0, 0.1); color: var(--gold);
+            padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: bold;
+            margin-top: 8px; border: 1px solid rgba(255, 215, 0, 0.3); letter-spacing: 1px;
+        }
+
+        .profile-divider { width: 50px; height: 2px; background: #333; margin: 25px auto; }
+
+        .profile-message {
+            font-style: italic; font-size: 1.1rem; color: #ccc; line-height: 1.6;
+            background: rgba(255,255,255,0.03); padding: 20px; border-radius: 12px;
+            border-left: 3px solid var(--gold); margin-bottom: 25px;
+            position: relative;
+        }
+        
+        .profile-stats-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;
+        }
+        
+        .stat-box {
+            background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; border: 1px solid #333;
+        }
+        .stat-label { font-size: 0.75rem; color: #777; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 5px; }
+        .stat-value { font-size: 1.1rem; font-weight: bold; color: white; }
+        .stat-value.gold { color: var(--gold); }
+        .stat-value.silver { color: #C0C0C0; }
+
+        .visit-link-btn {
+            display: block; width: 100%; padding: 16px; border-radius: 12px;
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #000; font-weight: 900; text-transform: uppercase; letter-spacing: 1px;
+            text-decoration: none; border: none; cursor: pointer;
+            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .visit-link-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(255, 215, 0, 0.5); }
+
+        /* --- STANDARD FORM STYLES (Keep existing for purchase) --- */
         .modal-header { padding: 20px; background: rgba(0,0,0,0.2); border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
         .modal-header h2 { margin: 0; font-family: 'Georgia', serif; font-size: 1.5rem; }
         .price-tag { background: rgba(255, 215, 0, 0.1); color: var(--gold); padding: 5px 15px; border-radius: 20px; border: 1px solid var(--gold); font-weight: bold; }
         .close-icon { color: #888; cursor: pointer; font-size: 1.5rem; background: none; border: none; }
-        
         .modal-body { padding: 25px; overflow-y: auto; display: flex; gap: 30px; color: white; }
         .col-left { flex: 1.2; display: flex; flex-direction: column; gap: 20px; }
         .col-right { flex: 1; display: flex; flex-direction: column; gap: 20px; border-left: 1px solid #333; padding-left: 20px; }
-        
-        /* Inputs & Form */
         .input-group label { display: block; font-size: 0.8rem; color: #888; margin-bottom: 6px; text-transform: uppercase; }
         .input-group input, .input-group select { width: 100%; background: rgba(10, 10, 15, 0.5); border: 2px solid #333; color: white; padding: 12px; border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
         .input-group input:focus { border-color: var(--gold); outline: none; }
-        
         .color-selector { display: flex; gap: 10px; align-items: center; }
         .color-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 10px; }
         .color-btn { width: 24px; height: 24px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; }
         .color-btn:hover { transform: scale(1.1); border-color: white; }
-        
         .image-upload-box { border: 2px dashed #444; padding: 20px; border-radius: 10px; text-align: center; cursor: pointer; transition: 0.2s; background: rgba(255,255,255,0.02); }
         .image-upload-box:hover { border-color: var(--gold); background: rgba(255,215,0,0.05); }
-        
         .preview-container { background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
         .preview-block { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; text-shadow: 0 0 3px black; position: relative; overflow: hidden; transition: all 0.2s; }
-        
         .modal-footer { padding: 20px; border-top: 1px solid #333; display: flex; justify-content: flex-end; gap: 15px; }
         .confirm-btn { background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: bold; padding: 12px 30px; border-radius: 10px; border: none; cursor: pointer; font-size: 1rem; }
         .confirm-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(255,215,0,0.4); }
         
         @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        #loader { position: fixed; top:0; left:0; width:100%; height:100%; background: #0a0a0f; z-index: 999; display: flex; justify-content: center; align-items: center; color: #FFD700; font-family: Georgia; font-size: 1.5rem; transition: opacity 0.5s; }
+        @keyframes pulseRing { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(1.2); opacity: 0; } }
         
+        #loader { position: fixed; top:0; left:0; width:100%; height:100%; background: #0a0a0f; z-index: 999; display: flex; justify-content: center; align-items: center; color: #FFD700; font-family: Georgia; font-size: 1.5rem; transition: opacity 0.5s; }
         @media (max-width: 700px) { .modal-body { flex-direction: column; } .col-right { border-left: none; padding-left: 0; border-top: 1px solid #333; padding-top: 20px; } }
-        .owner-avatar { width: 120px; height: 120px; border-radius: 50%; border: 3px solid #FFD700; margin: 0 auto 15px; background: #333; overflow: hidden; }
-        .owner-avatar img { width: 100%; height: 100%; object-fit: cover; }
     </style>
 </head>
 <body>
@@ -112,26 +195,22 @@
     const GAP = 2;
     const TOTAL_BLOCKS = 11325; 
     
-    // --- DIMENSIONS & PADDING ---
     const PYRAMID_WIDTH = TOTAL_ROWS * BLOCK_SIZE; 
     const PYRAMID_HEIGHT = TOTAL_ROWS * BLOCK_SIZE; 
     
-    // SAFE ZONES (Invisible Walls)
-    const BOTTOM_SAFE_ZONE = 120; // 120px space at bottom
-    const TOP_HEADER_ZONE = 100;  // 100px space at top
+    const BOTTOM_SAFE_ZONE = 120;
+    const TOP_HEADER_ZONE = 100;
     
     const API_URL = 'https://pyramid-backend.piyushsayare8.workers.dev';
     const RAZORPAY_KEY_ID = 'rzp_test_YOUR_KEY_HERE'; 
     const TEST_MODE = true; 
     
-    // OPTIMIZATION: Reduce text resolution on mobile to prevent crashes
     const isMobile = window.innerWidth < 800;
     const TEXT_RESOLUTION = isMobile ? 1.2 : 2.0;
 
     // --- 2. STATE ---
     let app, container;
     let blocksData = new Map();
-    // Optimization: Spatial lookup Grid [row][col] -> data
     let gridLookup = []; 
     let hoveredBlock = null;
 
@@ -141,9 +220,8 @@
     let minZoomLevel = 0.1;
     let textures = {}; 
     
-    // --- OPTIMIZATION STATE ---
-    let isProcessing = false; // Lock: Prevents overlapping simulations/fetches
-    let textTextureCache = new Map(); // Cache: Reuses textures for identical text
+    let isProcessing = false; 
+    let textTextureCache = new Map(); 
     
     let formData = { name: '', message: '', link: '', color: '#FFD700', text: '', font: 'Arial', imageUrl: '' };
     const COLORS = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8'];
@@ -164,7 +242,6 @@
         textures = createTextures(app);
         
         container = new PIXI.Container();
-        // Optimization: Container handles events, not individual sprites (Saves 40,000 listeners)
         container.eventMode = 'static'; 
         app.stage.addChild(container);
         
@@ -172,10 +249,7 @@
         
         calculateMinZoom();
         setupInteraction();
-        
-        // Start loading real data immediately
         loadData();
-        
         resetView();
 
         window.addEventListener('resize', () => {
@@ -209,8 +283,6 @@
 
     function buildGrid() {
         let blockId = TOTAL_BLOCKS;
-        
-        // Initialize Grid Lookup Array
         gridLookup = new Array(TOTAL_ROWS + 1).fill(null).map(() => []);
 
         for (let row = 1; row <= TOTAL_ROWS; row++) {
@@ -230,7 +302,6 @@
 
                 const data = { id: blockId, price, tier: type, row, col, sold: false, sprite: slot };
                 
-                // Store in both Map (for ID access) and Grid (for click access)
                 blocksData.set(blockId, data);
                 gridLookup[row][col] = data;
 
@@ -240,7 +311,6 @@
         }
     }
 
-    // --- 4. OPTIMIZED VISUAL ENGINE (The "Engine Room") ---
     function updateSlotVisuals(localData, serverData) {
         localData.sold = true; 
         localData.ownerData = serverData;
@@ -249,23 +319,15 @@
         localData.sprite.texture = textures[soldTextureKey];
         localData.sprite.tint = serverData.owner_color.replace('#', '0x');
         
-        // Remove existing text to prevent leaks
         if (localData.sprite.children.length > 0) {
             localData.sprite.removeChildren();
         }
 
         if (serverData.owner_text) {
             const textStr = serverData.owner_text.substring(0, 80);
-            
-            // --- CRITICAL PERFORMANCE UPGRADE: TEXTURE CACHING ---
-            // 1. Check if we have already drawn this EXACT word.
-            // 2. If yes, reuse the GPU texture. (0ms cost)
-            // 3. If no, create it once and save it. (5ms cost)
-            
             let targetTexture = textTextureCache.get(textStr);
 
             if (!targetTexture) {
-                // Generate Texture (CPU Heavy - Done only once per unique phrase)
                 const VIRTUAL_FONT_SIZE = 48; 
                 const APPROX_CHAR_WIDTH = VIRTUAL_FONT_SIZE * 0.7; 
                 const idealSquareSide = Math.sqrt(textStr.length) * APPROX_CHAR_WIDTH;
@@ -280,11 +342,9 @@
                 });
 
                 const tempText = new PIXI.Text({ text: textStr, style });
-                tempText.resolution = TEXT_RESOLUTION; // Optimized resolution
-                
+                tempText.resolution = TEXT_RESOLUTION;
                 targetTexture = app.renderer.generateTexture(tempText);
                 
-                // Limit Cache Size to prevent memory overflow (keep last 1000 unique phrases)
                 if(textTextureCache.size > 1000) {
                     const firstKey = textTextureCache.keys().next().value;
                     textTextureCache.delete(firstKey); 
@@ -292,11 +352,9 @@
                 textTextureCache.set(textStr, targetTexture);
             }
 
-            // Create Sprite from Texture (GPU Light)
             const textSprite = new PIXI.Sprite(targetTexture);
             textSprite.anchor.set(0.5);
 
-            // Calculate scaling to fit the box
             const BOX_SIZE = BLOCK_SIZE - GAP; 
             const SAFE_ZONE = 34; 
             const scaleX = SAFE_ZONE / textSprite.width;
@@ -311,7 +369,7 @@
         }
     }
 
-    // --- 5. INTERACTION LOGIC (Spatial Hashing) ---
+    // --- INTERACTION ---
     function calculateMinZoom() {
         const scaleX = app.screen.width / (PYRAMID_WIDTH + 200); 
         const scaleY = app.screen.height / (PYRAMID_HEIGHT + 300);
@@ -343,11 +401,8 @@
         }
     }
 
-    // O(1) Lookup - No Loops
     function getBlockAtGlobalPos(globalX, globalY) {
         const localPoint = container.toLocal({x: globalX, y: globalY});
-        
-        // Grid Math
         const r = Math.floor(localPoint.y / BLOCK_SIZE) + 1;
         if (r < 1 || r > TOTAL_ROWS) return null;
         
@@ -363,7 +418,6 @@
         app.stage.eventMode = 'static';
         app.stage.hitArea = app.screen;
         
-        // Pan Logic
         app.stage.on('pointerdown', (e) => {
             isDragging = true;
             dragStart = { x: e.global.x - container.x, y: e.global.y - container.y };
@@ -395,10 +449,8 @@
         app.stage.on('pointerup', (e) => {
             if (isDragging) {
                 isDragging = false;
-                
                 const dx = e.global.x - (app.dragStartPos?.x || 0);
                 const dy = e.global.y - (app.dragStartPos?.y || 0);
-                
                 if (Math.sqrt(dx*dx + dy*dy) < 5) {
                    const targetBlock = getBlockAtGlobalPos(e.global.x, e.global.y);
                    if (targetBlock) {
@@ -411,7 +463,6 @@
         
         app.stage.on('pointerupoutside', () => isDragging = false);
 
-        // Wheel Zoom
         document.getElementById('canvas-container').addEventListener('wheel', (e) => {
             e.preventDefault();
             const zoomSpeed = 0.001;
@@ -439,7 +490,7 @@
         }, { passive: false });
     }
 
-    // --- 6. VISUAL FEEDBACK (Tooltip) ---
+    // --- VISUALS ---
     function onHover(gx, gy, data) {
         data.sprite.alpha = 0.8;
         const tooltip = document.getElementById('tooltip');
@@ -459,20 +510,26 @@
         document.getElementById('tooltip').style.display = 'none';
     }
 
-    // --- 7. MODALS & FORMS ---
+    // --- MODAL & FORMS ---
     window.openModal = () => {
         const modal = document.getElementById('modal-backdrop');
         const content = document.getElementById('modal-content');
         modal.style.display = 'flex';
-        if (currentBlock.sold) renderSoldProfile(content, currentBlock);
-        else {
+        
+        // Remove old classes
+        content.classList.remove('premium-mode');
+        
+        if (currentBlock.sold) {
+            content.classList.add('premium-mode'); // Add specific class for profile view
+            renderSoldProfile(content, currentBlock);
+        } else {
             formData = { name: '', message: '', link: '', color: '#FFD700', text: '', font: 'Arial', imageUrl: '' };
             renderPurchaseForm(content, currentBlock);
         }
     };
 
     window.closeModal = (e) => {
-        if (!e || e.target.id === 'modal-backdrop' || e.target.classList.contains('close-icon')) {
+        if (!e || e.target.id === 'modal-backdrop' || e.target.classList.contains('close-icon') || e.target.classList.contains('close-icon-floating')) {
             document.getElementById('modal-backdrop').style.display = 'none';
         }
     };
@@ -542,29 +599,43 @@
 
     function renderSoldProfile(container, block) {
         const od = block.ownerData;
+        const fallbackImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(od.owner_name)}&background=random&size=128`;
+        const imageSrc = od.imageUrl ? od.imageUrl : fallbackImage;
+        
         container.innerHTML = `
-            <div class="modal-header">
-                <h2>Block #${block.id}</h2>
-                <button class="close-icon" onclick="closeModal()">✕</button>
+            <div class="profile-header-bg">
+                <button class="close-icon-floating" onclick="closeModal()">✕</button>
             </div>
-            <div class="modal-body" style="flex-direction:column; align-items:center; text-align:center;">
-                <div style="font-size:2rem; margin-bottom:10px;">👑</div>
-                <div class="owner-avatar">
-                    ${od.imageUrl ? `<img src="${od.imageUrl}">` : `<div style="height:100%; display:flex; align-items:center; justify-content:center; background:#444; font-size:2rem;">?</div>`}
+            
+            <div class="profile-content">
+                <div class="avatar-wrapper">
+                    <div class="avatar-ring"></div>
+                    <img src="${imageSrc}" class="avatar-img" alt="Owner">
                 </div>
-                <h2 style="margin:0">${od.owner_name}</h2>
-                ${od.message ? `<div style="background:rgba(255,255,255,0.05); padding:10px; border-left:3px solid gold; margin-top:10px;">"${od.message}"</div>` : ''}
-                <div style="margin-top:20px; width:100%;">
-                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid #333; padding:10px;">
-                        <span style="color:#888">Tier</span>
-                        <span style="color:${block.tier === 'gold' ? 'gold' : 'white'}">${block.tier.toUpperCase()}</span>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; padding:10px;">
-                        <span style="color:#888">Value</span>
-                        <span>$${block.price.toFixed(2)}</span>
-                    </div>
+                
+                <h2 class="profile-name">${od.owner_name}</h2>
+                <div class="block-badge">BLOCK #${block.id}</div>
+                
+                <div class="profile-divider"></div>
+
+                ${od.message ? `<div class="profile-message">"${od.message}"</div>` : ''}
+                
+                <div class="profile-stats-grid">
+                     <div class="stat-box">
+                        <span class="stat-label">Tier</span>
+                        <span class="stat-value ${block.tier}">${block.tier.toUpperCase()}</span>
+                     </div>
+                     <div class="stat-box">
+                        <span class="stat-label">Value</span>
+                        <span class="stat-value">$${block.price.toFixed(2)}</span>
+                     </div>
                 </div>
-                ${od.link ? `<a href="${od.link}" target="_blank" style="display:block; margin-top:20px; color:#4ECDC4; text-decoration:none; padding:10px; border:1px solid #4ECDC4; border-radius:5px;">🔗 Visit Website</a>` : ''}
+
+                ${od.link ? `
+                    <a href="${od.link}" target="_blank" class="visit-link-btn">
+                        Visit Website 🔗
+                    </a>
+                ` : ''}
             </div>
         `;
     }
@@ -590,7 +661,7 @@
         if (!file) return;
         document.getElementById('upload-label').textContent = "⏳ Uploading...";
         if (TEST_MODE) {
-            setTimeout(() => { formData.imageUrl = `https://picsum.photos/seed/${Math.random()}/150/150`; document.getElementById('upload-label').textContent = "✅ Image Set"; }, 1000);
+            setTimeout(() => { formData.imageUrl = `https://picsum.photos/seed/${Math.random()}/200/200`; document.getElementById('upload-label').textContent = "✅ Image Set"; }, 1000);
             return;
         }
         const data = new FormData(); data.append('image', file);
@@ -625,18 +696,13 @@
         } catch (e) { alert("Error: " + e.message); }
     }
 
-    // --- OPTIMIZED: CLOUDFLARE/SERVER DATA LOADING ---
     async function loadData() {
-        if(isProcessing) return; // Prevent double loads
+        if(isProcessing) return; 
         isProcessing = true;
-        
         try {
             const res = await fetch(`${API_URL}/api/grid`);
             if (!res.ok) throw new Error();
-            
             const soldSlots = await res.json();
-            
-            // Chunking: Process 40 items per frame (Safe for production)
             let index = 0;
             const batchSize = 40;
 
@@ -645,24 +711,14 @@
                 for (let i = index; i < limit; i++) {
                     const slotData = soldSlots[i];
                     const localBlock = blocksData.get(slotData.slot_number);
-                    if (localBlock) {
-                        updateSlotVisuals(localBlock, slotData);
-                    }
+                    if (localBlock) updateSlotVisuals(localBlock, slotData);
                 }
                 index += batchSize;
-                
-                if (index < soldSlots.length) {
-                    requestAnimationFrame(processBatch);
-                } else {
-                    isProcessing = false; // Release lock
-                }
+                if (index < soldSlots.length) requestAnimationFrame(processBatch);
+                else isProcessing = false;
             }
             processBatch();
-            
-        } catch (e) { 
-            console.log("Simulating offline mode / Error loading data"); 
-            isProcessing = false;
-        }
+        } catch (e) { isProcessing = false; }
     }
 
     window.resetView = () => {
@@ -671,37 +727,31 @@
         constrainPyramid();
     };
 
-    // --- OPTIMIZED: SIMULATION MODE (Safe & Fast) ---
     window.fillRandom = () => {
-        if (isProcessing) return; // Block multiple clicks
+        if (isProcessing) return; 
         isProcessing = true;
-
         const candidates = [];
-        blocksData.forEach(d => {
-            if(!d.sold && Math.random() > 0.95) candidates.push(d);
-        });
+        blocksData.forEach(d => { if(!d.sold && Math.random() > 0.95) candidates.push(d); });
 
         let index = 0;
         const batchSize = 50; 
-
         function processBatch() {
             const limit = Math.min(index + batchSize, candidates.length);
             for (let i = index; i < limit; i++) {
                 const d = candidates[i];
                 const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)];
                 updateSlotVisuals(d, { 
-                    owner_name: "Sim", 
+                    owner_name: "Simulated User", 
                     owner_color: randomColor, 
-                    owner_text: "My name is piyush and i am here to rule" 
+                    owner_text: "Empire " + d.id,
+                    message: "I built this part of history.",
+                    imageUrl: `https://picsum.photos/seed/${d.id}/200/200`,
+                    link: "https://google.com"
                 });
             }
             index += batchSize;
-            
-            if (index < candidates.length) {
-                requestAnimationFrame(processBatch);
-            } else {
-                isProcessing = false; // Unlock
-            }
+            if (index < candidates.length) requestAnimationFrame(processBatch);
+            else isProcessing = false;
         }
         processBatch();
     };
@@ -709,7 +759,7 @@
     window.viewRandom = () => {
          const sold = Array.from(blocksData.values()).filter(b => b.sold);
          if(sold.length) { currentBlock = sold[Math.floor(Math.random() * sold.length)]; openModal(); }
-         else alert("No blocks sold yet!");
+         else alert("No blocks sold yet! Use Simulation Mode first.");
     };
 
     init();
