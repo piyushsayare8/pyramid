@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>The History Pyramid | 11,325 Blocks</title>
+    <meta name="version" content="2026-02-06-v3">
     
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.x/dist/pixi.min.js"></script>
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
@@ -88,6 +89,7 @@
         <div class="controls interactive">
             <button class="btn" onclick="resetView()">⟲ Reset</button>
             <button class="btn btn-fill" onclick="fillRandom()">🎨 Simulation Mode</button>
+            <button class="btn" onclick="window.forceRebakePyramid()" style="background: rgba(255,100,100,0.2); border-color: #ff6464;">🔄 Re-bake Pyramid</button>
         </div>
 
         <div class="center-controls interactive">
@@ -120,7 +122,7 @@
     const BOTTOM_SAFE_ZONE = 120; // 120px space at bottom
     const TOP_HEADER_ZONE = 100;  // 100px space at top
     
-    const API_URL = 'https://pyramid-backend.piyushsayare8.workers.dev';
+    const API_URL = 'https://pyramid-single-file.piyushsayare8.workers.dev';
     const RAZORPAY_KEY_ID = 'rzp_test_YOUR_KEY_HERE'; 
     const TEST_MODE = true; 
     
@@ -156,8 +158,296 @@
     const COLORS = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8'];
     const FONTS = ['Arial', 'Georgia', 'Courier New', 'Comic Sans MS', 'Impact', 'Verdana'];
 
-    // --- 3. PIXIJS ENGINE ---
+    // --- PYRAMID SELF-BAKING SYSTEM ---
+    let isStaticMode = false;
+    let staticPyramidImage = null;
+    let pyramidImageWidth = 0;
+    let pyramidImageHeight = 0;
+    
+    // Check if pyramid exists as static image or needs baking
+    async function checkPyramidStatus() {
+        try {
+            const response = await fetch(`${API_URL}/api/pyramid-image`);
+            const contentType = response.headers.get('content-type');
+            
+            if (contentType && contentType.includes('image/webp')) {
+                // Static pyramid exists - show it
+                const imageBlob = await response.blob();
+                await showStaticPyramid(imageBlob);
+                return true;
+            } else {
+                // Check if there's a bake request pending
+                const bakeRequest = await checkBakeRequest();
+                if (bakeRequest) {
+                    console.log('Bake request found, will bake pyramid');
+                    return false; // Need to bake
+                }
+                return false;
+            }
+        } catch (error) {
+            console.error('Pyramid status check failed:', error);
+            return false;
+        }
+    }
+    
+    // Check if there's a pending bake request
+    async function checkBakeRequest() {
+        try {
+            const response = await fetch(`${API_URL}/storage/bake-request.json`);
+            if (response.ok) {
+                const data = await response.json();
+                // Only process recent bake requests (within last 5 minutes)
+                const requestTime = new Date(data.triggeredAt).getTime();
+                const now = Date.now();
+                return (now - requestTime) < 300000; // 5 minutes
+            }
+            return false;
+        } catch (error) {
+            return false;
+        }
+    }
+    
+    // Show static pyramid image instead of rendering
+    async function showStaticPyramid(imageBlob) {
+        isStaticMode = true;
+        
+        // Hide canvas and show image
+        const canvasContainer = document.getElementById('canvas-container');
+        canvasContainer.style.display = 'none';
+        
+        // Create or update static image container
+        let staticContainer = document.getElementById('static-pyramid-container');
+        if (!staticContainer) {
+            staticContainer = document.createElement('div');
+            staticContainer.id = 'static-pyramid-container';
+            staticContainer.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                background: #0a0a0f;
+                z-index: 1;
+            `;
+            document.body.insertBefore(staticContainer, document.body.firstChild);
+        }
+        
+        // Create image element
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(imageBlob);
+        img.style.cssText = `
+            max-width: 95vw;
+            max-height: 95vh;
+            cursor: grab;
+            user-select: none;
+        `;
+        
+        // Store image dimensions for click mapping
+        img.onload = () => {
+            pyramidImageWidth = img.naturalWidth;
+            pyramidImageHeight = img.naturalHeight;
+            staticPyramidImage = img;
+        };
+        
+        // Add click handler for static image
+        img.onclick = handleStaticPyramidClick;
+        img.onmousedown = () => img.style.cursor = 'grabbing';
+        img.onmouseup = () => img.style.cursor = 'grab';
+        
+        staticContainer.innerHTML = '';
+        staticContainer.appendChild(img);
+        
+        // Update loader message
+        const loader = document.getElementById('loader');
+        if (loader) {
+            loader.textContent = 'Loading Static Pyramid...';
+            setTimeout(() => {
+                loader.style.opacity = '0';
+                setTimeout(() => loader.remove(), 1000);
+            }, 500);
+        }
+    }
+    
+    // Handle clicks on static pyramid image
+    function handleStaticPyramidClick(event) {
+        const img = event.target;
+        const rect = img.getBoundingClientRect();
+        
+        // Calculate click position relative to image
+        const clickX = event.clientX - rect.left;
+        const clickY = event.clientY - rect.top;
+        
+        // Convert to pyramid coordinates
+        const pyramidCoords = imageToPyramidCoords(clickX, clickY, rect.width, rect.height);
+        
+        if (pyramidCoords) {
+            // Load block data and show modal
+            loadBlockDataAndShowModal(pyramidCoords.blockId);
+        }
+    }
+    
+    // Convert image coordinates to pyramid block coordinates
+    function imageToPyramidCoords(imageX, imageY, imageWidth, imageHeight) {
+        // Calculate grid dimensions
+        const gridWidth = imageWidth / TOTAL_ROWS;
+        const gridHeight = imageHeight / TOTAL_ROWS;
+        
+        // Calculate row (1-indexed)
+        const row = Math.floor(imageY / gridHeight) + 1;
+        if (row < 1 || row > TOTAL_ROWS) return null;
+        
+        // Calculate row width and starting X position
+        const rowWidth = row * gridWidth;
+        const rowStartX = (imageWidth - rowWidth) / 2;
+        
+        // Check if click is within pyramid bounds for this row
+        if (imageX < rowStartX || imageX > rowStartX + rowWidth) return null;
+        
+        // Calculate column (0-indexed)
+        const col = Math.floor((imageX - rowStartX) / gridWidth);
+        if (col < 0 || col >= row) return null;
+        
+        // Calculate block ID (reverse of buildGrid logic)
+        let blockId = 0;
+        for (let r = 1; r < row; r++) {
+            blockId += r;
+        }
+        blockId += col + 1;
+        
+        // Convert to actual block ID (reverse from TOTAL_BLOCKS)
+        const actualBlockId = TOTAL_BLOCKS - blockId + 1;
+        
+        return { row, col, blockId: actualBlockId };
+    }
+    
+    // Load block data and show modal for static image clicks
+    async function loadBlockDataAndShowModal(blockId) {
+        try {
+            const response = await fetch(`${API_URL}/api/slot/${blockId}`);
+            const blockData = await response.json();
+            
+            if (blockData) {
+                // Convert server data to local format
+                const localData = {
+                    id: blockData.id,
+                    price: blockData.price,
+                    tier: blockData.id <= 45 ? 'gold' : blockData.id <= 85 ? 'silver' : 'standard',
+                    sold: blockData.status === 'sold',
+                    ownerData: blockData.status === 'sold' ? {
+                        owner_name: blockData.owner_name,
+                        message: blockData.owner_message,
+                        owner_color: blockData.owner_color,
+                        owner_image_url: blockData.owner_image_url,
+                        owner_link: blockData.owner_link,
+                        owner_text: blockData.owner_text,
+                        owner_font: blockData.owner_font
+                    } : null
+                };
+                
+                currentBlock = localData;
+                openModal();
+            }
+        } catch (error) {
+            console.error('Failed to load block data:', error);
+            alert('Failed to load block information');
+        }
+    }
+    
+    // Bake pyramid and upload to R2
+    async function bakePyramid() {
+        try {
+            console.log('Starting pyramid bake...');
+            
+            // Wait for pyramid to be fully rendered and data loaded
+            await waitForPyramidReady();
+            
+            // Extract pyramid as base64 image
+            const imageBase64 = await app.renderer.extract.base64(app.stage, "image/webp", 0.8);
+            
+            console.log('Pyramid extracted, uploading...');
+            
+            // Upload to R2
+            const response = await fetch(`${API_URL}/api/pyramid-bake`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imageBase64 })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                console.log('Pyramid baked successfully!', result);
+                
+                // Show success message and reload to static mode
+                alert(`Pyramid baked successfully!\nImage size: ${(result.imageSize / 1024).toFixed(2)} KB\nProcessing time: ${result.processingTime}ms`);
+                
+                // Reload page to show static image
+                window.location.reload();
+            } else {
+                console.error('Pyramid bake failed:', result);
+                alert('Failed to bake pyramid: ' + result.error);
+            }
+            
+        } catch (error) {
+            console.error('Pyramid bake error:', error);
+            alert('Error baking pyramid: ' + error.message);
+        }
+    }
+    
+    // Wait for pyramid to be fully ready (data loaded, rendered)
+    async function waitForPyramidReady() {
+        return new Promise((resolve) => {
+            const checkReady = () => {
+                // Check if data is loaded and pyramid is built
+                if (blocksData.size > 0 && container.children.length > 0) {
+                    // Wait a bit more for any text rendering
+                    setTimeout(resolve, 2000);
+                } else {
+                    setTimeout(checkReady, 100);
+                }
+            };
+            checkReady();
+        });
+    }
+    
+    // Admin function to force re-bake
+    window.forceRebakePyramid = async () => {
+        const adminKey = prompt('Enter admin key:');
+        if (!adminKey) return;
+        
+        try {
+            const response = await fetch(`${API_URL}/api/pyramid-rebake`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adminKey })
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                alert('Pyramid re-bake initiated! Next visit will bake fresh pyramid.');
+                window.location.reload();
+            } else {
+                alert('Failed to initiate re-bake: ' + result.error);
+            }
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    };
+
+    // --- 3. PIXIJS ENGINE & SELF-BAKING SYSTEM ---
     async function init() {
+        // Check if static pyramid exists first
+        const hasStaticPyramid = await checkPyramidStatus();
+        
+        if (hasStaticPyramid) {
+            // Static pyramid is being shown, no need to initialize PIXI
+            return;
+        }
+        
+        // No static pyramid found - initialize PIXI and bake
         app = new PIXI.Application();
         await app.init({
             resizeTo: window,
@@ -220,6 +510,43 @@
 
         setTimeout(() => document.getElementById('loader').style.opacity = '0', 500);
         setTimeout(() => document.getElementById('loader').remove(), 1000);
+        
+        // Auto-bake pyramid after everything is loaded and ready
+        setTimeout(async () => {
+            console.log('Auto-baking pyramid...');
+            await bakePyramid();
+        }, 5000); // Wait 5 seconds for everything to settle
+        
+        // Start real-time pyramid monitoring
+        startPyramidMonitoring();
+    }
+
+    // Monitor for pyramid updates and auto-refresh
+    function startPyramidMonitoring() {
+        // Check for pyramid updates every 30 seconds
+        setInterval(async () => {
+            if (isStaticMode) {
+                try {
+                    const response = await fetch(`${API_URL}/api/pyramid-image`);
+                    const contentType = response.headers.get('content-type');
+                    
+                    if (contentType && contentType.includes('image/webp')) {
+                        // Get current image timestamp
+                        const currentImageTime = staticPyramidImage?.dataset?.timestamp || '0';
+                        const newImageTime = response.headers.get('last-modified') || Date.now().toString();
+                        
+                        // If image is newer, reload it
+                        if (newImageTime > currentImageTime) {
+                            console.log('Pyramid updated, refreshing...');
+                            const imageBlob = await response.blob();
+                            await showStaticPyramid(imageBlob);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Pyramid monitoring error:', error);
+                }
+            }
+        }, 30000); // Check every 30 seconds
     }
 
     function createTextures(app) {
