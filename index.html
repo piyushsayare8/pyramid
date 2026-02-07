@@ -3,765 +3,668 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>The History Pyramid | 11,325 Blocks</title>
+    <title>The History Pyramid | Immortal Edition</title>
     
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.x/dist/pixi.min.js"></script>
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
     <style>
-        /* --- CSS STYLES --- */
-        :root { --bg-dark: #0a0a0f; --bg-panel: #151520; --border: #333; --gold: #FFD700; --gold-glow: rgba(255, 215, 0, 0.5); }
-        body { margin: 0; overflow: hidden; background: #0a0a0f; font-family: 'Arial', sans-serif; color: white; }
-        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: grab; }
+        /* --- VISUAL THEME --- */
+        :root { 
+            --bg-dark: #050508; 
+            --gold: #FFD700; 
+            --gold-dim: rgba(255, 215, 0, 0.2);
+            --panel-bg: rgba(15, 15, 20, 0.95);
+            --border: rgba(255, 255, 255, 0.1);
+        }
+        
+        body { margin: 0; overflow: hidden; background: var(--bg-dark); font-family: 'Inter', system-ui, sans-serif; color: white; user-select: none; -webkit-font-smoothing: antialiased; }
+        
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: grab; touch-action: none; }
         #canvas-container:active { cursor: grabbing; }
+        
         .ui-layer { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         .interactive { pointer-events: auto; }
         
-        /* UI Elements */
-        .header { position: absolute; top: 20px; left: 20px; text-align: left; }
-        .header h1 { font-family: 'Georgia', serif; font-size: 2.5rem; color: #FFD700; margin: 0; text-shadow: 0 0 20px var(--gold-glow); letter-spacing: 4px; }
-        .subtitle { font-size: 1rem; color: #888; text-transform: uppercase; letter-spacing: 4px; margin-top: 5px; }
+        /* HEADER */
+        .header { position: absolute; top: 30px; left: 30px; text-shadow: 0 4px 20px black; }
+        .header h1 { font-family: 'Georgia', serif; font-size: 2.2rem; color: var(--gold); margin: 0; letter-spacing: 2px; }
+        .subtitle { font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 4px; margin-top: 8px; font-weight: 700; }
         
-        .controls { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
-        .btn { background: rgba(20,20,30,0.9); border: 1px solid #444; color: #ccc; padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 0.9rem; }
-        .btn:hover { border-color: #FFD700; color: #FFD700; background: rgba(255, 215, 0, 0.1); }
-        .btn-fill { border-color: #FF6B6B; color: #FF6B6B; }
-        .btn-fill:hover { background: rgba(255, 107, 107, 0.1); box-shadow: 0 0 15px rgba(255, 107, 107, 0.3); }
+        /* CONTROLS */
+        .controls { position: absolute; top: 30px; right: 30px; display: flex; gap: 12px; }
+        .btn { background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: #ccc; padding: 12px 24px; border-radius: 8px; cursor: pointer; transition: 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); font-weight: 600; backdrop-filter: blur(10px); }
+        .btn:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); transform: translateY(-2px); }
+        .btn-accent { background: rgba(255, 107, 107, 0.1); border-color: #ff6b6b; color: #ff6b6b; }
+        .btn-accent:hover { background: #ff6b6b; color: black; box-shadow: 0 0 20px rgba(255, 107, 107, 0.4); }
         
-        .center-controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); }
-        .profile-btn { background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.05)); border: 2px solid #FFD700; color: #FFD700; padding: 10px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 0 15px rgba(255,215,0,0.2); backdrop-filter: blur(5px); }
-        .profile-btn:hover { transform: translateX(-50%) translateY(-2px); box-shadow: 0 0 25px rgba(255,215,0,0.4); }
+        /* CENTER ACTION */
+        .center-controls { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); }
+        .profile-btn { background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(0,0,0,0)); border: 1px solid var(--gold); color: var(--gold); padding: 16px 40px; border-radius: 50px; font-weight: 800; cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(10px); transition: 0.3s; letter-spacing: 1px; text-transform: uppercase; }
+        .profile-btn:hover { transform: translateX(-50%) scale(1.05); box-shadow: 0 0 50px var(--gold-dim); background: var(--gold); color: black; }
         
-        .tooltip { position: absolute; display: none; padding: 8px 12px; background: rgba(15, 15, 25, 0.95); border: 1px solid #FFD700; border-radius: 8px; color: #FFD700; font-weight: bold; font-size: 0.9rem; pointer-events: none; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,0.5); transform: translateY(-100%); }
+        /* TOOLTIP */
+        .tooltip { position: absolute; display: none; padding: 12px 18px; background: var(--panel-bg); border: 1px solid var(--gold); border-radius: 8px; color: white; font-weight: 600; font-size: 0.9rem; pointer-events: none; z-index: 20; box-shadow: 0 20px 50px black; white-space: nowrap; transform: translate(20px, -50%); backdrop-filter: blur(10px); }
+        .tt-label { font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 4px; }
         
-        /* Modal General */
-        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); z-index: 100; justify-content: center; align-items: center; }
-        .modal { background: #1a1a2e; border: 1px solid #333; width: 95%; max-width: 900px; max-height: 90vh; border-radius: 24px; overflow: hidden; position: relative; box-shadow: 0 25px 60px rgba(0,0,0,0.8); animation: slideUp 0.3s ease-out; display: flex; flex-direction: column; }
+        /* MODAL */
+        .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 100; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s; }
+        .modal-backdrop.visible { opacity: 1; }
         
-        /* --- NEW PREMIUM PROFILE STYLES --- */
-        .modal.premium-mode {
-            background: linear-gradient(160deg, #0f0f16 0%, #161625 100%);
-            border: 1px solid rgba(255, 215, 0, 0.2);
-            box-shadow: 0 0 50px rgba(0,0,0,0.9), 0 0 0 1px rgba(255, 215, 0, 0.1);
-            max-width: 500px; /* Slimmer for profile view */
-        }
+        .modal { background: #121216; border: 1px solid #333; width: 95%; max-width: 900px; max-height: 90vh; border-radius: 24px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 50px 100px black; transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .modal-backdrop.visible .modal { transform: scale(1); }
+        .modal.premium { max-width: 500px; background: linear-gradient(160deg, #0a0a0f 0%, #1a1a24 100%); border: 1px solid var(--gold-dim); }
         
-        .profile-header-bg {
-            height: 120px;
-            background: linear-gradient(to bottom, rgba(255, 215, 0, 0.15), rgba(0,0,0,0));
-            position: relative;
-            display: flex;
-            justify-content: flex-end;
-            padding: 20px;
-        }
-
-        .close-icon-floating {
-            background: rgba(255,255,255,0.1); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; transition: 0.2s;
-        }
-        .close-icon-floating:hover { background: rgba(255, 0, 0, 0.4); transform: rotate(90deg); }
-
-        .profile-content {
-            padding: 0 30px 40px 30px;
-            text-align: center;
-            margin-top: -70px; /* Pull up into header */
-        }
-
-        .avatar-wrapper {
-            width: 130px; height: 130px; margin: 0 auto 20px;
-            position: relative;
-        }
+        /* MODAL CONTENT */
+        .modal-header { padding: 25px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); }
+        .modal-header h2 { margin: 0; font-family: 'Georgia', serif; font-size: 1.8rem; color: white; }
+        .close-icon { color: #666; background: none; border: none; font-size: 1.5rem; cursor: pointer; transition: 0.2s; }
+        .close-icon:hover { color: white; transform: rotate(90deg); }
         
-        .avatar-ring {
-            position: absolute; top: -5px; left: -5px; right: -5px; bottom: -5px;
-            border-radius: 50%;
-            border: 2px solid var(--gold);
-            box-shadow: 0 0 20px var(--gold-glow);
-            animation: pulseRing 3s infinite;
-        }
-        
-        .avatar-img {
-            width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
-            background: #222; border: 4px solid #1a1a2e;
-            position: relative; z-index: 2;
-        }
-
-        .profile-name {
-            font-family: 'Georgia', serif; font-size: 2.2rem; color: white; margin: 0;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
-        }
-        
-        .block-badge {
-            display: inline-block; background: rgba(255, 215, 0, 0.1); color: var(--gold);
-            padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: bold;
-            margin-top: 8px; border: 1px solid rgba(255, 215, 0, 0.3); letter-spacing: 1px;
-        }
-
-        .profile-divider { width: 50px; height: 2px; background: #333; margin: 25px auto; }
-
-        .profile-message {
-            font-style: italic; font-size: 1.1rem; color: #ccc; line-height: 1.6;
-            background: rgba(255,255,255,0.03); padding: 20px; border-radius: 12px;
-            border-left: 3px solid var(--gold); margin-bottom: 25px;
-            position: relative;
-        }
-        
-        .profile-stats-grid {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;
-        }
-        
-        .stat-box {
-            background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; border: 1px solid #333;
-        }
-        .stat-label { font-size: 0.75rem; color: #777; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 5px; }
-        .stat-value { font-size: 1.1rem; font-weight: bold; color: white; }
-        .stat-value.gold { color: var(--gold); }
-        .stat-value.silver { color: #C0C0C0; }
-
-        .visit-link-btn {
-            display: block; width: 100%; padding: 16px; border-radius: 12px;
-            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-            color: #000; font-weight: 900; text-transform: uppercase; letter-spacing: 1px;
-            text-decoration: none; border: none; cursor: pointer;
-            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.3);
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .visit-link-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(255, 215, 0, 0.5); }
-
-        /* --- STANDARD FORM STYLES (Keep existing for purchase) --- */
-        .modal-header { padding: 20px; background: rgba(0,0,0,0.2); border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
-        .modal-header h2 { margin: 0; font-family: 'Georgia', serif; font-size: 1.5rem; }
-        .price-tag { background: rgba(255, 215, 0, 0.1); color: var(--gold); padding: 5px 15px; border-radius: 20px; border: 1px solid var(--gold); font-weight: bold; }
-        .close-icon { color: #888; cursor: pointer; font-size: 1.5rem; background: none; border: none; }
-        .modal-body { padding: 25px; overflow-y: auto; display: flex; gap: 30px; color: white; }
+        .modal-body { padding: 30px; overflow-y: auto; display: flex; gap: 40px; }
         .col-left { flex: 1.2; display: flex; flex-direction: column; gap: 20px; }
-        .col-right { flex: 1; display: flex; flex-direction: column; gap: 20px; border-left: 1px solid #333; padding-left: 20px; }
-        .input-group label { display: block; font-size: 0.8rem; color: #888; margin-bottom: 6px; text-transform: uppercase; }
-        .input-group input, .input-group select { width: 100%; background: rgba(10, 10, 15, 0.5); border: 2px solid #333; color: white; padding: 12px; border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
-        .input-group input:focus { border-color: var(--gold); outline: none; }
-        .color-selector { display: flex; gap: 10px; align-items: center; }
-        .color-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 10px; }
-        .color-btn { width: 24px; height: 24px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; }
-        .color-btn:hover { transform: scale(1.1); border-color: white; }
-        .image-upload-box { border: 2px dashed #444; padding: 20px; border-radius: 10px; text-align: center; cursor: pointer; transition: 0.2s; background: rgba(255,255,255,0.02); }
-        .image-upload-box:hover { border-color: var(--gold); background: rgba(255,215,0,0.05); }
-        .preview-container { background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-        .preview-block { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; text-shadow: 0 0 3px black; position: relative; overflow: hidden; transition: all 0.2s; }
-        .modal-footer { padding: 20px; border-top: 1px solid #333; display: flex; justify-content: flex-end; gap: 15px; }
-        .confirm-btn { background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: bold; padding: 12px 30px; border-radius: 10px; border: none; cursor: pointer; font-size: 1rem; }
-        .confirm-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(255,215,0,0.4); }
+        .col-right { flex: 1; display: flex; flex-direction: column; gap: 20px; border-left: 1px solid var(--border); padding-left: 40px; }
         
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes pulseRing { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(1.2); opacity: 0; } }
+        .input-group label { display: block; font-size: 0.75rem; color: #888; margin-bottom: 8px; text-transform: uppercase; font-weight: 700; letter-spacing: 1px; }
+        .input-group input, .input-group textarea { width: 100%; background: rgba(0,0,0,0.3); border: 1px solid #333; padding: 14px; color: white; border-radius: 8px; box-sizing: border-box; font-family: inherit; transition: 0.2s; }
+        .input-group input:focus, .input-group textarea:focus { border-color: var(--gold); outline: none; background: rgba(0,0,0,0.5); }
         
-        #loader { position: fixed; top:0; left:0; width:100%; height:100%; background: #0a0a0f; z-index: 999; display: flex; justify-content: center; align-items: center; color: #FFD700; font-family: Georgia; font-size: 1.5rem; transition: opacity 0.5s; }
-        @media (max-width: 700px) { .modal-body { flex-direction: column; } .col-right { border-left: none; padding-left: 0; border-top: 1px solid #333; padding-top: 20px; } }
+        .color-selector { display: flex; gap: 12px; flex-wrap: wrap; }
+        .color-btn { width: 32px; height: 32px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: transform 0.2s; }
+        .color-btn:hover, .color-btn.active { transform: scale(1.15); border-color: white; box-shadow: 0 0 15px currentColor; }
+        
+        .preview-box { width: 100%; height: 120px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 12px; position: relative; overflow: hidden; }
+        
+        .modal-footer { padding: 25px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; background: rgba(255,255,255,0.02); }
+        .confirm-btn { background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: 800; padding: 14px 40px; border-radius: 12px; border: none; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: 0.2s; }
+        .confirm-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3); }
+
+        /* PROFILE */
+        .profile-header-bg { height: 120px; background: linear-gradient(to bottom, rgba(255,255,255,0.05), transparent); position: relative; display: flex; justify-content: flex-end; padding: 20px; }
+        .profile-content { padding: 0 40px 40px; text-align: center; margin-top: -70px; }
+        .avatar { width: 130px; height: 130px; border-radius: 50%; border: 4px solid #121216; background: #000; object-fit: cover; box-shadow: 0 20px 40px black; }
+        .p-name { font-family: 'Georgia', serif; font-size: 2.2rem; margin: 15px 0 5px; text-shadow: 0 2px 10px black; }
+        .p-badge { display: inline-block; background: var(--gold-dim); color: var(--gold); padding: 5px 15px; border-radius: 50px; font-size: 0.8rem; font-weight: 700; border: 1px solid var(--gold-dim); margin-bottom: 25px; }
+        .p-msg { font-style: italic; font-size: 1.1rem; color: #ccc; line-height: 1.6; padding: 20px; background: rgba(255,255,255,0.03); border-radius: 12px; margin-bottom: 25px; }
+        .visit-btn { display: block; width: 100%; padding: 16px; background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: 900; text-transform: uppercase; text-decoration: none; border-radius: 12px; transition: 0.2s; }
+        .visit-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 40px rgba(255,215,0,0.3); }
+
+        #loader { position: fixed; inset: 0; background: var(--bg-dark); z-index: 999; display: flex; flex-direction: column; justify-content: center; align-items: center; color: var(--gold); transition: opacity 0.5s; font-family: monospace; letter-spacing: 2px; }
+        .spinner { width: 40px; height: 40px; border: 2px solid #333; border-top-color: var(--gold); border-radius: 50%; animation: spin 1s infinite linear; margin-bottom: 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        @media(max-width: 800px) { .modal-body { flex-direction: column; } .col-right { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 30px; } }
     </style>
 </head>
 <body>
 
-    <div id="loader">Building 11,325 Blocks...</div>
+    <div id="loader">
+        <div class="spinner"></div>
+        <div>INITIALIZING IMMORTAL ENGINE</div>
+    </div>
+    
     <div id="canvas-container"></div>
 
     <div class="ui-layer">
         <div class="header interactive">
             <h1>THE PYRAMID</h1>
-            <div class="subtitle">11,325 Blocks of History</div>
+            <div class="subtitle">11,325 Blocks • Immortal Core</div>
         </div>
 
         <div class="controls interactive">
-            <button class="btn" onclick="resetView()">⟲ Reset</button>
-            <button class="btn btn-fill" onclick="fillRandom()">🎨 Simulation Mode</button>
+            <button class="btn" onclick="app.resetCamera()">⟲ Reset</button>
+            <button class="btn btn-accent" onclick="app.simulate()">🎨 Full Simulation</button>
         </div>
 
         <div class="center-controls interactive">
-            <button class="profile-btn" onclick="viewRandom()">👤 View Random Profile</button>
+            <button class="profile-btn" onclick="app.viewRandom()">👤 View Random Profile</button>
         </div>
         
-        <div class="instructions" style="position: absolute; bottom: 20px; right: 20px; color: #555;">
-             <span>🖱️ Scroll to zoom • ✋ Drag to pan</span>
+        <div class="instructions" style="position: absolute; bottom: 30px; right: 30px; color: #444; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">
+             SCROLL TO ZOOM • DRAG TO PAN
         </div>
     </div>
 
-    <div id="tooltip" class="tooltip">Block #5050</div>
+    <div id="tooltip" class="tooltip"></div>
 
     <div id="modal-backdrop" class="modal-backdrop interactive" onclick="closeModal(event)">
         <div class="modal" id="modal-content"></div>
     </div>
 
 <script type="module">
-    // --- 1. CONFIGURATION ---
-    const TOTAL_ROWS = 150;
-    const BLOCK_SIZE = 40;
-    const GAP = 2;
-    const TOTAL_BLOCKS = 11325; 
+    // =========================================================================
+    // 1. ENGINE CONFIGURATION
+    // =========================================================================
+    const CONFIG = {
+        ROWS: 150,
+        BLOCK_SIZE: 40,
+        GAP: 2,
+        TOTAL_BLOCKS: 11325,
+        // Performance Tuning
+        LOD_THRESHOLD: 0.35,  // Scale at which text appears
+        CHUNK_SIZE: 25,       // Rows per chunk for culling
+        // Camera Physics
+        MAX_ZOOM: 50.0,
+        MIN_ZOOM: 0.1,
+        FRICTION: 0.92,
+        // Visuals
+        COLORS: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8']
+    };
     
-    const PYRAMID_WIDTH = TOTAL_ROWS * BLOCK_SIZE; 
-    const PYRAMID_HEIGHT = TOTAL_ROWS * BLOCK_SIZE; 
-    
-    const BOTTOM_SAFE_ZONE = 120;
-    const TOP_HEADER_ZONE = 100;
-    
-    const API_URL = 'https://pyramid-backend.piyushsayare8.workers.dev';
-    const RAZORPAY_KEY_ID = 'rzp_test_YOUR_KEY_HERE'; 
-    const TEST_MODE = true; 
-    
-    const isMobile = window.innerWidth < 800;
-    const TEXT_RESOLUTION = isMobile ? 1.2 : 2.0;
+    const PYRAMID_WIDTH = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
+    const PYRAMID_HEIGHT = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
 
-    // --- 2. STATE ---
-    let app, container;
-    let blocksData = new Map();
-    let gridLookup = []; 
-    let hoveredBlock = null;
+    // =========================================================================
+    // 2. STATE & DATA (O(1) Access)
+    // =========================================================================
+    const state = {
+        pixi: null,
+        world: null,
+        chunks: [],
+        blocks: new Array(CONFIG.TOTAL_BLOCKS + 1), // Direct index access
+        textPool: [], // Pool for active text sprites
+        baseTextures: {},
+        
+        // Physics Camera State
+        cam: { x: 0, y: 0, zoom: 0.1 },
+        target: { x: 0, y: 0, zoom: 0.1 },
+        vel: { x: 0, y: 0 },
+        
+        // Interaction
+        dragging: false,
+        dragStart: { x: 0, y: 0 },
+        dragOriginalStart: { x: 0, y: 0 }, // Store original start position
+        hasMoved: false, // Flag to track if actual movement occurred
+        clickThreshold: 5, // Pixels moved before it counts as a drag
+        hoverId: -1,
+        selectedId: -1,
+        
+        simulating: false
+    };
 
-    let isDragging = false;
-    let dragStart = { x: 0, y: 0 };
-    let currentBlock = null;
-    let minZoomLevel = 0.1;
-    let textures = {}; 
-    
-    let isProcessing = false; 
-    let textTextureCache = new Map(); 
-    
-    let formData = { name: '', message: '', link: '', color: '#FFD700', text: '', font: 'Arial', imageUrl: '' };
-    const COLORS = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8'];
-    const FONTS = ['Arial', 'Georgia', 'Courier New', 'Comic Sans MS', 'Impact', 'Verdana'];
+    let formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: '' };
 
-    // --- 3. PIXIJS ENGINE ---
+    // =========================================================================
+    // 3. ENGINE INITIALIZATION
+    // =========================================================================
     async function init() {
-        app = new PIXI.Application();
-        await app.init({
+        state.pixi = new PIXI.Application();
+        await state.pixi.init({
             resizeTo: window,
-            backgroundColor: 0x0a0a0f,
-            resolution: window.devicePixelRatio || 2,
+            backgroundColor: 0x050508,
+            resolution: Math.min(window.devicePixelRatio, 2),
             autoDensity: true,
-            antialias: true
+            antialias: false, // Performance + Crisp Pixels
+            powerPreference: 'high-performance'
         });
-        document.getElementById('canvas-container').appendChild(app.canvas);
+        document.getElementById('canvas-container').appendChild(state.pixi.canvas);
 
-        textures = createTextures(app);
-        
-        container = new PIXI.Container();
-        container.eventMode = 'static'; 
-        app.stage.addChild(container);
-        
-        buildGrid();
-        
-        calculateMinZoom();
-        setupInteraction();
-        loadData();
-        resetView();
-
-        window.addEventListener('resize', () => {
-            app.resize();
-            calculateMinZoom();
-            constrainPyramid();
+        // A. High-Res Bitmap Font (The secret to sharp 50x zoom)
+        PIXI.BitmapFont.install({
+            name: 'ImmortalFont',
+            style: {
+                fontFamily: 'Arial',
+                fontSize: 256, 
+                fontWeight: '900',
+                fill: 'white',
+                stroke: { color: 'black', width: 12 }
+            }
         });
 
+        // B. Generate Flyweight Textures
+        createSharedTextures();
+
+        // C. Build Geometry (The Virtual Grid)
+        state.world = new PIXI.Container();
+        state.world.eventMode = 'none'; // Manual math-based hit testing is faster
+        state.pixi.stage.addChild(state.world);
+        buildPyramid();
+
+        // D. Setup Input & Physics
+        setupInput();
+        centerCamera();
+
+        // E. The Game Loop
+        state.pixi.ticker.add((ticker) => {
+            updatePhysics(ticker.deltaTime);
+            cullWorld();
+            updateLOD();
+        });
+
+        // F. Fade In
         setTimeout(() => document.getElementById('loader').style.opacity = '0', 500);
         setTimeout(() => document.getElementById('loader').remove(), 1000);
     }
 
-    function createTextures(app) {
-        const makeRect = (fillColor, strokeColor, width) => {
+    function createSharedTextures() {
+        const make = (color, border) => {
             const g = new PIXI.Graphics()
-                .rect(0, 0, BLOCK_SIZE-GAP, BLOCK_SIZE-GAP)
-                .fill(fillColor)
-                .stroke({ width: width, color: strokeColor });
-            return app.renderer.generateTexture(g);
+                .rect(0, 0, CONFIG.BLOCK_SIZE - CONFIG.GAP, CONFIG.BLOCK_SIZE - CONFIG.GAP)
+                .fill(color)
+                .stroke({ width: 2, color: border });
+            return state.pixi.renderer.generateTexture(g);
         };
-
-        return {
-            gold: makeRect(0x2d2d44, 0xFFD700, 3),
-            silver: makeRect(0x252535, 0xC0C0C0, 2),
-            standard: makeRect(0x1e1e28, 0x444444, 1),
-            gold_sold: makeRect(0xFFFFFF, 0xFFD700, 3),
-            silver_sold: makeRect(0xFFFFFF, 0xC0C0C0, 2),
-            standard_sold: makeRect(0xFFFFFF, 0x444444, 1)
+        
+        state.baseTextures = {
+            gold: make(0x2d2d44, 0xFFD700),
+            silver: make(0x252535, 0xC0C0C0),
+            std: make(0x1e1e28, 0x444444),
+            sold: make(0xFFFFFF, 0xFFFFFF)
         };
     }
 
-    function buildGrid() {
-        let blockId = TOTAL_BLOCKS;
-        gridLookup = new Array(TOTAL_ROWS + 1).fill(null).map(() => []);
+    function buildPyramid() {
+        let blockId = CONFIG.TOTAL_BLOCKS;
 
-        for (let row = 1; row <= TOTAL_ROWS; row++) {
-            const startX = -(row * BLOCK_SIZE) / 2; 
-            const yPos = (row - 1) * BLOCK_SIZE;
+        for (let row = 1; row <= CONFIG.ROWS; row++) {
+            // Chunking Strategy
+            if ((row - 1) % CONFIG.CHUNK_SIZE === 0) {
+                const chunk = new PIXI.Container();
+                chunk.yStart = (row - 1) * CONFIG.BLOCK_SIZE;
+                chunk.yEnd = chunk.yStart + (CONFIG.CHUNK_SIZE * CONFIG.BLOCK_SIZE);
+                chunk.visible = false; // Start hidden
+                state.chunks.push(chunk);
+                state.world.addChild(chunk);
+            }
+            
+            const chunk = state.chunks[state.chunks.length - 1];
+            const startX = -(row * CONFIG.BLOCK_SIZE) / 2;
+            const yPos = (row - 1) * CONFIG.BLOCK_SIZE;
 
             for (let col = 0; col < row; col++) {
-                let type = 'standard';
+                // Tier Logic
+                let type = 'std';
                 if (row <= 45) type = 'gold';
                 else if (row <= 85) type = 'silver';
 
-                const slot = new PIXI.Sprite(textures[type]);
-                slot.x = startX + (col * BLOCK_SIZE);
-                slot.y = yPos;
-                
-                let price = blockId === TOTAL_BLOCKS ? 5000 : 1 + (blockId - 1) * 0.5;
+                const sprite = new PIXI.Sprite(state.baseTextures[type]);
+                sprite.x = startX + (col * CONFIG.BLOCK_SIZE);
+                sprite.y = yPos;
 
-                const data = { id: blockId, price, tier: type, row, col, sold: false, sprite: slot };
-                
-                blocksData.set(blockId, data);
-                gridLookup[row][col] = data;
+                let price = blockId === CONFIG.TOTAL_BLOCKS ? 5000 : 1 + (blockId * 0.5);
 
-                container.addChild(slot);
+                state.blocks[blockId] = {
+                    id: blockId,
+                    price: price,
+                    tier: type,
+                    sold: false,
+                    sprite: sprite,
+                    data: null,
+                    textRef: null
+                };
+
+                chunk.addChild(sprite);
                 blockId--;
             }
         }
     }
 
-    function updateSlotVisuals(localData, serverData) {
-        localData.sold = true; 
-        localData.ownerData = serverData;
-        
-        const soldTextureKey = localData.tier + '_sold';
-        localData.sprite.texture = textures[soldTextureKey];
-        localData.sprite.tint = serverData.owner_color.replace('#', '0x');
-        
-        if (localData.sprite.children.length > 0) {
-            localData.sprite.removeChildren();
+    // =========================================================================
+    // 4. PHYSICS CAMERA (Smooth Inertia)
+    // =========================================================================
+    function updatePhysics(dt) {
+        if (!state.dragging) {
+            state.target.x += state.vel.x * dt;
+            state.target.y += state.vel.y * dt;
+            state.vel.x *= CONFIG.FRICTION;
+            state.vel.y *= CONFIG.FRICTION;
         }
 
-        if (serverData.owner_text) {
-            const textStr = serverData.owner_text.substring(0, 80);
-            let targetTexture = textTextureCache.get(textStr);
+        const spring = 0.15;
+        state.cam.zoom += (state.target.zoom - state.cam.zoom) * spring;
+        state.cam.x += (state.target.x - state.cam.x) * spring;
+        state.cam.y += (state.target.y - state.cam.y) * spring;
 
-            if (!targetTexture) {
-                const VIRTUAL_FONT_SIZE = 48; 
-                const APPROX_CHAR_WIDTH = VIRTUAL_FONT_SIZE * 0.7; 
-                const idealSquareSide = Math.sqrt(textStr.length) * APPROX_CHAR_WIDTH;
-                const MIN_WIDTH = VIRTUAL_FONT_SIZE * 5; 
-                const targetWrapWidth = Math.max(idealSquareSide, MIN_WIDTH);
+        state.world.scale.set(state.cam.zoom);
+        state.world.position.set(state.cam.x, state.cam.y);
+    }
 
-                const style = new PIXI.TextStyle({ 
-                    fontFamily: 'Arial', fontSize: VIRTUAL_FONT_SIZE, fontWeight: '900', 
-                    fill: '#ffffff', stroke: { color: '#000000', width: 6 }, 
-                    dropShadow: true, dropShadowColor: '#000000', dropShadowBlur: 3, dropShadowDistance: 2,
-                    align: 'center', wordWrap: true, wordWrapWidth: targetWrapWidth, lineHeight: VIRTUAL_FONT_SIZE * 1.1, padding: 10
-                });
+    function cullWorld() {
+        const viewTop = -state.cam.y / state.cam.zoom;
+        const viewBottom = viewTop + (state.pixi.screen.height / state.cam.zoom);
+        const buffer = 200;
 
-                const tempText = new PIXI.Text({ text: textStr, style });
-                tempText.resolution = TEXT_RESOLUTION;
-                targetTexture = app.renderer.generateTexture(tempText);
-                
-                if(textTextureCache.size > 1000) {
-                    const firstKey = textTextureCache.keys().next().value;
-                    textTextureCache.delete(firstKey); 
-                }
-                textTextureCache.set(textStr, targetTexture);
+        for (const chunk of state.chunks) {
+            if (chunk.yEnd < viewTop - buffer || chunk.yStart > viewBottom + buffer) {
+                chunk.visible = false;
+            } else {
+                chunk.visible = true;
             }
-
-            const textSprite = new PIXI.Sprite(targetTexture);
-            textSprite.anchor.set(0.5);
-
-            const BOX_SIZE = BLOCK_SIZE - GAP; 
-            const SAFE_ZONE = 34; 
-            const scaleX = SAFE_ZONE / textSprite.width;
-            const scaleY = SAFE_ZONE / textSprite.height;
-            const finalScale = Math.min(scaleX, scaleY); 
-
-            textSprite.scale.set(finalScale);
-            textSprite.x = BOX_SIZE / 2; 
-            textSprite.y = BOX_SIZE / 2;
-            
-            localData.sprite.addChild(textSprite);
         }
     }
 
-    // --- INTERACTION ---
-    function calculateMinZoom() {
-        const scaleX = app.screen.width / (PYRAMID_WIDTH + 200); 
-        const scaleY = app.screen.height / (PYRAMID_HEIGHT + 300);
-        minZoomLevel = Math.min(scaleX, scaleY);
-    }
-
-    function constrainPyramid() {
-        if (container.scale.x < minZoomLevel) container.scale.set(minZoomLevel);
-
-        const pyWidth = PYRAMID_WIDTH * container.scale.x;
-        const pyHeight = PYRAMID_HEIGHT * container.scale.y;
-
-        if (pyWidth < app.screen.width) {
-            container.x = app.screen.width / 2;
-        } else {
-            const minX = app.screen.width - (pyWidth / 2) - 100;
-            const maxX = (pyWidth / 2) + 100;
-            if (container.x < minX) container.x = minX;
-            if (container.x > maxX) container.x = maxX;
-        }
-
-        if (pyHeight < app.screen.height) {
-            container.y = (app.screen.height - pyHeight) / 2;
-        } else {
-            const maxY = TOP_HEADER_ZONE; 
-            const minY = app.screen.height - pyHeight - BOTTOM_SAFE_ZONE;
-            if (container.y < minY) container.y = minY;
-            if (container.y > maxY) container.y = maxY;
+    function updateLOD() {
+        const showText = state.cam.zoom > CONFIG.LOD_THRESHOLD;
+        
+        for (const text of state.textPool) {
+            if (text.parent.parent.visible) {
+                text.visible = showText;
+            }
         }
     }
 
-    function getBlockAtGlobalPos(globalX, globalY) {
-        const localPoint = container.toLocal({x: globalX, y: globalY});
-        const r = Math.floor(localPoint.y / BLOCK_SIZE) + 1;
-        if (r < 1 || r > TOTAL_ROWS) return null;
-        
-        const rowWidth = r * BLOCK_SIZE;
-        const rowStartX = -rowWidth / 2;
-        const c = Math.floor((localPoint.x - rowStartX) / BLOCK_SIZE);
-        if (c < 0 || c >= r) return null;
-        
-        return gridLookup[r] ? gridLookup[r][c] : null;
-    }
+    // =========================================================================
+    // 5. O(1) INTERACTION SYSTEM (FIXED CLICK vs DRAG)
+    // =========================================================================
+    function setupInput() {
+        const dom = document.getElementById('canvas-container');
 
-    function setupInteraction() {
-        app.stage.eventMode = 'static';
-        app.stage.hitArea = app.screen;
-        
-        app.stage.on('pointerdown', (e) => {
-            isDragging = true;
-            dragStart = { x: e.global.x - container.x, y: e.global.y - container.y };
-            app.dragStartPos = { x: e.global.x, y: e.global.y }; 
-        });
-        
-        app.stage.on('pointermove', (e) => {
-            const globalX = e.global.x;
-            const globalY = e.global.y;
-
-            if(isDragging) {
-                container.x = globalX - dragStart.x;
-                container.y = globalY - dragStart.y;
-                constrainPyramid();
-                return; 
-            }
-
-            const targetBlock = getBlockAtGlobalPos(globalX, globalY);
-
-            if (targetBlock !== hoveredBlock) {
-                if (hoveredBlock) onHoverOut(hoveredBlock);
-                if (targetBlock) onHover(globalX, globalY, targetBlock);
-                hoveredBlock = targetBlock;
-            } else if (targetBlock) {
-                updateTooltipPos(globalX, globalY);
-            }
-        });
-        
-        app.stage.on('pointerup', (e) => {
-            if (isDragging) {
-                isDragging = false;
-                const dx = e.global.x - (app.dragStartPos?.x || 0);
-                const dy = e.global.y - (app.dragStartPos?.y || 0);
-                if (Math.sqrt(dx*dx + dy*dy) < 5) {
-                   const targetBlock = getBlockAtGlobalPos(e.global.x, e.global.y);
-                   if (targetBlock) {
-                       currentBlock = targetBlock;
-                       openModal();
-                   }
-                }
-            }
-        });
-        
-        app.stage.on('pointerupoutside', () => isDragging = false);
-
-        document.getElementById('canvas-container').addEventListener('wheel', (e) => {
+        // Zoom
+        dom.addEventListener('wheel', (e) => {
             e.preventDefault();
-            const zoomSpeed = 0.001;
-            const mouseX = e.clientX;
-            const mouseY = e.clientY;
+            const factor = 0.0015;
+            const mouseWx = (e.clientX - state.cam.x) / state.cam.zoom;
+            const mouseWy = (e.clientY - state.cam.y) / state.cam.zoom;
 
-            const worldPos = {
-                x: (mouseX - container.x) / container.scale.x,
-                y: (mouseY - container.y) / container.scale.y
-            };
-
-            const newScale = container.scale.x - (e.deltaY * zoomSpeed);
-            const clampedScale = Math.min(Math.max(newScale, minZoomLevel), 4.0);
-            container.scale.set(clampedScale);
-
-            const newScreenPos = {
-                x: worldPos.x * container.scale.x + container.x,
-                y: worldPos.y * container.scale.y + container.y
-            };
-
-            container.x -= (newScreenPos.x - mouseX);
-            container.y -= (newScreenPos.y - mouseY);
+            let newZoom = state.target.zoom - (e.deltaY * factor * state.target.zoom);
+            newZoom = Math.max(CONFIG.MIN_ZOOM, Math.min(CONFIG.MAX_ZOOM, newZoom));
             
-            constrainPyramid();
+            state.target.zoom = newZoom;
+            state.target.x = e.clientX - (mouseWx * newZoom);
+            state.target.y = e.clientY - (mouseWy * newZoom);
         }, { passive: false });
+
+        // Drag Start
+        dom.addEventListener('pointerdown', (e) => {
+            state.dragging = true;
+            state.hasMoved = false; // Reset move flag
+            state.dragStart = { x: e.clientX, y: e.clientY };
+            state.dragOriginalStart = { x: e.clientX, y: e.clientY }; // Store TRUE start
+            state.vel = { x: 0, y: 0 }; 
+            dom.style.cursor = 'grabbing';
+        });
+
+        // Move
+        window.addEventListener('pointermove', (e) => {
+            if (state.dragging) {
+                const dx = e.clientX - state.dragStart.x;
+                const dy = e.clientY - state.dragStart.y;
+                
+                // Calculate total distance from original start point to check for intent
+                const totalDist = Math.hypot(e.clientX - state.dragOriginalStart.x, e.clientY - state.dragOriginalStart.y);
+                if (totalDist > state.clickThreshold) {
+                    state.hasMoved = true;
+                }
+
+                state.target.x += dx;
+                state.target.y += dy;
+                state.vel = { x: dx * 0.8, y: dy * 0.8 };
+                state.dragStart = { x: e.clientX, y: e.clientY };
+            } else {
+                handleHover(e.clientX, e.clientY);
+            }
+        });
+
+        // End
+        window.addEventListener('pointerup', (e) => {
+            if (state.dragging) {
+                state.dragging = false;
+                dom.style.cursor = 'grab';
+                
+                // Only trigger click if we haven't moved beyond threshold
+                if (!state.hasMoved) {
+                     handleClick(e.clientX, e.clientY);
+                }
+            }
+        });
     }
 
-    // --- VISUALS ---
-    function onHover(gx, gy, data) {
-        data.sprite.alpha = 0.8;
-        const tooltip = document.getElementById('tooltip');
-        tooltip.style.display = 'block';
-        tooltip.textContent = data.sold ? `${data.ownerData.owner_name} (#${data.id})` : `Block #${data.id} - $${data.price.toFixed(2)}`;
-        updateTooltipPos(gx, gy);
+    function getBlockId(screenX, screenY) {
+        const worldX = (screenX - state.cam.x) / state.cam.zoom;
+        const worldY = (screenY - state.cam.y) / state.cam.zoom;
+
+        const row = Math.floor(worldY / CONFIG.BLOCK_SIZE) + 1;
+        if (row < 1 || row > CONFIG.ROWS) return -1;
+
+        const rowStartX = -(row * CONFIG.BLOCK_SIZE) / 2;
+        const col = Math.floor((worldX - rowStartX) / CONFIG.BLOCK_SIZE);
+        
+        if (col < 0 || col >= row) return -1;
+        
+        const blocksAbove = (row * (row - 1)) / 2;
+        return CONFIG.TOTAL_BLOCKS - blocksAbove - col;
     }
 
-    function updateTooltipPos(gx, gy) {
-        const tooltip = document.getElementById('tooltip');
-        tooltip.style.left = (gx + 15) + 'px';
-        tooltip.style.top = (gy - 30) + 'px';
+    function handleHover(x, y) {
+        const id = getBlockId(x, y);
+        const tt = document.getElementById('tooltip');
+        
+        if (id !== state.hoverId) {
+            if (state.hoverId !== -1 && state.blocks[state.hoverId]) {
+                state.blocks[state.hoverId].sprite.alpha = 1;
+            }
+            
+            state.hoverId = id;
+            
+            if (id !== -1 && state.blocks[id]) {
+                const b = state.blocks[id];
+                b.sprite.alpha = 0.6;
+                document.body.style.cursor = 'pointer';
+                
+                tt.style.display = 'block';
+                if (b.sold) {
+                    tt.innerHTML = `<div class="tt-label">OWNER</div><span style="color:${b.data.owner_color}">●</span> ${b.data.owner_name}`;
+                    tt.style.borderColor = b.data.owner_color;
+                } else {
+                    tt.innerHTML = `<div class="tt-label">AVAILABLE</div>Block #${b.id} &bull; <span style="color:var(--gold)">$${b.price.toFixed(0)}</span>`;
+                    tt.style.borderColor = '#FFD700';
+                }
+            } else {
+                document.body.style.cursor = 'grab';
+                tt.style.display = 'none';
+            }
+        }
+        
+        if (id !== -1) {
+            tt.style.left = (x + 20) + 'px';
+            tt.style.top = (y - 30) + 'px';
+        }
     }
 
-    function onHoverOut(data) {
-        if(data && data.sprite) data.sprite.alpha = 1.0;
-        document.getElementById('tooltip').style.display = 'none';
+    function handleClick(x, y) {
+        const id = getBlockId(x, y);
+        if (id !== -1) {
+            state.selectedId = id;
+            openModal();
+        }
     }
 
-    // --- MODAL & FORMS ---
+    // =========================================================================
+    // 6. VISUAL UPDATE LOGIC (RECYCLING FIX APPLIED)
+    // =========================================================================
+    function updateBlock(id, data) {
+        const b = state.blocks[id];
+        if(!b) return;
+        
+        b.sold = true;
+        b.data = data;
+        
+        // 1. Texture Change (Fast)
+        b.sprite.texture = state.baseTextures.sold;
+        b.sprite.tint = data.owner_color.replace('#', '0x');
+
+        // 2. Text Handling (Optimized RECYCLE Pattern)
+        if (data.owner_text) {
+            // A. CREATE ONLY IF MISSING (Recycling Strategy)
+            if (!b.textRef) {
+                b.textRef = new PIXI.BitmapText({
+                    text: '', // Initialize empty
+                    style: { fontFamily: 'ImmortalFont', fontSize: 128, align: 'center' }
+                });
+                b.textRef.anchor.set(0.5);
+                b.textRef.x = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
+                b.textRef.y = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
+                
+                b.sprite.addChild(b.textRef);
+                state.textPool.push(b.textRef); // Add to pool only once
+            }
+
+            // B. UPDATE CONTENT (No destroy, no splice, no indexOf)
+            b.textRef.text = data.owner_text; 
+            b.textRef.visible = true; // Ensure it's visible
+
+            // C. RE-CALCULATE SCALE (Your original perfect-fit logic)
+            const maxW = CONFIG.BLOCK_SIZE - 4;
+            const maxH = CONFIG.BLOCK_SIZE - 4;
+            // Reset scale to 1 before measuring to get accurate bounds
+            b.textRef.scale.set(1); 
+            const scale = Math.min(maxW / b.textRef.width, maxH / b.textRef.height);
+            b.textRef.scale.set(scale);
+            
+        } else if (b.textRef) {
+            // If block has no text but used to, just hide it. Don't destroy.
+            b.textRef.visible = false;
+            b.textRef.text = '';
+        }
+    }
+
+    // =========================================================================
+    // 7. UI LOGIC (MODALS & FORMS)
+    // =========================================================================
+    window.app = {
+        resetCamera: () => centerCamera(),
+        
+        simulate: () => {
+            if(state.simulating) return;
+            state.simulating = true;
+            const unsold = [];
+            for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) if(!state.blocks[i].sold) unsold.push(i);
+            
+            if(unsold.length === 0) { alert("Grid Full!"); state.simulating = false; return; }
+            
+            // AGGRESSIVE SIMULATION: Fill Everything
+            const totalToFill = unsold.length;
+            let count = 0;
+            const BATCH_SIZE = 50; 
+            
+            const interval = setInterval(() => {
+                if (count >= totalToFill || unsold.length === 0) { 
+                    clearInterval(interval); 
+                    state.simulating = false; 
+                    alert("Simulation Complete: Grid Fully Populated.");
+                    return; 
+                }
+                
+                for(let k=0; k<BATCH_SIZE; k++) {
+                    if(unsold.length === 0) break;
+                    const randIdx = Math.floor(Math.random() * unsold.length);
+                    const id = unsold[randIdx];
+                    unsold.splice(randIdx, 1);
+                    
+                    const col = CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)];
+                    const texts = ["HI", "BOSS", "A.I.", "WEB3", "100 CHAR TEXT FITS PERFECTLY"];
+                    
+                    updateBlock(id, {
+                        owner_name: "Sim User " + id,
+                        owner_color: col,
+                        owner_text: texts[Math.floor(Math.random()*texts.length)],
+                        message: "This block was purchased during the stress test simulation."
+                    });
+                    count++;
+                }
+            }, 16); 
+        },
+
+        viewRandom: () => {
+            const sold = [];
+            for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) if(state.blocks[i].sold) sold.push(i);
+            if(sold.length === 0) return alert("Run Simulation first!");
+            state.selectedId = sold[Math.floor(Math.random() * sold.length)];
+            openModal();
+        },
+
+        updateForm: (f, v) => {
+            formData[f] = v;
+            if (f === 'text') {
+                const el = document.getElementById('preview-text');
+                el.textContent = v;
+                el.style.fontSize = v.length < 5 ? '30px' : v.length < 20 ? '16px' : '10px';
+            }
+        },
+
+        setColor: (c, el) => {
+            formData.color = c;
+            document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+            const p = document.getElementById('block-preview');
+            p.style.backgroundColor = c;
+            p.style.borderColor = c;
+        },
+
+        submit: () => {
+            if(!formData.name) return alert("Name is required");
+            updateBlock(state.selectedId, {
+                owner_name: formData.name,
+                owner_color: formData.color,
+                owner_text: formData.text,
+                message: formData.message || "Owned forever."
+            });
+            closeModal();
+        }
+    };
+
     window.openModal = () => {
-        const modal = document.getElementById('modal-backdrop');
+        const id = state.selectedId;
+        const b = state.blocks[id];
+        const backdrop = document.getElementById('modal-backdrop');
         const content = document.getElementById('modal-content');
-        modal.style.display = 'flex';
         
-        // Remove old classes
-        content.classList.remove('premium-mode');
+        backdrop.style.display = 'flex';
+        void backdrop.offsetWidth; // Reflow for animation
+        backdrop.classList.add('visible');
+        content.classList.remove('premium');
         
-        if (currentBlock.sold) {
-            content.classList.add('premium-mode'); // Add specific class for profile view
-            renderSoldProfile(content, currentBlock);
+        if (b.sold) {
+            content.classList.add('premium');
+            const d = b.data;
+            const img = d.imageUrl || `https://ui-avatars.com/api/?name=${d.owner_name}&background=random&size=256`;
+            content.innerHTML = `
+                <div class="profile-header-bg"><button class="close-icon" onclick="closeModal()">✕</button></div>
+                <div class="profile-content">
+                    <img src="${img}" class="avatar">
+                    <h2 class="p-name">${d.owner_name}</h2>
+                    <div class="p-badge" style="color:${d.owner_color}; border-color:${d.owner_color}">BLOCK #${b.id}</div>
+                    <div class="p-msg">"${d.message}"</div>
+                    <button class="visit-btn" style="background:${d.owner_color}">View Link 🔗</button>
+                </div>
+            `;
         } else {
-            formData = { name: '', message: '', link: '', color: '#FFD700', text: '', font: 'Arial', imageUrl: '' };
-            renderPurchaseForm(content, currentBlock);
+            formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: '' };
+            content.innerHTML = `
+                <div class="modal-header"><h2>Claim Block <span style="color:var(--gold)">#${b.id}</span></h2><div class="price-tag">$${b.price.toFixed(2)}</div><button class="close-icon" onclick="closeModal()">✕</button></div>
+                <div class="modal-body">
+                    <div class="col-left">
+                        <div class="input-group"><label>Name</label><input type="text" oninput="app.updateForm('name', this.value)"></div>
+                        <div class="input-group"><label>Message</label><input type="text" oninput="app.updateForm('message', this.value)"></div>
+                        <div class="input-group"><label>Color</label><div class="color-selector">${CONFIG.COLORS.map(c => `<div class="color-btn" style="background:${c}" onclick="app.setColor('${c}', this)"></div>`).join('')}</div></div>
+                    </div>
+                    <div class="col-right">
+                        <div class="input-group"><label>Text (Auto-Fit)</label><textarea oninput="app.updateForm('text', this.value)" style="height:80px; text-align:center; font-weight:900; font-size:1.5rem"></textarea></div>
+                        <div class="preview-box" id="block-preview" style="background:#FFD700"><span id="preview-text" style="color:white; text-shadow:0 2px 5px black; font-weight:900"></span></div>
+                    </div>
+                </div>
+                <div class="modal-footer"><button class="confirm-btn" onclick="app.submit()">Mint Block</button></div>
+            `;
         }
     };
 
     window.closeModal = (e) => {
-        if (!e || e.target.id === 'modal-backdrop' || e.target.classList.contains('close-icon') || e.target.classList.contains('close-icon-floating')) {
-            document.getElementById('modal-backdrop').style.display = 'none';
+        if (!e || e.target.id === 'modal-backdrop' || e.target.classList.contains('close-icon')) {
+            const el = document.getElementById('modal-backdrop');
+            el.classList.remove('visible');
+            setTimeout(() => el.style.display = 'none', 300);
         }
     };
 
-    function renderPurchaseForm(container, block) {
-        container.innerHTML = `
-            <div class="modal-header">
-                <h2>Claim Block <span style="color:#FFD700">#${block.id}</span></h2>
-                <div class="price-tag">$${block.price.toFixed(2)}</div>
-                <button class="close-icon" onclick="closeModal()">✕</button>
-            </div>
-            <div class="modal-body">
-                <div class="col-left">
-                    <div class="input-group">
-                        <label>Name / Alias</label>
-                        <input type="text" placeholder="Enter your name" maxlength="30" oninput="updateForm('name', this.value)">
-                    </div>
-                    <div class="input-group">
-                        <label>Message</label>
-                        <input type="text" placeholder="Make history..." maxlength="50" oninput="updateForm('message', this.value)">
-                    </div>
-                    <div class="input-group">
-                        <label>Link (Optional)</label>
-                        <input type="url" placeholder="https://..." oninput="updateForm('link', this.value)">
-                    </div>
-                    <div class="input-group">
-                        <label>Choose Color</label>
-                        <div class="color-selector">
-                            <input type="color" id="color-picker" value="#FFD700" oninput="updateForm('color', this.value)">
-                            <div class="color-presets">
-                                ${COLORS.map(c => `<div class="color-btn" style="background:${c}" onclick="updateForm('color', '${c}')"></div>`).join('')}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-right">
-                    <div class="input-group">
-                        <label>Block Text (Max 80 chars)</label>
-                        <textarea maxlength="80" placeholder="HI" oninput="updateForm('text', this.value)" style="width:100%; height:80px; background:rgba(10,10,15,0.5); border:2px solid #333; color:white; padding:10px; border-radius:8px;"></textarea>
-                    </div>
-                    <div class="input-group">
-                        <label>Font</label>
-                        <select onchange="updateForm('font', this.value)">
-                            ${FONTS.map(f => `<option value="${f}">${f}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="input-group">
-                         <label>Profile Image</label>
-                        <input type="file" id="file-upload" hidden onchange="handleImageUpload(this)">
-                        <div class="image-upload-box" onclick="document.getElementById('file-upload').click()">
-                            <span id="upload-label">📷 Upload Image</span>
-                        </div>
-                    </div>
-                    <div class="preview-container">
-                        <label>Preview</label>
-                        <div id="block-preview" class="preview-block" style="background-color: #FFD700; border: 3px solid #FFD700;">
-                            <span id="preview-text" style="font-family: Arial; font-size:12px; text-align:center; overflow:hidden;">123</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="confirm-btn" onclick="initiatePurchase()">Buy & Mint</button>
-            </div>
-        `;
+    function centerCamera() {
+        const w = PYRAMID_WIDTH + 200;
+        const h = PYRAMID_HEIGHT + 200;
+        const s = Math.min(state.pixi.screen.width / w, state.pixi.screen.height / h);
+        state.target.zoom = s;
+        state.target.x = (state.pixi.screen.width - (PYRAMID_WIDTH*s))/2;
+        state.target.y = (state.pixi.screen.height - (PYRAMID_HEIGHT*s))/2;
     }
 
-    function renderSoldProfile(container, block) {
-        const od = block.ownerData;
-        const fallbackImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(od.owner_name)}&background=random&size=128`;
-        const imageSrc = od.imageUrl ? od.imageUrl : fallbackImage;
-        
-        container.innerHTML = `
-            <div class="profile-header-bg">
-                <button class="close-icon-floating" onclick="closeModal()">✕</button>
-            </div>
-            
-            <div class="profile-content">
-                <div class="avatar-wrapper">
-                    <div class="avatar-ring"></div>
-                    <img src="${imageSrc}" class="avatar-img" alt="Owner">
-                </div>
-                
-                <h2 class="profile-name">${od.owner_name}</h2>
-                <div class="block-badge">BLOCK #${block.id}</div>
-                
-                <div class="profile-divider"></div>
-
-                ${od.message ? `<div class="profile-message">"${od.message}"</div>` : ''}
-                
-                <div class="profile-stats-grid">
-                     <div class="stat-box">
-                        <span class="stat-label">Tier</span>
-                        <span class="stat-value ${block.tier}">${block.tier.toUpperCase()}</span>
-                     </div>
-                     <div class="stat-box">
-                        <span class="stat-label">Value</span>
-                        <span class="stat-value">$${block.price.toFixed(2)}</span>
-                     </div>
-                </div>
-
-                ${od.link ? `
-                    <a href="${od.link}" target="_blank" class="visit-link-btn">
-                        Visit Website 🔗
-                    </a>
-                ` : ''}
-            </div>
-        `;
-    }
-
-    window.updateForm = (field, value) => {
-        formData[field] = value;
-        if (field === 'color') {
-            document.getElementById('color-picker').value = value;
-            document.getElementById('block-preview').style.backgroundColor = value;
-            document.getElementById('block-preview').style.borderColor = value;
-        }
-        if (field === 'text') {
-            const t = document.getElementById('preview-text');
-            t.textContent = value || (currentBlock.id % 1000);
-            if (value.length > 20) t.style.fontSize = "8px";
-            else t.style.fontSize = "12px";
-        }
-        if (field === 'font') document.getElementById('preview-text').style.fontFamily = value;
-    };
-
-    window.handleImageUpload = async (input) => {
-        const file = input.files[0];
-        if (!file) return;
-        document.getElementById('upload-label').textContent = "⏳ Uploading...";
-        if (TEST_MODE) {
-            setTimeout(() => { formData.imageUrl = `https://picsum.photos/seed/${Math.random()}/200/200`; document.getElementById('upload-label').textContent = "✅ Image Set"; }, 1000);
-            return;
-        }
-        const data = new FormData(); data.append('image', file);
-        try {
-            const res = await fetch(`${API_URL}/api/upload-image`, { method: 'POST', body: data });
-            const json = await res.json();
-            if (json.success) { formData.imageUrl = json.imageUrl; document.getElementById('upload-label').textContent = "✅ Image Uploaded"; }
-        } catch (e) { alert('Upload error'); }
-    };
-
-    window.initiatePurchase = () => {
-        if (!formData.name) { alert("Please enter a name"); return; }
-        if (TEST_MODE) { finalizePurchase("test_" + Date.now()); return; }
-        const options = {
-            "key": RAZORPAY_KEY_ID, "amount": currentBlock.price * 100, "currency": "USD",
-            "name": "The History Pyramid", "description": `Block #${currentBlock.id}`,
-            "handler": (r) => finalizePurchase(r.razorpay_payment_id),
-            "prefill": { "name": formData.name }, "theme": { "color": "#FFD700" }
-        };
-        new Razorpay(options).open();
-    };
-
-    async function finalizePurchase(paymentId) {
-        document.querySelector('.confirm-btn').textContent = "Minting Block...";
-        const payload = { slotId: currentBlock.id, user: formData.name, message: formData.message, color: formData.color, text: formData.text, paymentId, imageUrl: formData.imageUrl, link: formData.link };
-        try {
-            if (!TEST_MODE) await fetch(`${API_URL}/api/purchase`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const serverData = { owner_name: payload.user, owner_color: payload.color, owner_text: payload.text, message: payload.message, imageUrl: payload.imageUrl, link: payload.link };
-            updateSlotVisuals(blocksData.get(currentBlock.id), serverData);
-            closeModal();
-            alert(`🎉 Congratulations! Block #${currentBlock.id} is yours forever.`);
-        } catch (e) { alert("Error: " + e.message); }
-    }
-
-    async function loadData() {
-        if(isProcessing) return; 
-        isProcessing = true;
-        try {
-            const res = await fetch(`${API_URL}/api/grid`);
-            if (!res.ok) throw new Error();
-            const soldSlots = await res.json();
-            let index = 0;
-            const batchSize = 40;
-
-            function processBatch() {
-                const limit = Math.min(index + batchSize, soldSlots.length);
-                for (let i = index; i < limit; i++) {
-                    const slotData = soldSlots[i];
-                    const localBlock = blocksData.get(slotData.slot_number);
-                    if (localBlock) updateSlotVisuals(localBlock, slotData);
-                }
-                index += batchSize;
-                if (index < soldSlots.length) requestAnimationFrame(processBatch);
-                else isProcessing = false;
-            }
-            processBatch();
-        } catch (e) { isProcessing = false; }
-    }
-
-    window.resetView = () => {
-        calculateMinZoom();
-        container.scale.set(minZoomLevel);
-        constrainPyramid();
-    };
-
-    window.fillRandom = () => {
-        if (isProcessing) return; 
-        isProcessing = true;
-        const candidates = [];
-        blocksData.forEach(d => { if(!d.sold && Math.random() > 0.95) candidates.push(d); });
-
-        let index = 0;
-        const batchSize = 50; 
-        function processBatch() {
-            const limit = Math.min(index + batchSize, candidates.length);
-            for (let i = index; i < limit; i++) {
-                const d = candidates[i];
-                const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)];
-                updateSlotVisuals(d, { 
-                    owner_name: "Simulated User", 
-                    owner_color: randomColor, 
-                    owner_text: "Empire " + d.id,
-                    message: "I built this part of history.",
-                    imageUrl: `https://picsum.photos/seed/${d.id}/200/200`,
-                    link: "https://google.com"
-                });
-            }
-            index += batchSize;
-            if (index < candidates.length) requestAnimationFrame(processBatch);
-            else isProcessing = false;
-        }
-        processBatch();
-    };
-    
-    window.viewRandom = () => {
-         const sold = Array.from(blocksData.values()).filter(b => b.sold);
-         if(sold.length) { currentBlock = sold[Math.floor(Math.random() * sold.length)]; openModal(); }
-         else alert("No blocks sold yet! Use Simulation Mode first.");
-    };
-
+    window.addEventListener('resize', () => { state.pixi.resize(); centerCamera(); });
     init();
 </script>
 </body>
