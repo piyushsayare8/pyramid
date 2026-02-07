@@ -571,7 +571,7 @@
                 document.body.style.cursor = 'pointer';
                 tt.style.display = 'block';
                 if (b.sold) {
-                    tt.innerHTML = `<div class="tt-label">OWNER</div><span style="color:${b.data.owner_color}">●</span> ${b.data.owner_name}`;
+                    tt.innerHTML = `<div class="tt-label">OWNER</div><span style="color:${b.data.owner_color}">●</span> ${b.data.owner_name}<br><div class="tt-label" style="margin-top:4px">PURCHASED</div><span style="color:var(--gold)">$${b.price.toFixed(2)}</span>`;
                     tt.style.borderColor = b.data.owner_color;
                 } else {
                     tt.innerHTML = `<div class="tt-label">AVAILABLE</div>Block #${b.id} &bull; <span style="color:var(--gold)">$${b.price.toFixed(2)}</span>`;
