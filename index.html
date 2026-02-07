@@ -116,7 +116,7 @@
         </div>
 
         <div class="center-controls interactive">
-            <button class="profile-btn" onclick="app.viewRandom()">👤 View Random Profile</button>
+            <button class="profile-btn" onclick="app.viewRandom()"> View Random Profile</button>
         </div>
         
         <div class="instructions" style="position: absolute; bottom: 30px; right: 30px; color: #444; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">
@@ -139,29 +139,28 @@
         BLOCK_SIZE: 40,
         GAP: 2,
         TOTAL_BLOCKS: 11325,
-        // Performance Tuning
-        LOD_THRESHOLD: 0.35,  // Scale at which text appears
-        CHUNK_SIZE: 25,       // Rows per chunk for culling
-        // Camera Physics
+        LOD_THRESHOLD: 0.35, 
+        CHUNK_SIZE: 25,
         MAX_ZOOM: 50.0,
-        MIN_ZOOM: 0.1,
-        FRICTION: 0.92,
-        // Visuals
+        MIN_ZOOM: 0.05,
+        FRICTION: 0.9,
         COLORS: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8']
     };
     
+    // Calculate Pyramid Dimensions for Bounds
+    // Width at bottom row = ROWS * BLOCK_SIZE
     const PYRAMID_WIDTH = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
     const PYRAMID_HEIGHT = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
 
     // =========================================================================
-    // 2. STATE & DATA (O(1) Access)
+    // 2. STATE & DATA
     // =========================================================================
     const state = {
         pixi: null,
         world: null,
         chunks: [],
-        blocks: new Array(CONFIG.TOTAL_BLOCKS + 1), // Direct index access
-        textPool: [], // Pool for active text sprites
+        blocks: new Array(CONFIG.TOTAL_BLOCKS + 1),
+        textPool: [],
         baseTextures: {},
         
         // Physics Camera State
@@ -172,11 +171,15 @@
         // Interaction
         dragging: false,
         dragStart: { x: 0, y: 0 },
-        dragOriginalStart: { x: 0, y: 0 }, // Store original start position
-        hasMoved: false, // Flag to track if actual movement occurred
-        clickThreshold: 5, // Pixels moved before it counts as a drag
+        dragOriginalStart: { x: 0, y: 0 },
+        hasMoved: false,
+        clickThreshold: 5,
         hoverId: -1,
         selectedId: -1,
+        
+        // Mobile touch
+        touches: [],
+        lastTouchDistance: 0,
         
         simulating: false
     };
@@ -193,44 +196,32 @@
             backgroundColor: 0x050508,
             resolution: Math.min(window.devicePixelRatio, 2),
             autoDensity: true,
-            antialias: false, // Performance + Crisp Pixels
+            antialias: false,
             powerPreference: 'high-performance'
         });
         document.getElementById('canvas-container').appendChild(state.pixi.canvas);
 
-        // A. High-Res Bitmap Font (The secret to sharp 50x zoom)
         PIXI.BitmapFont.install({
             name: 'ImmortalFont',
-            style: {
-                fontFamily: 'Arial',
-                fontSize: 256, 
-                fontWeight: '900',
-                fill: 'white',
-                stroke: { color: 'black', width: 12 }
-            }
+            style: { fontFamily: 'Arial', fontSize: 256, fontWeight: '900', fill: 'white', stroke: { color: 'black', width: 12 } }
         });
 
-        // B. Generate Flyweight Textures
         createSharedTextures();
 
-        // C. Build Geometry (The Virtual Grid)
         state.world = new PIXI.Container();
-        state.world.eventMode = 'none'; // Manual math-based hit testing is faster
+        state.world.eventMode = 'none';
         state.pixi.stage.addChild(state.world);
         buildPyramid();
 
-        // D. Setup Input & Physics
         setupInput();
-        centerCamera();
+        centerCamera(); // Ensures default view is full pyramid
 
-        // E. The Game Loop
         state.pixi.ticker.add((ticker) => {
             updatePhysics(ticker.deltaTime);
             cullWorld();
             updateLOD();
         });
 
-        // F. Fade In
         setTimeout(() => document.getElementById('loader').style.opacity = '0', 500);
         setTimeout(() => document.getElementById('loader').remove(), 1000);
     }
@@ -243,7 +234,6 @@
                 .stroke({ width: 2, color: border });
             return state.pixi.renderer.generateTexture(g);
         };
-        
         state.baseTextures = {
             gold: make(0x2d2d44, 0xFFD700),
             silver: make(0x252535, 0xC0C0C0),
@@ -254,24 +244,22 @@
 
     function buildPyramid() {
         let blockId = CONFIG.TOTAL_BLOCKS;
-
         for (let row = 1; row <= CONFIG.ROWS; row++) {
-            // Chunking Strategy
             if ((row - 1) % CONFIG.CHUNK_SIZE === 0) {
                 const chunk = new PIXI.Container();
                 chunk.yStart = (row - 1) * CONFIG.BLOCK_SIZE;
                 chunk.yEnd = chunk.yStart + (CONFIG.CHUNK_SIZE * CONFIG.BLOCK_SIZE);
-                chunk.visible = false; // Start hidden
+                chunk.visible = false;
                 state.chunks.push(chunk);
                 state.world.addChild(chunk);
             }
             
             const chunk = state.chunks[state.chunks.length - 1];
+            // Center the rows: x = -(row_width)/2
             const startX = -(row * CONFIG.BLOCK_SIZE) / 2;
             const yPos = (row - 1) * CONFIG.BLOCK_SIZE;
 
             for (let col = 0; col < row; col++) {
-                // Tier Logic
                 let type = 'std';
                 if (row <= 45) type = 'gold';
                 else if (row <= 85) type = 'silver';
@@ -279,19 +267,10 @@
                 const sprite = new PIXI.Sprite(state.baseTextures[type]);
                 sprite.x = startX + (col * CONFIG.BLOCK_SIZE);
                 sprite.y = yPos;
-
+                
                 let price = blockId === CONFIG.TOTAL_BLOCKS ? 5000 : 1 + (blockId * 0.5);
 
-                state.blocks[blockId] = {
-                    id: blockId,
-                    price: price,
-                    tier: type,
-                    sold: false,
-                    sprite: sprite,
-                    data: null,
-                    textRef: null
-                };
-
+                state.blocks[blockId] = { id: blockId, price: price, tier: type, sold: false, sprite: sprite, data: null, textRef: null };
                 chunk.addChild(sprite);
                 blockId--;
             }
@@ -299,8 +278,81 @@
     }
 
     // =========================================================================
-    // 4. PHYSICS CAMERA (Smooth Inertia)
+    // 4. PHYSICS & CAMERA CONSTRAINTS
     // =========================================================================
+    function constrainCamera() {
+        // --- 1. MINIMUM ZOOM (Fit to Screen) ---
+        // Calculate the zoom level where the pyramid fits perfectly with padding.
+        // We ensure the user cannot zoom OUT further than this (so the pyramid is never tiny).
+        const padding = 50; 
+        const fitW = state.pixi.screen.width / (PYRAMID_WIDTH + padding * 2);
+        const fitH = state.pixi.screen.height / (PYRAMID_HEIGHT + padding * 2);
+        const minAllowedZoom = Math.min(fitW, fitH);
+        
+        if (state.target.zoom < minAllowedZoom) {
+            state.target.zoom = minAllowedZoom;
+        }
+
+        // --- 2. PANNING BOUNDS (Keep Pyramid in View) ---
+        // We restrict the CAMERA FOCUS POINT (center of screen) relative to the pyramid center.
+        
+        // How much world space is visible at current zoom?
+        const visibleWorldWidth = state.pixi.screen.width / state.target.zoom;
+        const visibleWorldHeight = state.pixi.screen.height / state.target.zoom;
+        
+        // Define the "World Box" of the pyramid
+        // Pyramid is centered on X=0. Top is Y=0. Bottom is Y=PYRAMID_HEIGHT.
+        const pyLeft = -(PYRAMID_WIDTH / 2);
+        const pyRight = (PYRAMID_WIDTH / 2);
+        const pyTop = 0;
+        const pyBottom = PYRAMID_HEIGHT;
+
+        // Calculate maximum allowable pan offsets.
+        // We want to stop panning when the edge of the pyramid reaches the center of the screen
+        // (or slightly past it), ensuring the user can always reach the edges but never lose it.
+        
+        const panBufferX = visibleWorldWidth * 0.4; // Keep at least 10% of width visible? No, let's just clamp to edges.
+        const panBufferY = visibleWorldHeight * 0.4;
+
+        // The center of the screen (in world coords) is bounded by the pyramid dimensions
+        // effectively treating the pyramid like a "map".
+        
+        // Clamp X: Screen center cannot go too far left of LeftEdge or right of RightEdge
+        const minX = pyLeft; 
+        const maxX = pyRight; 
+        
+        // Clamp Y: Screen center cannot go too far above Top or below Bottom
+        const minY = pyTop;
+        const maxY = pyBottom;
+
+        // Convert current target (screen center logic) to World Coordinates
+        // target.x/y is actually the "Camera Offset" in PIXI (top-left).
+        // We need to inverse solve for the World Point at the Screen Center.
+        // ScreenCenter = (WorldPoint * Zoom) + CamOffset
+        // WorldPoint = (ScreenCenter - CamOffset) / Zoom
+        
+        const screenCX = state.pixi.screen.width / 2;
+        const screenCY = state.pixi.screen.height / 2;
+        
+        let worldCX = (screenCX - state.target.x) / state.target.zoom;
+        let worldCY = (screenCY - state.target.y) / state.target.zoom;
+
+        // Clamp the WORLD center point
+        let clampedWX = Math.max(minX, Math.min(maxX, worldCX));
+        let clampedWY = Math.max(minY, Math.min(maxY, worldCY));
+
+        // Re-calculate the Camera Offset based on the Clamped World Center
+        // CamOffset = ScreenCenter - (WorldPoint * Zoom)
+        if (clampedWX !== worldCX) {
+            state.target.x = screenCX - (clampedWX * state.target.zoom);
+            state.vel.x = 0; // Kill velocity if we hit a wall
+        }
+        if (clampedWY !== worldCY) {
+            state.target.y = screenCY - (clampedWY * state.target.zoom);
+            state.vel.y = 0; // Kill velocity
+        }
+    }
+
     function updatePhysics(dt) {
         if (!state.dragging) {
             state.target.x += state.vel.x * dt;
@@ -309,7 +361,9 @@
             state.vel.y *= CONFIG.FRICTION;
         }
 
-        const spring = 0.15;
+        constrainCamera(); // Apply bounds before moving visual camera
+
+        const spring = 0.25; 
         state.cam.zoom += (state.target.zoom - state.cam.zoom) * spring;
         state.cam.x += (state.target.x - state.cam.x) * spring;
         state.cam.y += (state.target.y - state.cam.y) * spring;
@@ -319,23 +373,21 @@
     }
 
     function cullWorld() {
+        // Only render blocks visible on screen
         const viewTop = -state.cam.y / state.cam.zoom;
         const viewBottom = viewTop + (state.pixi.screen.height / state.cam.zoom);
-        const buffer = 200;
+        const buffer = 200; // Extra buffer to prevent pop-in
 
         for (const chunk of state.chunks) {
-            if (chunk.yEnd < viewTop - buffer || chunk.yStart > viewBottom + buffer) {
-                chunk.visible = false;
-            } else {
-                chunk.visible = true;
-            }
+            chunk.visible = !(chunk.yEnd < viewTop - buffer || chunk.yStart > viewBottom + buffer);
         }
     }
 
     function updateLOD() {
+        // Level of Detail: Hide text when zoomed out
         const showText = state.cam.zoom > CONFIG.LOD_THRESHOLD;
-        
         for (const text of state.textPool) {
+            // Only update visibility if parent chunk is visible
             if (text.parent.parent.visible) {
                 text.visible = showText;
             }
@@ -343,83 +395,143 @@
     }
 
     // =========================================================================
-    // 5. O(1) INTERACTION SYSTEM (FIXED CLICK vs DRAG)
+    // 5. INPUT SYSTEM
     // =========================================================================
     function setupInput() {
         const dom = document.getElementById('canvas-container');
 
-        // Zoom
+        // 1. MOUSE WHEEL ZOOM (Anchor Based)
         dom.addEventListener('wheel', (e) => {
             e.preventDefault();
-            const factor = 0.0015;
-            const mouseWx = (e.clientX - state.cam.x) / state.cam.zoom;
-            const mouseWy = (e.clientY - state.cam.y) / state.cam.zoom;
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
 
-            let newZoom = state.target.zoom - (e.deltaY * factor * state.target.zoom);
-            newZoom = Math.max(CONFIG.MIN_ZOOM, Math.min(CONFIG.MAX_ZOOM, newZoom));
-            
+            // Get world point under mouse
+            const worldPos = {
+                x: (mouseX - state.target.x) / state.target.zoom,
+                y: (mouseY - state.target.y) / state.target.zoom
+            };
+
+            const delta = -e.deltaY * 0.001;
+            let newZoom = state.target.zoom * (1 + delta);
+            newZoom = Math.min(Math.max(newZoom, 0.001), CONFIG.MAX_ZOOM); // Min handled by constrainCamera
+
             state.target.zoom = newZoom;
-            state.target.x = e.clientX - (mouseWx * newZoom);
-            state.target.y = e.clientY - (mouseWy * newZoom);
+            // Adjust pan so world point stays under mouse
+            state.target.x = mouseX - (worldPos.x * newZoom);
+            state.target.y = mouseY - (worldPos.y * newZoom);
+            
         }, { passive: false });
 
-        // Drag Start
+        // 2. DRAG
         dom.addEventListener('pointerdown', (e) => {
             state.dragging = true;
-            state.hasMoved = false; // Reset move flag
+            state.hasMoved = false;
             state.dragStart = { x: e.clientX, y: e.clientY };
-            state.dragOriginalStart = { x: e.clientX, y: e.clientY }; // Store TRUE start
-            state.vel = { x: 0, y: 0 }; 
+            state.dragOriginalStart = { x: e.clientX, y: e.clientY };
+            state.vel = { x: 0, y: 0 };
             dom.style.cursor = 'grabbing';
         });
 
-        // Move
         window.addEventListener('pointermove', (e) => {
             if (state.dragging) {
                 const dx = e.clientX - state.dragStart.x;
                 const dy = e.clientY - state.dragStart.y;
-                
-                // Calculate total distance from original start point to check for intent
-                const totalDist = Math.hypot(e.clientX - state.dragOriginalStart.x, e.clientY - state.dragOriginalStart.y);
-                if (totalDist > state.clickThreshold) {
+                if (Math.hypot(e.clientX - state.dragOriginalStart.x, e.clientY - state.dragOriginalStart.y) > state.clickThreshold) {
                     state.hasMoved = true;
                 }
-
                 state.target.x += dx;
                 state.target.y += dy;
-                state.vel = { x: dx * 0.8, y: dy * 0.8 };
                 state.dragStart = { x: e.clientX, y: e.clientY };
+                state.vel = { x: dx, y: dy };
             } else {
                 handleHover(e.clientX, e.clientY);
             }
         });
 
-        // End
         window.addEventListener('pointerup', (e) => {
             if (state.dragging) {
                 state.dragging = false;
                 dom.style.cursor = 'grab';
-                
-                // Only trigger click if we haven't moved beyond threshold
-                if (!state.hasMoved) {
-                     handleClick(e.clientX, e.clientY);
-                }
+                if (!state.hasMoved) handleClick(e.clientX, e.clientY);
             }
         });
+
+        // 3. TOUCH
+        dom.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            state.touches = Array.from(e.touches);
+            if (state.touches.length === 1) {
+                state.dragging = true;
+                state.hasMoved = false;
+                state.dragStart = { x: state.touches[0].clientX, y: state.touches[0].clientY };
+                state.dragOriginalStart = { x: state.touches[0].clientX, y: state.touches[0].clientY };
+                state.vel = { x: 0, y: 0 };
+            } else if (state.touches.length === 2) {
+                state.dragging = false;
+                const dx = state.touches[0].clientX - state.touches[1].clientX;
+                const dy = state.touches[0].clientY - state.touches[1].clientY;
+                state.lastTouchDistance = Math.hypot(dx, dy);
+            }
+        }, { passive: false });
+
+        dom.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            state.touches = Array.from(e.touches);
+            
+            if (state.touches.length === 1 && state.dragging) {
+                const t = state.touches[0];
+                const dx = t.clientX - state.dragStart.x;
+                const dy = t.clientY - state.dragStart.y;
+                if (Math.hypot(t.clientX - state.dragOriginalStart.x, t.clientY - state.dragOriginalStart.y) > state.clickThreshold) {
+                    state.hasMoved = true;
+                }
+                state.target.x += dx;
+                state.target.y += dy;
+                state.dragStart = { x: t.clientX, y: t.clientY };
+                state.vel = { x: dx, y: dy };
+            } else if (state.touches.length === 2) {
+                const p1 = state.touches[0];
+                const p2 = state.touches[1];
+                const dist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+                
+                if (state.lastTouchDistance > 0) {
+                    const centerX = (p1.clientX + p2.clientX) / 2;
+                    const centerY = (p1.clientY + p2.clientY) / 2;
+                    const worldX = (centerX - state.target.x) / state.target.zoom;
+                    const worldY = (centerY - state.target.y) / state.target.zoom;
+
+                    const scaleFactor = dist / state.lastTouchDistance;
+                    let newZoom = state.target.zoom * scaleFactor;
+                    newZoom = Math.min(Math.max(newZoom, 0.001), CONFIG.MAX_ZOOM);
+
+                    state.target.zoom = newZoom;
+                    state.target.x = centerX - (worldX * newZoom);
+                    state.target.y = centerY - (worldY * newZoom);
+                }
+                state.lastTouchDistance = dist;
+            }
+        }, { passive: false });
+
+        dom.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (state.touches.length === 1 && state.dragging && !state.hasMoved) {
+                const t = state.touches[0] || e.changedTouches[0];
+                handleClick(t.clientX, t.clientY);
+            }
+            state.touches = Array.from(e.touches);
+            if (state.touches.length === 0) state.dragging = false;
+        }, { passive: false });
     }
 
     function getBlockId(screenX, screenY) {
         const worldX = (screenX - state.cam.x) / state.cam.zoom;
         const worldY = (screenY - state.cam.y) / state.cam.zoom;
-
         const row = Math.floor(worldY / CONFIG.BLOCK_SIZE) + 1;
         if (row < 1 || row > CONFIG.ROWS) return -1;
-
         const rowStartX = -(row * CONFIG.BLOCK_SIZE) / 2;
         const col = Math.floor((worldX - rowStartX) / CONFIG.BLOCK_SIZE);
-        
         if (col < 0 || col >= row) return -1;
-        
         const blocksAbove = (row * (row - 1)) / 2;
         return CONFIG.TOTAL_BLOCKS - blocksAbove - col;
     }
@@ -427,19 +539,13 @@
     function handleHover(x, y) {
         const id = getBlockId(x, y);
         const tt = document.getElementById('tooltip');
-        
         if (id !== state.hoverId) {
-            if (state.hoverId !== -1 && state.blocks[state.hoverId]) {
-                state.blocks[state.hoverId].sprite.alpha = 1;
-            }
-            
+            if (state.hoverId !== -1 && state.blocks[state.hoverId]) state.blocks[state.hoverId].sprite.alpha = 1;
             state.hoverId = id;
-            
             if (id !== -1 && state.blocks[id]) {
                 const b = state.blocks[id];
                 b.sprite.alpha = 0.6;
                 document.body.style.cursor = 'pointer';
-                
                 tt.style.display = 'block';
                 if (b.sold) {
                     tt.innerHTML = `<div class="tt-label">OWNER</div><span style="color:${b.data.owner_color}">●</span> ${b.data.owner_name}`;
@@ -453,117 +559,70 @@
                 tt.style.display = 'none';
             }
         }
-        
-        if (id !== -1) {
-            tt.style.left = (x + 20) + 'px';
-            tt.style.top = (y - 30) + 'px';
-        }
+        if (id !== -1) { tt.style.left = (x + 20) + 'px'; tt.style.top = (y - 30) + 'px'; }
     }
 
     function handleClick(x, y) {
         const id = getBlockId(x, y);
-        if (id !== -1) {
-            state.selectedId = id;
-            openModal();
-        }
+        if (id !== -1) { state.selectedId = id; openModal(); }
     }
 
     // =========================================================================
-    // 6. VISUAL UPDATE LOGIC (RECYCLING FIX APPLIED)
+    // 6. LOGIC & UI
     // =========================================================================
     function updateBlock(id, data) {
         const b = state.blocks[id];
         if(!b) return;
-        
         b.sold = true;
         b.data = data;
-        
-        // 1. Texture Change (Fast)
         b.sprite.texture = state.baseTextures.sold;
         b.sprite.tint = data.owner_color.replace('#', '0x');
 
-        // 2. Text Handling (Optimized RECYCLE Pattern)
         if (data.owner_text) {
-            // A. CREATE ONLY IF MISSING (Recycling Strategy)
             if (!b.textRef) {
-                b.textRef = new PIXI.BitmapText({
-                    text: '', // Initialize empty
-                    style: { fontFamily: 'ImmortalFont', fontSize: 128, align: 'center' }
-                });
+                b.textRef = new PIXI.BitmapText({ text: '', style: { fontFamily: 'ImmortalFont', fontSize: 128, align: 'center' } });
                 b.textRef.anchor.set(0.5);
                 b.textRef.x = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
                 b.textRef.y = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
-                
                 b.sprite.addChild(b.textRef);
-                state.textPool.push(b.textRef); // Add to pool only once
+                state.textPool.push(b.textRef);
             }
-
-            // B. UPDATE CONTENT (No destroy, no splice, no indexOf)
             b.textRef.text = data.owner_text; 
-            b.textRef.visible = true; // Ensure it's visible
-
-            // C. RE-CALCULATE SCALE (Your original perfect-fit logic)
-            const maxW = CONFIG.BLOCK_SIZE - 4;
-            const maxH = CONFIG.BLOCK_SIZE - 4;
-            // Reset scale to 1 before measuring to get accurate bounds
+            b.textRef.visible = true;
             b.textRef.scale.set(1); 
-            const scale = Math.min(maxW / b.textRef.width, maxH / b.textRef.height);
+            const scale = Math.min((CONFIG.BLOCK_SIZE - 4) / b.textRef.width, (CONFIG.BLOCK_SIZE - 4) / b.textRef.height);
             b.textRef.scale.set(scale);
-            
         } else if (b.textRef) {
-            // If block has no text but used to, just hide it. Don't destroy.
             b.textRef.visible = false;
-            b.textRef.text = '';
         }
     }
 
-    // =========================================================================
-    // 7. UI LOGIC (MODALS & FORMS)
-    // =========================================================================
     window.app = {
         resetCamera: () => centerCamera(),
-        
         simulate: () => {
             if(state.simulating) return;
             state.simulating = true;
             const unsold = [];
             for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) if(!state.blocks[i].sold) unsold.push(i);
-            
             if(unsold.length === 0) { alert("Grid Full!"); state.simulating = false; return; }
-            
-            // AGGRESSIVE SIMULATION: Fill Everything
-            const totalToFill = unsold.length;
             let count = 0;
-            const BATCH_SIZE = 50; 
-            
             const interval = setInterval(() => {
-                if (count >= totalToFill || unsold.length === 0) { 
-                    clearInterval(interval); 
-                    state.simulating = false; 
-                    alert("Simulation Complete: Grid Fully Populated.");
-                    return; 
-                }
-                
-                for(let k=0; k<BATCH_SIZE; k++) {
+                if (count >= unsold.length || unsold.length === 0) { clearInterval(interval); state.simulating = false; return; }
+                for(let k=0; k<50; k++) {
                     if(unsold.length === 0) break;
                     const randIdx = Math.floor(Math.random() * unsold.length);
                     const id = unsold[randIdx];
                     unsold.splice(randIdx, 1);
-                    
-                    const col = CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)];
-                    const texts = ["HI", "BOSS", "A.I.", "WEB3", "100 CHAR TEXT FITS PERFECTLY"];
-                    
                     updateBlock(id, {
-                        owner_name: "Sim User " + id,
-                        owner_color: col,
-                        owner_text: texts[Math.floor(Math.random()*texts.length)],
-                        message: "This block was purchased during the stress test simulation."
+                        owner_name: "Sim " + id,
+                        owner_color: CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)],
+                        owner_text: ["A.I", "WEB3", "BTC", "ETH"][Math.floor(Math.random()*4)],
+                        message: "Simulation"
                     });
                     count++;
                 }
             }, 16); 
         },
-
         viewRandom: () => {
             const sold = [];
             for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) if(state.blocks[i].sold) sold.push(i);
@@ -571,7 +630,6 @@
             state.selectedId = sold[Math.floor(Math.random() * sold.length)];
             openModal();
         },
-
         updateForm: (f, v) => {
             formData[f] = v;
             if (f === 'text') {
@@ -580,7 +638,6 @@
                 el.style.fontSize = v.length < 5 ? '30px' : v.length < 20 ? '16px' : '10px';
             }
         },
-
         setColor: (c, el) => {
             formData.color = c;
             document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
@@ -589,7 +646,6 @@
             p.style.backgroundColor = c;
             p.style.borderColor = c;
         },
-
         submit: () => {
             if(!formData.name) return alert("Name is required");
             updateBlock(state.selectedId, {
@@ -607,9 +663,8 @@
         const b = state.blocks[id];
         const backdrop = document.getElementById('modal-backdrop');
         const content = document.getElementById('modal-content');
-        
         backdrop.style.display = 'flex';
-        void backdrop.offsetWidth; // Reflow for animation
+        void backdrop.offsetWidth; 
         backdrop.classList.add('visible');
         content.classList.remove('premium');
         
@@ -625,8 +680,7 @@
                     <div class="p-badge" style="color:${d.owner_color}; border-color:${d.owner_color}">BLOCK #${b.id}</div>
                     <div class="p-msg">"${d.message}"</div>
                     <button class="visit-btn" style="background:${d.owner_color}">View Link 🔗</button>
-                </div>
-            `;
+                </div>`;
         } else {
             formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: '' };
             content.innerHTML = `
@@ -642,8 +696,7 @@
                         <div class="preview-box" id="block-preview" style="background:#FFD700"><span id="preview-text" style="color:white; text-shadow:0 2px 5px black; font-weight:900"></span></div>
                     </div>
                 </div>
-                <div class="modal-footer"><button class="confirm-btn" onclick="app.submit()">Mint Block</button></div>
-            `;
+                <div class="modal-footer"><button class="confirm-btn" onclick="app.submit()">Mint Block</button></div>`;
         }
     };
 
@@ -656,12 +709,22 @@
     };
 
     function centerCamera() {
-        const w = PYRAMID_WIDTH + 200;
-        const h = PYRAMID_HEIGHT + 200;
+        const padding = 100; // Increased padding for initial view
+        const w = PYRAMID_WIDTH + (padding * 2);
+        const h = PYRAMID_HEIGHT + (padding * 2);
         const s = Math.min(state.pixi.screen.width / w, state.pixi.screen.height / h);
         state.target.zoom = s;
-        state.target.x = (state.pixi.screen.width - (PYRAMID_WIDTH*s))/2;
-        state.target.y = (state.pixi.screen.height - (PYRAMID_HEIGHT*s))/2;
+        
+        // Center of the pyramid is X=0, Y=PYRAMID_HEIGHT/2 roughly
+        // Our coordinates: Top=0, Bottom=Height, Center X=0.
+        // We want the screen center to point at the middle of the pyramid.
+        state.target.x = state.pixi.screen.width / 2;
+        state.target.y = state.pixi.screen.height / 2 - (PYRAMID_HEIGHT / 2 * s);
+        
+        // Ensure immediate snap
+        state.cam.zoom = state.target.zoom;
+        state.cam.x = state.target.x;
+        state.cam.y = state.target.y;
     }
 
     window.addEventListener('resize', () => { state.pixi.resize(); centerCamera(); });
