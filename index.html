@@ -38,6 +38,13 @@
         .btn-accent { background: rgba(255, 107, 107, 0.1); border-color: #ff6b6b; color: #ff6b6b; }
         .btn-accent:hover { background: #ff6b6b; color: black; box-shadow: 0 0 20px rgba(255, 107, 107, 0.4); }
         
+        /* SALES COUNTER */
+        .sales-counter { position: absolute; top: 100px; left: 30px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); padding: 15px 20px; border-radius: 12px; backdrop-filter: blur(10px); }
+        .sales-label { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; font-weight: 700; }
+        .sales-stats { font-size: 1.2rem; color: var(--gold); font-weight: 900; font-family: 'Georgia', serif; }
+        .sales-progress { width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+        .sales-progress-bar { height: 100%; background: linear-gradient(90deg, var(--gold), #FFA500); border-radius: 2px; transition: width 0.5s ease; }
+        
         /* CENTER ACTION */
         .center-controls { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); }
         .profile-btn { background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(0,0,0,0)); border: 1px solid var(--gold); color: var(--gold); padding: 16px 40px; border-radius: 50px; font-weight: 800; cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(10px); transition: 0.3s; letter-spacing: 1px; text-transform: uppercase; }
@@ -112,6 +119,14 @@
         <div class="header interactive">
             <h1>THE PYRAMID</h1>
             <div class="subtitle">11,325 Blocks • Immortal Core</div>
+        </div>
+
+        <div class="sales-counter interactive">
+            <div class="sales-label">Blocks Sold</div>
+            <div class="sales-stats" id="sales-count">0 / 11,325</div>
+            <div class="sales-progress">
+                <div class="sales-progress-bar" id="sales-progress-bar" style="width: 0%"></div>
+            </div>
         </div>
 
         <div class="controls interactive">
@@ -308,20 +323,42 @@
             const yPos = (row - 1) * CONFIG.BLOCK_SIZE;
 
             for (let col = 0; col < row; col++) {
+                let price = 0.1 + ((blockId - 1) * 0.1);
                 let type = 'std';
-                if (row <= 45) type = 'gold';
+                if (blockId >= 10000) type = 'gold';
                 else if (row <= 85) type = 'silver';
 
                 const sprite = new PIXI.Sprite(state.baseTextures[type]);
                 sprite.x = startX + (col * CONFIG.BLOCK_SIZE);
                 sprite.y = yPos;
-                
-                let price = blockId === CONFIG.TOTAL_BLOCKS ? 5000 : 1 + (blockId * 0.5);
 
                 state.blocks[blockId] = { id: blockId, price: price, tier: type, sold: false, sprite: sprite, data: null, textRef: null };
                 chunk.addChild(sprite);
                 blockId--;
             }
+        }
+        
+        // Initialize sales counter
+        updateSalesCounter();
+    }
+
+    function updateSalesCounter() {
+        let soldCount = 0;
+        for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
+            if (state.blocks[i] && state.blocks[i].sold) {
+                soldCount++;
+            }
+        }
+        
+        const percentage = (soldCount / CONFIG.TOTAL_BLOCKS) * 100;
+        const countElement = document.getElementById('sales-count');
+        const progressBar = document.getElementById('sales-progress-bar');
+        
+        if (countElement) {
+            countElement.textContent = `${soldCount.toLocaleString()} / ${CONFIG.TOTAL_BLOCKS.toLocaleString()}`;
+        }
+        if (progressBar) {
+            progressBar.style.width = `${percentage}%`;
         }
     }
 
@@ -537,7 +574,7 @@
                     tt.innerHTML = `<div class="tt-label">OWNER</div><span style="color:${b.data.owner_color}">●</span> ${b.data.owner_name}`;
                     tt.style.borderColor = b.data.owner_color;
                 } else {
-                    tt.innerHTML = `<div class="tt-label">AVAILABLE</div>Block #${b.id} &bull; <span style="color:var(--gold)">$${b.price.toFixed(0)}</span>`;
+                    tt.innerHTML = `<div class="tt-label">AVAILABLE</div>Block #${b.id} &bull; <span style="color:var(--gold)">$${b.price.toFixed(2)}</span>`;
                     tt.style.borderColor = '#FFD700';
                 }
             } else {
@@ -654,6 +691,9 @@
             const t = b.sprite.children.find(c => c instanceof PIXI.BitmapText);
             if(t) t.visible = false;
         }
+        
+        // Update sales counter
+        updateSalesCounter();
     }
 
     // =========================================================================
