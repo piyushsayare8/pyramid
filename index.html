@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -118,12 +119,12 @@
     <div class="ui-layer">
         <div class="header interactive">
             <h1>THE PYRAMID</h1>
-            <div class="subtitle">11,325 Blocks • Immortal Core</div>
+            <div class="subtitle">10,011 Blocks • Immortal Core</div>
         </div>
 
         <div class="sales-counter interactive">
             <div class="sales-label">Blocks Sold</div>
-            <div class="sales-stats" id="sales-count">0 / 11,325</div>
+            <div class="sales-stats" id="sales-count">0 / 10,011</div>
             <div class="sales-progress">
                 <div class="sales-progress-bar" id="sales-progress-bar" style="width: 0%"></div>
             </div>
@@ -154,10 +155,10 @@
     // 1. ENGINE CONFIGURATION
     // =========================================================================
     const CONFIG = {
-        ROWS: 150,
+        ROWS: 141,
         BLOCK_SIZE: 40,
         GAP: 2,
-        TOTAL_BLOCKS: 11325,
+        TOTAL_BLOCKS: 10011,
         LOD_THRESHOLD: 0.35, 
         CHUNK_SIZE: 25,
         MAX_ZOOM: 50.0,
@@ -294,15 +295,14 @@
         const make = (color, border) => {
             const g = new PIXI.Graphics()
                 .rect(0, 0, CONFIG.BLOCK_SIZE - CONFIG.GAP, CONFIG.BLOCK_SIZE - CONFIG.GAP)
-                .fill(color)
-                .stroke({ width: 2, color: border });
+                .fill(color);
             return state.pixi.renderer.generateTexture(g);
         };
         state.baseTextures = {
-            gold: make(0x2d2d44, 0xFFD700),
-            silver: make(0x252535, 0xC0C0C0),
-            std: make(0x1e1e28, 0x444444),
-            sold: make(0xFFFFFF, 0xFFFFFF)
+            gold: make(0x2a2a2a, 0xFFD700),
+            silver: make(0x2a2a2a, 0xFFD700),
+            std: make(0x2a2a2a, 0xFFD700),
+            sold: make(0xFFFFFF, 0xFFD700)
         };
     }
 
@@ -325,7 +325,7 @@
             for (let col = 0; col < row; col++) {
                 let price = 0.1 + ((blockId - 1) * 0.1);
                 let type = 'std';
-                if (blockId >= 10000) type = 'gold';
+                if (blockId >= 9000) type = 'gold';
                 else if (row <= 85) type = 'silver';
 
                 const sprite = new PIXI.Sprite(state.baseTextures[type]);
