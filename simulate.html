@@ -1,0 +1,850 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The History Pyramid | Immortal Edition</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.x/dist/pixi.min.js"></script>
+
+    <style>
+        /* --- VISUAL THEME --- */
+        :root { 
+            --bg-dark: #050508; 
+            --gold: #FFD700; 
+            --gold-dim: rgba(255, 215, 0, 0.2);
+            --panel-bg: rgba(15, 15, 20, 0.95);
+            --border: rgba(255, 255, 255, 0.1);
+        }
+        
+        body { margin: 0; overflow: hidden; background: var(--bg-dark); font-family: 'Inter', system-ui, sans-serif; color: white; user-select: none; -webkit-font-smoothing: antialiased; }
+        
+        /* FIX: touch-action: none prevents mobile browser scrolling/pull-to-refresh */
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: grab; touch-action: none; }
+        #canvas-container:active { cursor: grabbing; }
+        
+        .ui-layer { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .interactive { pointer-events: auto; }
+        
+        /* HEADER */
+        .header { position: absolute; top: 30px; left: 30px; text-shadow: 0 4px 20px black; }
+        .header h1 { font-family: 'Georgia', serif; font-size: 2.2rem; color: var(--gold); margin: 0; letter-spacing: 2px; }
+        .subtitle { font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 4px; margin-top: 8px; font-weight: 700; }
+        
+        /* CONTROLS */
+        .controls { position: absolute; top: 30px; right: 30px; display: flex; gap: 12px; }
+        .btn { background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: #ccc; padding: 12px 24px; border-radius: 8px; cursor: pointer; transition: 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); font-weight: 600; backdrop-filter: blur(10px); }
+        .btn:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); transform: translateY(-2px); }
+        .btn-accent { background: rgba(255, 107, 107, 0.1); border-color: #ff6b6b; color: #ff6b6b; }
+        .btn-accent:hover { background: #ff6b6b; color: black; box-shadow: 0 0 20px rgba(255, 107, 107, 0.4); }
+        
+        /* SALES COUNTER */
+        .sales-counter { position: absolute; top: 100px; left: 30px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); padding: 15px 20px; border-radius: 12px; backdrop-filter: blur(10px); }
+        .sales-label { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; font-weight: 700; }
+        .sales-stats { font-size: 1.2rem; color: var(--gold); font-weight: 900; font-family: 'Georgia', serif; }
+        .sales-progress { width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+        .sales-progress-bar { height: 100%; background: linear-gradient(90deg, var(--gold), #FFA500); border-radius: 2px; transition: width 0.5s ease; }
+        
+        /* CENTER ACTION */
+        .center-controls { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); }
+        .profile-btn { background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(0,0,0,0)); border: 1px solid var(--gold); color: var(--gold); padding: 16px 40px; border-radius: 50px; font-weight: 800; cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(10px); transition: 0.3s; letter-spacing: 1px; text-transform: uppercase; }
+        .profile-btn:hover { transform: translateX(-50%) scale(1.05); box-shadow: 0 0 50px var(--gold-dim); background: var(--gold); color: black; }
+        
+        /* TOOLTIP */
+        .tooltip { position: absolute; display: none; padding: 12px 18px; background: var(--panel-bg); border: 1px solid var(--gold); border-radius: 8px; color: white; font-weight: 600; font-size: 0.9rem; pointer-events: none; z-index: 20; box-shadow: 0 20px 50px black; white-space: nowrap; transform: translate(20px, -50%); backdrop-filter: blur(10px); }
+        .tt-label { font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 4px; }
+        
+        /* MODAL */
+        .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 100; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s; }
+        .modal-backdrop.visible { opacity: 1; }
+        
+        .modal { background: #121216; border: 1px solid #333; width: 95%; max-width: 900px; max-height: 90vh; border-radius: 24px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 50px 100px black; transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .modal-backdrop.visible .modal { transform: scale(1); }
+        .modal.premium { max-width: 500px; background: linear-gradient(160deg, #0a0a0f 0%, #1a1a24 100%); border: 1px solid var(--gold-dim); }
+        
+        /* MODAL CONTENT */
+        .modal-header { padding: 25px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); }
+        .modal-header h2 { margin: 0; font-family: 'Georgia', serif; font-size: 1.8rem; color: white; }
+        .close-icon { color: #666; background: none; border: none; font-size: 1.5rem; cursor: pointer; transition: 0.2s; }
+        .close-icon:hover { color: white; transform: rotate(90deg); }
+        
+        .modal-body { padding: 30px; overflow-y: auto; display: flex; gap: 40px; }
+        .col-left { flex: 1.2; display: flex; flex-direction: column; gap: 20px; }
+        .col-right { flex: 1; display: flex; flex-direction: column; gap: 20px; border-left: 1px solid var(--border); padding-left: 40px; }
+        
+        .input-group label { display: flex; justify-content: space-between; font-size: 0.75rem; color: #888; margin-bottom: 8px; text-transform: uppercase; font-weight: 700; letter-spacing: 1px; }
+        .input-group input, .input-group textarea { width: 100%; background: rgba(0,0,0,0.3); border: 1px solid #333; padding: 14px; color: white; border-radius: 8px; box-sizing: border-box; font-family: inherit; transition: 0.2s; }
+        .input-group input:focus, .input-group textarea:focus { border-color: var(--gold); outline: none; background: rgba(0,0,0,0.5); }
+        
+        .char-count { font-size: 0.7rem; color: #555; }
+        
+        .color-selector { display: flex; gap: 12px; flex-wrap: wrap; }
+        .color-btn { width: 32px; height: 32px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: transform 0.2s; }
+        .color-btn:hover, .color-btn.active { transform: scale(1.15); border-color: white; box-shadow: 0 0 15px currentColor; }
+        
+        /* Preview box has black background, so content must be drawn on top clearly */
+        .preview-box { width: 100%; height: 300px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 12px; position: relative; overflow: hidden; background: #000; }
+        
+        .modal-footer { padding: 25px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; background: rgba(255,255,255,0.02); }
+        .confirm-btn { background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: 800; padding: 14px 40px; border-radius: 12px; border: none; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: 0.2s; }
+        .confirm-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3); }
+
+        /* PROFILE */
+        .profile-header-bg { height: 120px; background: linear-gradient(to bottom, rgba(255,255,255,0.05), transparent); position: relative; display: flex; justify-content: flex-end; padding: 20px; }
+        .profile-content { padding: 0 40px 40px; text-align: center; margin-top: -70px; }
+        .avatar { width: 130px; height: 130px; border-radius: 50%; border: 4px solid #121216; background: #000; object-fit: cover; box-shadow: 0 20px 40px black; }
+        .p-name { font-family: 'Georgia', serif; font-size: 2.2rem; margin: 15px 0 5px; text-shadow: 0 2px 10px black; }
+        .p-badge { display: inline-block; background: var(--gold-dim); color: var(--gold); padding: 5px 15px; border-radius: 50px; font-size: 0.8rem; font-weight: 700; border: 1px solid var(--gold-dim); margin-bottom: 25px; }
+        .p-msg { font-style: italic; font-size: 1.1rem; color: #ccc; line-height: 1.6; padding: 20px; background: rgba(255,255,255,0.03); border-radius: 12px; margin-bottom: 25px; }
+        .visit-btn { display: block; width: 100%; padding: 16px; background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: 900; text-transform: uppercase; text-decoration: none; border-radius: 12px; transition: 0.2s; }
+        .visit-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 40px rgba(255,215,0,0.3); }
+
+        #loader { position: fixed; inset: 0; background: var(--bg-dark); z-index: 999; display: flex; flex-direction: column; justify-content: center; align-items: center; color: var(--gold); transition: opacity 0.5s; font-family: monospace; letter-spacing: 2px; }
+        .spinner { width: 40px; height: 40px; border: 2px solid #333; border-top-color: var(--gold); border-radius: 50%; animation: spin 1s infinite linear; margin-bottom: 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        @media(max-width: 800px) { .modal-body { flex-direction: column; } .col-right { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 30px; } }
+    </style>
+</head>
+<body>
+
+    <div id="loader">
+        <div class="spinner"></div>
+        <div>INITIALIZING IMMORTAL ENGINE</div>
+    </div>
+    
+    <div id="canvas-container"></div>
+
+    <div class="ui-layer">
+        <div class="header interactive">
+            <h1>THE PYRAMID</h1>
+            <div class="subtitle">10,011 Blocks • Immortal Core</div>
+        </div>
+
+        <div class="sales-counter interactive">
+            <div class="sales-label">Blocks Sold</div>
+            <div class="sales-stats" id="sales-count">0 / 10,011</div>
+            <div class="sales-progress">
+                <div class="sales-progress-bar" id="sales-progress-bar" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="controls interactive">
+            <button class="btn" onclick="window.location.href='index.html'">← Back to Main</button>
+            <button class="btn" onclick="app.resetCamera()">⟲ Reset</button>
+            <button class="btn btn-accent" onclick="app.simulate()">🎨 Full Simulation</button>
+        </div>
+
+        <div class="center-controls interactive">
+            <button class="profile-btn" onclick="app.viewRandom()"> View Random Profile</button>
+        </div>
+        
+        <div class="instructions" style="position: absolute; bottom: 30px; right: 30px; color: #444; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">
+             SCROLL TO ZOOM • DRAG TO PAN
+        </div>
+    </div>
+
+    <div id="tooltip" class="tooltip"></div>
+
+    <div id="modal-backdrop" class="modal-backdrop interactive" onclick="closeModal(event)">
+        <div class="modal" id="modal-content"></div>
+    </div>
+
+<script type="module">
+    // =========================================================================
+    // 1. ENGINE CONFIGURATION
+    // =========================================================================
+    const CONFIG = {
+        ROWS: 141,
+        BLOCK_SIZE: 40,
+        GAP: 2,
+        TOTAL_BLOCKS: 10011,
+        LOD_THRESHOLD: 0.35, 
+        CHUNK_SIZE: 25,
+        MAX_ZOOM: 50.0,
+        MIN_ZOOM: 0.05,
+        FRICTION: 0.9,
+        COLORS: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8']
+    };
+    
+    // Calculate Pyramid Dimensions for Bounds
+    const PYRAMID_WIDTH = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
+    const PYRAMID_HEIGHT = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
+
+    // =========================================================================
+    // 2. STATE & DATA
+    // =========================================================================
+    const state = {
+        pixi: null,
+        previewApp: null, // NEW: Dedicated Preview Engine
+        previewBlock: null, // NEW: The specific sprite in the modal
+        world: null,
+        chunks: [],
+        blocks: new Array(CONFIG.TOTAL_BLOCKS + 1),
+        textPool: [],
+        baseTextures: {},
+        cam: { x: 0, y: 0, zoom: 0.1 },
+        target: { x: 0, y: 0, zoom: 0.1 },
+        vel: { x: 0, y: 0 },
+        dragging: false,
+        dragStart: { x: 0, y: 0 },
+        dragOriginalStart: { x: 0, y: 0 },
+        hasMoved: false,
+        clickThreshold: 5,
+        hoverId: -1,
+        selectedId: -1,
+        touches: [],
+        lastTouchDistance: 0,
+        simulating: false
+    };
+
+    let formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: '' };
+
+    // =========================================================================
+    // 3. ENGINE INITIALIZATION
+    // =========================================================================
+    async function init() {
+        // --- Main Engine ---
+        state.pixi = new PIXI.Application();
+        await state.pixi.init({
+            resizeTo: window,
+            backgroundColor: 0x050508,
+            resolution: Math.min(window.devicePixelRatio, 2),
+            autoDensity: true,
+            antialias: false,
+            powerPreference: 'high-performance'
+        });
+        document.getElementById('canvas-container').appendChild(state.pixi.canvas);
+
+        // --- Font Loading ---
+        PIXI.BitmapFont.install({
+            name: 'ImmortalFont',
+            style: { fontFamily: 'Arial', fontSize: 256, fontWeight: '900', fill: 'white', stroke: { color: 'black', width: 12 } }
+        });
+
+        createSharedTextures();
+
+        state.world = new PIXI.Container();
+        state.world.eventMode = 'none';
+        state.pixi.stage.addChild(state.world);
+        buildPyramid();
+
+        setupInput();
+        centerCamera(); 
+
+        // --- NEW: Initialize Preview Engine ---
+        await initPreviewApp();
+
+        state.pixi.ticker.add((ticker) => {
+            updatePhysics(ticker.deltaTime);
+            cullWorld();
+            updateLOD();
+        });
+
+        setTimeout(() => document.getElementById('loader').style.opacity = '0', 500);
+        setTimeout(() => document.getElementById('loader').remove(), 1000);
+    }
+
+    // NEW: Real-Time Preview Engine Initialization
+    async function initPreviewApp() {
+        state.previewApp = new PIXI.Application();
+        // Create a 400x400 canvas for high-quality preview
+        await state.previewApp.init({
+            width: 400,
+            height: 400,
+            backgroundAlpha: 0,
+            resolution: 2,
+            autoDensity: true
+        });
+        
+        // Create container for preview content
+        const previewContainer = new PIXI.Container();
+        state.previewApp.stage.addChild(previewContainer);
+        
+        // Create block with exact same dimensions as grid blocks
+        const g = new PIXI.Graphics()
+            .rect(0, 0, CONFIG.BLOCK_SIZE - CONFIG.GAP, CONFIG.BLOCK_SIZE - CONFIG.GAP)
+            .fill(0xFFFFFF);
+        
+        const texture = state.previewApp.renderer.generateTexture(g);
+        const sprite = new PIXI.Sprite(texture);
+        
+        // Calculate scale to make block visible in 400x400 preview
+        // Ensure perfect square proportions like pyramid grid
+        const targetPreviewSize = 280; // Perfect square size
+        const scaleFactor = targetPreviewSize / (CONFIG.BLOCK_SIZE - CONFIG.GAP);
+        
+        sprite.anchor.set(0.5);
+        sprite.x = 200;
+        sprite.y = 200;
+        sprite.scale.set(scaleFactor);
+        sprite.tint = 0xFFD700;
+        
+        // Store both sprite and container for text rendering
+        state.previewBlock = { 
+            container: previewContainer,
+            sprite: sprite, 
+            textRef: null, 
+            scaleFactor: scaleFactor 
+        };
+        
+        previewContainer.addChild(sprite);
+    }
+
+    function createSharedTextures() {
+        const make = (color, border) => {
+            const g = new PIXI.Graphics()
+                .rect(0, 0, CONFIG.BLOCK_SIZE - CONFIG.GAP, CONFIG.BLOCK_SIZE - CONFIG.GAP)
+                .fill(color);
+            return state.pixi.renderer.generateTexture(g);
+        };
+        state.baseTextures = {
+            gold: make(0x2a2a2a, 0xFFD700),
+            silver: make(0x2a2a2a, 0xFFD700),
+            std: make(0x2a2a2a, 0xFFD700),
+            sold: make(0xFFFFFF, 0xFFD700)
+        };
+    }
+
+    function buildPyramid() {
+        let blockId = CONFIG.TOTAL_BLOCKS;
+        for (let row = 1; row <= CONFIG.ROWS; row++) {
+            if ((row - 1) % CONFIG.CHUNK_SIZE === 0) {
+                const chunk = new PIXI.Container();
+                chunk.yStart = (row - 1) * CONFIG.BLOCK_SIZE;
+                chunk.yEnd = chunk.yStart + (CONFIG.CHUNK_SIZE * CONFIG.BLOCK_SIZE);
+                chunk.visible = false;
+                state.chunks.push(chunk);
+                state.world.addChild(chunk);
+            }
+            
+            const chunk = state.chunks[state.chunks.length - 1];
+            const startX = -(row * CONFIG.BLOCK_SIZE) / 2;
+            const yPos = (row - 1) * CONFIG.BLOCK_SIZE;
+
+            for (let col = 0; col < row; col++) {
+                let price = 0.1 + ((blockId - 1) * 0.1);
+                let type = 'std';
+                if (blockId >= 9000) type = 'gold';
+                else if (row <= 85) type = 'silver';
+
+                const sprite = new PIXI.Sprite(state.baseTextures[type]);
+                sprite.x = startX + (col * CONFIG.BLOCK_SIZE);
+                sprite.y = yPos;
+
+                state.blocks[blockId] = { id: blockId, price: price, tier: type, sold: false, sprite: sprite, data: null, textRef: null };
+                chunk.addChild(sprite);
+                blockId--;
+            }
+        }
+        
+        // Initialize sales counter
+        updateSalesCounter();
+    }
+
+    function updateSalesCounter() {
+        let soldCount = 0;
+        for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
+            if (state.blocks[i] && state.blocks[i].sold) {
+                soldCount++;
+            }
+        }
+        
+        const percentage = (soldCount / CONFIG.TOTAL_BLOCKS) * 100;
+        const countElement = document.getElementById('sales-count');
+        const progressBar = document.getElementById('sales-progress-bar');
+        
+        if (countElement) {
+            countElement.textContent = `${soldCount.toLocaleString()} / ${CONFIG.TOTAL_BLOCKS.toLocaleString()}`;
+        }
+        if (progressBar) {
+            progressBar.style.width = `${percentage}%`;
+        }
+    }
+
+    // =========================================================================
+    // 4. PHYSICS & CAMERA
+    // =========================================================================
+    function constrainCamera() {
+        const padding = 50; 
+        const fitW = state.pixi.screen.width / (PYRAMID_WIDTH + padding * 2);
+        const fitH = state.pixi.screen.height / (PYRAMID_HEIGHT + padding * 2);
+        const minAllowedZoom = Math.min(fitW, fitH);
+        
+        if (state.target.zoom < minAllowedZoom) {
+            state.target.zoom = minAllowedZoom;
+        }
+
+        const pyLeft = -(PYRAMID_WIDTH / 2);
+        const pyRight = (PYRAMID_WIDTH / 2);
+        const pyTop = 0;
+        const pyBottom = PYRAMID_HEIGHT;
+
+        const screenCX = state.pixi.screen.width / 2;
+        const screenCY = state.pixi.screen.height / 2;
+        
+        let worldCX = (screenCX - state.target.x) / state.target.zoom;
+        let worldCY = (screenCY - state.target.y) / state.target.zoom;
+
+        let clampedWX = Math.max(pyLeft, Math.min(pyRight, worldCX));
+        let clampedWY = Math.max(pyTop, Math.min(pyBottom, worldCY));
+
+        if (clampedWX !== worldCX) {
+            state.target.x = screenCX - (clampedWX * state.target.zoom);
+            state.vel.x = 0; 
+        }
+        if (clampedWY !== worldCY) {
+            state.target.y = screenCY - (clampedWY * state.target.zoom);
+            state.vel.y = 0; 
+        }
+    }
+
+    function updatePhysics(dt) {
+        if (!state.dragging) {
+            state.target.x += state.vel.x * dt;
+            state.target.y += state.vel.y * dt;
+            state.vel.x *= CONFIG.FRICTION;
+            state.vel.y *= CONFIG.FRICTION;
+        }
+
+        constrainCamera(); 
+
+        const spring = 0.25; 
+        state.cam.zoom += (state.target.zoom - state.cam.zoom) * spring;
+        state.cam.x += (state.target.x - state.cam.x) * spring;
+        state.cam.y += (state.target.y - state.cam.y) * spring;
+
+        state.world.scale.set(state.cam.zoom);
+        state.world.position.set(state.cam.x, state.cam.y);
+    }
+
+    function cullWorld() {
+        const viewTop = -state.cam.y / state.cam.zoom;
+        const viewBottom = viewTop + (state.pixi.screen.height / state.cam.zoom);
+        const buffer = 200; 
+
+        for (const chunk of state.chunks) {
+            chunk.visible = !(chunk.yEnd < viewTop - buffer || chunk.yStart > viewBottom + buffer);
+        }
+    }
+
+    function updateLOD() {
+        const showText = state.cam.zoom > CONFIG.LOD_THRESHOLD;
+        for (const text of state.textPool) {
+            if (text.parent.parent.visible) {
+                text.visible = showText;
+            }
+        }
+    }
+
+    // =========================================================================
+    // 5. INPUT SYSTEM
+    // =========================================================================
+    function setupInput() {
+        const dom = document.getElementById('canvas-container');
+
+        dom.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+            const worldPos = { x: (mouseX - state.target.x) / state.target.zoom, y: (mouseY - state.target.y) / state.target.zoom };
+            const delta = -e.deltaY * 0.001;
+            let newZoom = state.target.zoom * (1 + delta);
+            newZoom = Math.min(Math.max(newZoom, 0.001), CONFIG.MAX_ZOOM);
+            state.target.zoom = newZoom;
+            state.target.x = mouseX - (worldPos.x * newZoom);
+            state.target.y = mouseY - (worldPos.y * newZoom);
+        }, { passive: false });
+
+        dom.addEventListener('pointerdown', (e) => {
+            state.dragging = true;
+            state.hasMoved = false;
+            state.dragStart = { x: e.clientX, y: e.clientY };
+            state.dragOriginalStart = { x: e.clientX, y: e.clientY };
+            state.vel = { x: 0, y: 0 };
+            dom.style.cursor = 'grabbing';
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (state.dragging) {
+                const dx = e.clientX - state.dragStart.x;
+                const dy = e.clientY - state.dragStart.y;
+                if (Math.hypot(e.clientX - state.dragOriginalStart.x, e.clientY - state.dragOriginalStart.y) > state.clickThreshold) state.hasMoved = true;
+                state.target.x += dx;
+                state.target.y += dy;
+                state.dragStart = { x: e.clientX, y: e.clientY };
+                state.vel = { x: dx, y: dy };
+            } else {
+                handleHover(e.clientX, e.clientY);
+            }
+        });
+
+        window.addEventListener('pointerup', (e) => {
+            if (state.dragging) {
+                state.dragging = false;
+                dom.style.cursor = 'grab';
+                if (!state.hasMoved) handleClick(e.clientX, e.clientY);
+            }
+        });
+
+        dom.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            state.touches = Array.from(e.touches);
+            if (state.touches.length === 1) {
+                state.dragging = true;
+                state.hasMoved = false;
+                state.dragStart = { x: state.touches[0].clientX, y: state.touches[0].clientY };
+                state.dragOriginalStart = { x: state.touches[0].clientX, y: state.touches[0].clientY };
+                state.vel = { x: 0, y: 0 };
+            } else if (state.touches.length === 2) {
+                state.dragging = false;
+                const dx = state.touches[0].clientX - state.touches[1].clientX;
+                const dy = state.touches[0].clientY - state.touches[1].clientY;
+                state.lastTouchDistance = Math.hypot(dx, dy);
+            }
+        }, { passive: false });
+
+        dom.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            state.touches = Array.from(e.touches);
+            if (state.touches.length === 1 && state.dragging) {
+                const t = state.touches[0];
+                const dx = t.clientX - state.dragStart.x;
+                const dy = t.clientY - state.dragStart.y;
+                if (Math.hypot(t.clientX - state.dragOriginalStart.x, t.clientY - state.dragOriginalStart.y) > state.clickThreshold) state.hasMoved = true;
+                state.target.x += dx;
+                state.target.y += dy;
+                state.dragStart = { x: t.clientX, y: t.clientY };
+                state.vel = { x: dx, y: dy };
+            } else if (state.touches.length === 2) {
+                const p1 = state.touches[0];
+                const p2 = state.touches[1];
+                const dist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+                if (state.lastTouchDistance > 0) {
+                    const centerX = (p1.clientX + p2.clientX) / 2;
+                    const centerY = (p1.clientY + p2.clientY) / 2;
+                    const worldX = (centerX - state.target.x) / state.target.zoom;
+                    const worldY = (centerY - state.target.y) / state.target.zoom;
+                    const scaleFactor = dist / state.lastTouchDistance;
+                    let newZoom = state.target.zoom * scaleFactor;
+                    newZoom = Math.min(Math.max(newZoom, 0.001), CONFIG.MAX_ZOOM);
+                    state.target.zoom = newZoom;
+                    state.target.x = centerX - (worldX * newZoom);
+                    state.target.y = centerY - (worldY * newZoom);
+                }
+                state.lastTouchDistance = dist;
+            }
+        }, { passive: false });
+
+        dom.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (state.touches.length === 1 && state.dragging && !state.hasMoved) {
+                const t = state.touches[0] || e.changedTouches[0];
+                handleClick(t.clientX, t.clientY);
+            }
+            state.touches = Array.from(e.touches);
+            if (state.touches.length === 0) state.dragging = false;
+        }, { passive: false });
+    }
+
+    function getBlockId(screenX, screenY) {
+        const worldX = (screenX - state.cam.x) / state.cam.zoom;
+        const worldY = (screenY - state.cam.y) / state.cam.zoom;
+        const row = Math.floor(worldY / CONFIG.BLOCK_SIZE) + 1;
+        if (row < 1 || row > CONFIG.ROWS) return -1;
+        const rowStartX = -(row * CONFIG.BLOCK_SIZE) / 2;
+        const col = Math.floor((worldX - rowStartX) / CONFIG.BLOCK_SIZE);
+        if (col < 0 || col >= row) return -1;
+        const blocksAbove = (row * (row - 1)) / 2;
+        return CONFIG.TOTAL_BLOCKS - blocksAbove - col;
+    }
+
+    function handleHover(x, y) {
+        const id = getBlockId(x, y);
+        const tt = document.getElementById('tooltip');
+        if (id !== state.hoverId) {
+            if (state.hoverId !== -1 && state.blocks[state.hoverId]) state.blocks[state.hoverId].sprite.alpha = 1;
+            state.hoverId = id;
+            if (id !== -1 && state.blocks[id]) {
+                const b = state.blocks[id];
+                b.sprite.alpha = 0.6;
+                document.body.style.cursor = 'pointer';
+                tt.style.display = 'block';
+                if (b.sold) {
+                    tt.innerHTML = `<div class="tt-label">OWNER</div><span style="color:${b.data.owner_color}">●</span> ${b.data.owner_name}<br><div class="tt-label" style="margin-top:4px">PURCHASED</div><span style="color:var(--gold)">$${b.price.toFixed(2)}</span>`;
+                    tt.style.borderColor = b.data.owner_color;
+                } else {
+                    tt.innerHTML = `<div class="tt-label">AVAILABLE</div>Block #${b.id} &bull; <span style="color:var(--gold)">$${b.price.toFixed(2)}</span>`;
+                    tt.style.borderColor = '#FFD700';
+                }
+            } else {
+                document.body.style.cursor = 'grab';
+                tt.style.display = 'none';
+            }
+        }
+        if (id !== -1) { tt.style.left = (x + 20) + 'px'; tt.style.top = (y - 30) + 'px'; }
+    }
+
+    function handleClick(x, y) {
+        const id = getBlockId(x, y);
+        if (id !== -1) { state.selectedId = id; openModal(); }
+    }
+
+    // =========================================================================
+    // 6. CORE LOGIC (SHARED BETWEEN PREVIEW & WORLD)
+    // =========================================================================
+    
+    // Helper: Injects spaces to force wrapping on massive strings
+    function smartBreakText(text) {
+        if (!text) return '';
+        const limit = 15; 
+        return text.split(' ').map(word => {
+            if (word.length > limit) {
+                return word.match(new RegExp(`.{1,${limit}}`, 'g')).join(' ');
+            }
+            return word;
+        }).join(' ');
+    }
+
+    // The Renderer Logic - Used for both Grid Blocks AND Preview Block
+    function renderBlockText(sprite, textData, isPreview = false) {
+        let textObj;
+        
+        if (isPreview) {
+            textObj = state.previewBlock.textRef;
+            // Remove old text if it exists
+            if (textObj && textObj.parent) {
+                textObj.parent.removeChild(textObj);
+            }
+        } else {
+            textObj = sprite.children.find(c => c instanceof PIXI.BitmapText);
+        }
+        
+        if (!textData) {
+            if (textObj) textObj.visible = false;
+            return;
+        }
+
+        const safeText = smartBreakText(textData);
+
+        // Create new text object
+        textObj = new PIXI.BitmapText({ 
+            text: safeText, 
+            style: { 
+                fontFamily: 'ImmortalFont', 
+                fontSize: 54,
+                align: 'center',
+                wordWrap: true,     
+                wordWrapWidth: 440,
+                lineHeight: 58,
+                breakWords: false
+            } 
+        });
+        
+        if (isPreview) {
+            // For preview: position relative to scaled block center
+            textObj.anchor.set(0.5);
+            textObj.x = 200; // Center of 400x400 canvas
+            textObj.y = 200; // Center of 400x400 canvas
+            
+            state.previewBlock.container.addChild(textObj);
+            state.previewBlock.textRef = textObj;
+        } else {
+            // For grid blocks: position relative to block
+            textObj.anchor.set(0.5);
+            textObj.x = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
+            textObj.y = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
+            
+            sprite.addChild(textObj);
+            state.textPool.push(textObj);
+        }
+        
+        // Scale text to fit
+        textObj.scale.set(1);
+        
+        if (isPreview) {
+            // For preview: scale to fit within the scaled block
+            const scaledBlockSize = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * state.previewBlock.scaleFactor;
+            const targetSize = scaledBlockSize * 0.8;
+            const scale = Math.min(targetSize / textObj.width, targetSize / textObj.height);
+            textObj.scale.set(scale);
+        } else {
+            // For grid: use original scaling logic
+            const targetSize = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * 0.9;
+            const scale = Math.min(targetSize / textObj.width, targetSize / textObj.height);
+            textObj.scale.set(scale);
+        }
+    }
+
+    function updateBlock(id, data) {
+        const b = state.blocks[id];
+        if(!b) return;
+        b.sold = true;
+        b.data = data;
+        b.sprite.texture = state.baseTextures.sold;
+        b.sprite.tint = data.owner_color.replace('#', '0x');
+
+        if (data.owner_text) {
+            renderBlockText(b.sprite, data.owner_text);
+        } else {
+            // clear text
+            const t = b.sprite.children.find(c => c instanceof PIXI.BitmapText);
+            if(t) t.visible = false;
+        }
+        
+        // Update sales counter
+        updateSalesCounter();
+    }
+
+    // =========================================================================
+    // 7. APP INTERFACE
+    // =========================================================================
+    window.app = {
+        resetCamera: () => centerCamera(),
+        simulate: () => {
+            if(state.simulating) return;
+            state.simulating = true;
+            const unsold = [];
+            for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) if(!state.blocks[i].sold) unsold.push(i);
+            if(unsold.length === 0) { alert("Grid Full!"); state.simulating = false; return; }
+            let count = 0;
+            const interval = setInterval(() => {
+                if (count >= unsold.length || unsold.length === 0) { clearInterval(interval); state.simulating = false; return; }
+                for(let k=0; k<50; k++) {
+                    if(unsold.length === 0) break;
+                    const randIdx = Math.floor(Math.random() * unsold.length);
+                    const id = unsold[randIdx];
+                    unsold.splice(randIdx, 1);
+                    updateBlock(id, {
+                        owner_name: "Sim " + id,
+                        owner_color: CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)],
+                        owner_text: ["CRYPTO", "HODL", "BTC", "LONG TEXT HERE"][Math.floor(Math.random()*4)],
+                        message: "Simulation"
+                    });
+                    count++;
+                }
+            }, 16); 
+        },
+        viewRandom: () => {
+            const sold = [];
+            for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) if(state.blocks[i].sold) sold.push(i);
+            if(sold.length === 0) return alert("Run Simulation first!");
+            state.selectedId = sold[Math.floor(Math.random() * sold.length)];
+            openModal();
+        },
+        updateForm: (f, v) => {
+            formData[f] = v;
+            if (f === 'text') {
+                document.getElementById('char-counter').innerText = `${v.length}/150`;
+                // REAL-TIME PIXI PREVIEW
+                renderBlockText(state.previewBlock.sprite, v, true);
+            }
+        },
+        setColor: (c, el) => {
+            formData.color = c;
+            document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+            // Update the preview sprite tint
+            if (state.previewBlock && state.previewBlock.sprite) {
+                state.previewBlock.sprite.tint = c.replace('#', '0x');
+            }
+        },
+        submit: () => {
+            if(!formData.name) return alert("Name is required");
+            updateBlock(state.selectedId, {
+                owner_name: formData.name,
+                owner_color: formData.color,
+                owner_text: formData.text.substring(0, 150),
+                message: formData.message || "Owned forever."
+            });
+            closeModal();
+        }
+    };
+
+    window.openModal = () => {
+        const id = state.selectedId;
+        const b = state.blocks[id];
+        const backdrop = document.getElementById('modal-backdrop');
+        const content = document.getElementById('modal-content');
+        backdrop.style.display = 'flex';
+        void backdrop.offsetWidth; 
+        backdrop.classList.add('visible');
+        content.classList.remove('premium');
+        
+        if (b.sold) {
+            content.classList.add('premium');
+            const d = b.data;
+            const img = d.imageUrl || `https://ui-avatars.com/api/?name=${d.owner_name}&background=random&size=256`;
+            content.innerHTML = `
+                <div class="profile-header-bg"><button class="close-icon" onclick="closeModal()">✕</button></div>
+                <div class="profile-content">
+                    <img src="${img}" class="avatar">
+                    <h2 class="p-name">${d.owner_name}</h2>
+                    <div class="p-badge" style="color:${d.owner_color}; border-color:${d.owner_color}">BLOCK #${b.id}</div>
+                    <div class="p-msg">"${d.message}"</div>
+                    <button class="visit-btn" style="background:${d.owner_color}">View Link 🔗</button>
+                </div>`;
+        } else {
+            formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: '' };
+            content.innerHTML = `
+                <div class="modal-header"><h2>Claim Block <span style="color:var(--gold)">#${b.id}</span></h2><div class="price-tag">$${b.price.toFixed(2)}</div><button class="close-icon" onclick="closeModal()">✕</button></div>
+                <div class="modal-body">
+                    <div class="col-left">
+                        <div class="input-group"><label>Name</label><input type="text" maxlength="30" oninput="app.updateForm('name', this.value)"></div>
+                        <div class="input-group"><label>Message</label><input type="text" maxlength="100" oninput="app.updateForm('message', this.value)"></div>
+                        <div class="input-group"><label>Color</label><div class="color-selector">${CONFIG.COLORS.map(c => `<div class="color-btn" style="background:${c}" onclick="app.setColor('${c}', this)"></div>`).join('')}</div></div>
+                    </div>
+                    <div class="col-right">
+                        <div class="input-group">
+                            <label>Block Text <span id="char-counter" class="char-count">0/150</span></label>
+                            <textarea maxlength="150" oninput="app.updateForm('text', this.value)" style="height:80px; text-align:center; font-weight:900; font-size:1.5rem"></textarea>
+                        </div>
+                        <div class="preview-box" id="block-preview">
+                            </div>
+                    </div>
+                </div>
+                <div class="modal-footer"><button class="confirm-btn" onclick="app.submit()">Mint Block</button></div>`;
+            
+            // RESET PREVIEW ON OPEN
+            // We append the dedicated preview canvas to the new modal DOM
+            setTimeout(() => {
+                const previewDiv = document.getElementById('block-preview');
+                if (previewDiv && state.previewApp) {
+                    previewDiv.innerHTML = '';
+                    previewDiv.appendChild(state.previewApp.canvas);
+                    
+                    // Reset preview state: Tint gold by default for visibility
+                    state.previewBlock.sprite.tint = 0xFFD700;
+                    renderBlockText(state.previewBlock.sprite, ""); // Clear Text
+                }
+            }, 50);
+        }
+    };
+
+    window.closeModal = (e) => {
+        if (!e || e.target.id === 'modal-backdrop' || e.target.classList.contains('close-icon')) {
+            const el = document.getElementById('modal-backdrop');
+            el.classList.remove('visible');
+            setTimeout(() => el.style.display = 'none', 300);
+        }
+    };
+
+    function centerCamera() {
+        const padding = 100; 
+        const w = PYRAMID_WIDTH + (padding * 2);
+        const h = PYRAMID_HEIGHT + (padding * 2);
+        const s = Math.min(state.pixi.screen.width / w, state.pixi.screen.height / h);
+        state.target.zoom = s;
+        state.target.x = state.pixi.screen.width / 2;
+        state.target.y = state.pixi.screen.height / 2 - (PYRAMID_HEIGHT / 2 * s);
+        state.cam.zoom = state.target.zoom;
+        state.cam.x = state.target.x;
+        state.cam.y = state.target.y;
+    }
+
+    window.addEventListener('resize', () => { state.pixi.resize(); centerCamera(); });
+    init();
+</script>
+</body>
+</html>

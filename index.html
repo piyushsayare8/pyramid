@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,102 +8,397 @@
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.x/dist/pixi.min.js"></script>
 
     <style>
-        /* --- VISUAL THEME --- */
+        /* --- CORE THEME --- */
         :root { 
             --bg-dark: #050508; 
             --gold: #FFD700; 
-            --gold-dim: rgba(255, 215, 0, 0.2);
-            --panel-bg: rgba(15, 15, 20, 0.95);
-            --border: rgba(255, 255, 255, 0.1);
+            --gold-grad: linear-gradient(135deg, #FFD700, #FDB931);
+            --gold-dim: rgba(255, 215, 0, 0.15);
+            --panel-bg: rgba(18, 18, 24, 0.85);
+            --border: rgba(255, 255, 255, 0.08);
+            --glass: blur(20px) saturate(180%);
         }
         
-        body { margin: 0; overflow: hidden; background: var(--bg-dark); font-family: 'Inter', system-ui, sans-serif; color: white; user-select: none; -webkit-font-smoothing: antialiased; }
+        body { margin: 0; overflow: hidden; background-color: #050508; font-family: 'Inter', system-ui, -apple-system, sans-serif; color: white; user-select: none; -webkit-font-smoothing: antialiased; touch-action: none; }
         
-        /* FIX: touch-action: none prevents mobile browser scrolling/pull-to-refresh */
-        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: grab; touch-action: none; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; cursor: grab; }
         #canvas-container:active { cursor: grabbing; }
         
-        .ui-layer { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .ui-layer { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
         .interactive { pointer-events: auto; }
         
-        /* HEADER */
-        .header { position: absolute; top: 30px; left: 30px; text-shadow: 0 4px 20px black; }
-        .header h1 { font-family: 'Georgia', serif; font-size: 2.2rem; color: var(--gold); margin: 0; letter-spacing: 2px; }
-        .subtitle { font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 4px; margin-top: 8px; font-weight: 700; }
+        /* --- HUD ELEMENTS --- */
+        .header { position: absolute; top: 30px; left: 30px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,249,250,0.95)); padding: 20px 30px; border-radius: 15px; border: 2px solid #FFD700; box-shadow: 0 8px 30px rgba(255,215,0,0.3); }
+        .header h1 { font-family: 'Georgia', serif; font-size: 2.2rem; background: linear-gradient(135deg, #FFD700, #FFA500, #FF69B4, #00CED1, #9370DB); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0; letter-spacing: 1px; }
+        .subtitle { font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 3px; margin-top: 5px; font-weight: 700; }
         
-        /* CONTROLS */
-        .controls { position: absolute; top: 30px; right: 30px; display: flex; gap: 12px; }
-        .btn { background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: #ccc; padding: 12px 24px; border-radius: 8px; cursor: pointer; transition: 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); font-weight: 600; backdrop-filter: blur(10px); }
-        .btn:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); transform: translateY(-2px); }
-        .btn-accent { background: rgba(255, 107, 107, 0.1); border-color: #ff6b6b; color: #ff6b6b; }
-        .btn-accent:hover { background: #ff6b6b; color: black; box-shadow: 0 0 20px rgba(255, 107, 107, 0.4); }
+        .controls { position: absolute; top: 30px; right: 30px; display: flex; gap: 12px; flex-direction: column; align-items: flex-end; }
+        .btn { background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(248,249,250,0.9)); border: 2px solid rgba(255,215,0,0.3); color: #333; padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); font-weight: 600; backdrop-filter: blur(10px); font-size: 0.85rem; box-shadow: 0 4px 15px rgba(255,215,0,0.1); }
+        .btn:hover { border-color: #FFD700; color: #333; background: linear-gradient(135deg, #FFD700, #FFA500); transform: translateY(-2px); box-shadow: 0 8px 25px rgba(255,215,0,0.4); }
+        .btn-accent { background: linear-gradient(135deg, #FF69B4, #FF6B6B); border-color: #FF69B4; color: white; }
+        .btn-accent:hover { background: linear-gradient(135deg, #FF6B6B, #FF1493); color: white; box-shadow: 0 8px 25px rgba(255, 107, 107, 0.5); transform: translateY(-2px); }
         
-        /* SALES COUNTER */
-        .sales-counter { position: absolute; top: 100px; left: 30px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); padding: 15px 20px; border-radius: 12px; backdrop-filter: blur(10px); }
-        .sales-label { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; font-weight: 700; }
-        .sales-stats { font-size: 1.2rem; color: var(--gold); font-weight: 900; font-family: 'Georgia', serif; }
-        .sales-progress { width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 8px; overflow: hidden; }
-        .sales-progress-bar { height: 100%; background: linear-gradient(90deg, var(--gold), #FFA500); border-radius: 2px; transition: width 0.5s ease; }
+        .sales-counter { position: absolute; top: 140px; left: 30px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,249,250,0.95)); border: 2px solid rgba(255,215,0,0.3); padding: 12px 16px; border-radius: 12px; backdrop-filter: blur(10px); min-width: 140px; box-shadow: 0 4px 15px rgba(255,215,0,0.2); }
+        .sales-label { font-size: 0.65rem; color: #666; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 4px; font-weight: 700; }
+        .sales-stats { font-size: 1.1rem; color: #333; font-weight: 700; font-family: 'Georgia', serif; }
+        .sales-progress { width: 100%; height: 3px; background: rgba(255,255,255,0.3); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+        .sales-progress-bar { height: 100%; background: linear-gradient(90deg, #FFD700, #FFA500, #FF69B4, #00CED1, #9370DB); transition: width 0.5s ease; box-shadow: 0 0 10px rgba(255,215,0,0.5); }
         
-        /* CENTER ACTION */
         .center-controls { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); }
-        .profile-btn { background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(0,0,0,0)); border: 1px solid var(--gold); color: var(--gold); padding: 16px 40px; border-radius: 50px; font-weight: 800; cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(10px); transition: 0.3s; letter-spacing: 1px; text-transform: uppercase; }
-        .profile-btn:hover { transform: translateX(-50%) scale(1.05); box-shadow: 0 0 50px var(--gold-dim); background: var(--gold); color: black; }
+        .profile-btn { background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(248,249,250,0.9)); border: 2px solid rgba(255,215,0,0.3); color: #333; padding: 14px 30px; border-radius: 50px; font-weight: 600; cursor: pointer; backdrop-filter: blur(10px); transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); letter-spacing: 1px; text-transform: uppercase; font-size: 0.8rem; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 15px rgba(255,215,0,0.2); }
+        .profile-btn:hover { border-color: #FFD700; background: linear-gradient(135deg, #FFD700, #FFA500); color: white; box-shadow: 0 8px 25px rgba(255,215,0,0.4); transform: translateY(-2px); }
         
-        /* TOOLTIP */
-        .tooltip { position: absolute; display: none; padding: 12px 18px; background: var(--panel-bg); border: 1px solid var(--gold); border-radius: 8px; color: white; font-weight: 600; font-size: 0.9rem; pointer-events: none; z-index: 20; box-shadow: 0 20px 50px black; white-space: nowrap; transform: translate(20px, -50%); backdrop-filter: blur(10px); }
-        .tt-label { font-size: 0.7rem; color: #888; text-transform: uppercase; margin-bottom: 4px; }
+        .toggle-btn { background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(248,249,250,0.9)); border: 2px solid rgba(255,215,0,0.3); color: #333; padding: 8px 16px; border-radius: 8px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); font-weight: 600; backdrop-filter: blur(10px); font-size: 0.75rem; box-shadow: 0 4px 15px rgba(255,215,0,0.1); margin-bottom: 8px; }
+        .toggle-btn:hover { border-color: #FFD700; color: #333; background: linear-gradient(135deg, #FFD700, #FFA500); transform: translateY(-2px); box-shadow: 0 8px 25px rgba(255,215,0,0.4); }
         
-        /* MODAL */
-        .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 100; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s; }
+        .center-controls.hidden { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(10px); }
+        
+        .tooltip { position: absolute; display: none; padding: 10px 14px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,249,250,0.95)); border: 2px solid #FFD700; border-radius: 8px; color: #333; font-weight: 500; font-size: 0.85rem; pointer-events: none; z-index: 20; white-space: nowrap; transform: translate(15px, -50%); backdrop-filter: blur(10px); box-shadow: 0 4px 15px rgba(255,215,0,0.2); }
+        .tt-label { font-size: 0.65rem; color: #666; text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.5px; }
+
+        /* --- MODAL SYSTEM --- */
+        .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 100; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s ease; }
         .modal-backdrop.visible { opacity: 1; }
         
-        .modal { background: #121216; border: 1px solid #333; width: 95%; max-width: 900px; max-height: 90vh; border-radius: 24px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 50px 100px black; transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .modal { background: transparent; border: none; width: 95%; max-width: 900px; max-height: 90vh; border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; box-shadow: none; transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.19, 1, 0.22, 1); }
         .modal-backdrop.visible .modal { transform: scale(1); }
-        .modal.premium { max-width: 500px; background: linear-gradient(160deg, #0a0a0f 0%, #1a1a24 100%); border: 1px solid var(--gold-dim); }
         
-        /* MODAL CONTENT */
-        .modal-header { padding: 25px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); }
-        .modal-header h2 { margin: 0; font-family: 'Georgia', serif; font-size: 1.8rem; color: white; }
-        .close-icon { color: #666; background: none; border: none; font-size: 1.5rem; cursor: pointer; transition: 0.2s; }
-        .close-icon:hover { color: white; transform: rotate(90deg); }
+        /* Premium Modal Override for Purchase Mode */
+        .modal:not(.premium) { 
+            background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+            border: 2px solid #FFD700;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 30px rgba(255,215,0,0.2);
+            max-height: 85vh;
+            overflow-y: auto;
+        }
         
-        .modal-body { padding: 30px; overflow-y: auto; display: flex; gap: 40px; }
-        .col-left { flex: 1.2; display: flex; flex-direction: column; gap: 20px; }
-        .col-right { flex: 1; display: flex; flex-direction: column; gap: 20px; border-left: 1px solid var(--border); padding-left: 40px; }
-        
-        .input-group label { display: flex; justify-content: space-between; font-size: 0.75rem; color: #888; margin-bottom: 8px; text-transform: uppercase; font-weight: 700; letter-spacing: 1px; }
-        .input-group input, .input-group textarea { width: 100%; background: rgba(0,0,0,0.3); border: 1px solid #333; padding: 14px; color: white; border-radius: 8px; box-sizing: border-box; font-family: inherit; transition: 0.2s; }
-        .input-group input:focus, .input-group textarea:focus { border-color: var(--gold); outline: none; background: rgba(0,0,0,0.5); }
-        
-        .char-count { font-size: 0.7rem; color: #555; }
-        
-        .color-selector { display: flex; gap: 12px; flex-wrap: wrap; }
-        .color-btn { width: 32px; height: 32px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: transform 0.2s; }
-        .color-btn:hover, .color-btn.active { transform: scale(1.15); border-color: white; box-shadow: 0 0 15px currentColor; }
-        
-        /* Preview box has black background, so content must be drawn on top clearly */
-        .preview-box { width: 100%; height: 300px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 12px; position: relative; overflow: hidden; background: #000; }
-        
-        .modal-footer { padding: 25px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; background: rgba(255,255,255,0.02); }
-        .confirm-btn { background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: 800; padding: 14px 40px; border-radius: 12px; border: none; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: 0.2s; }
-        .confirm-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3); }
+        /* Premium Profile Override */
+        .modal.premium { 
+            max-width: 450px; 
+            min-height: 75vh;
+            background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+            border: 2px solid #FFD700;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 30px rgba(255,215,0,0.2);
+            overflow: visible;
+        }
 
-        /* PROFILE */
-        .profile-header-bg { height: 120px; background: linear-gradient(to bottom, rgba(255,255,255,0.05), transparent); position: relative; display: flex; justify-content: flex-end; padding: 20px; }
-        .profile-content { padding: 0 40px 40px; text-align: center; margin-top: -70px; }
-        .avatar { width: 130px; height: 130px; border-radius: 50%; border: 4px solid #121216; background: #000; object-fit: cover; box-shadow: 0 20px 40px black; }
-        .p-name { font-family: 'Georgia', serif; font-size: 2.2rem; margin: 15px 0 5px; text-shadow: 0 2px 10px black; }
-        .p-badge { display: inline-block; background: var(--gold-dim); color: var(--gold); padding: 5px 15px; border-radius: 50px; font-size: 0.8rem; font-weight: 700; border: 1px solid var(--gold-dim); margin-bottom: 25px; }
-        .p-msg { font-style: italic; font-size: 1.1rem; color: #ccc; line-height: 1.6; padding: 20px; background: rgba(255,255,255,0.03); border-radius: 12px; margin-bottom: 25px; }
-        .visit-btn { display: block; width: 100%; padding: 16px; background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: 900; text-transform: uppercase; text-decoration: none; border-radius: 12px; transition: 0.2s; }
-        .visit-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 40px rgba(255,215,0,0.3); }
+        /* --- BUY MODE LAYOUT --- */
+        .modal-header { 
+            height: 140px;
+            padding: 20px 30px; 
+            border-bottom: 2px solid #FFD700; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-end;
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 25%, #FF69B4 50%, #00CED1 75%, #9370DB 100%);
+            position: relative;
+            border-radius: 18px 18px 0 0;
+        }
+        .modal-header::after {
+            content: ''; position: absolute; inset: 0;
+            background-image: radial-gradient(circle at 30% 50%, rgba(255,255,255,0.8) 0%, transparent 50%);
+            mix-blend-mode: overlay;
+            border-radius: 18px 18px 0 0;
+        }
+        .modal-header-value { 
+            position: absolute; 
+            top: 15px; 
+            left: 15px; 
+            background: rgba(255,255,255,0.95); 
+            color: #333; 
+            padding: 8px 16px; 
+            border-radius: 20px; 
+            font-weight: 700; 
+            font-size: 0.9rem; 
+            border: 2px solid #FFD700; 
+            box-shadow: 0 4px 15px rgba(255,215,0,0.2);
+            z-index: 2;
+        }
+        .modal-header h2 { 
+            margin: 0; 
+            font-family: 'Georgia', serif; 
+            font-size: 1.5rem; 
+            color: white; 
+            text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 2;
+        }
+        .close-icon { 
+            color: #333; 
+            background: rgba(255,255,255,0.95); 
+            border: 2px solid #FFD700; 
+            font-size: 1.2rem; 
+            cursor: pointer; 
+            transition: 0.2s; 
+            padding: 5px; 
+            width: 32px; 
+            height: 32px; 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            font-weight: bold;
+            position: relative;
+            z-index: 2;
+            box-shadow: 0 4px 15px rgba(255,215,0,0.2);
+        }
+        .close-icon:hover { 
+            background: #FFD700; 
+            color: white; 
+            transform: scale(1.1);
+        }
+        
+        .modal-body { 
+            padding: 30px; 
+            overflow-y: auto; 
+            display: flex; 
+            gap: 40px; 
+            max-height: calc(85vh - 180px);
+        }
+        .col-left { 
+            flex: 1; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 18px; 
+        }
+        .col-right { 
+            flex: 0.8; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 18px; 
+            border-left: 2px solid rgba(255,215,0,0.2); 
+            padding-left: 30px; 
+        }
+        
+        .input-group label { 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 0.7rem; 
+            color: #666; 
+            margin-bottom: 6px; 
+            text-transform: uppercase; 
+            font-weight: 700; 
+            letter-spacing: 0.5px; 
+        }
+        .input-group input, .input-group textarea { 
+            width: 100%; 
+            background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,249,250,0.95)); 
+            border: 2px solid rgba(255,215,0,0.2); 
+            padding: 16px 20px; 
+            color: #333; 
+            border-radius: 12px; 
+            box-sizing: border-box; 
+            font-family: 'Georgia', serif; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            font-size: 1rem;
+            font-weight: 500;
+            box-shadow: 0 4px 20px rgba(255,215,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8);
+            backdrop-filter: blur(10px);
+        }
+        .input-group input:focus, .input-group textarea:focus { 
+            border-color: #FFD700; 
+            outline: none; 
+            background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(248,249,250,0.98));
+            box-shadow: 0 8px 30px rgba(255,215,0,0.25), inset 0 1px 0 rgba(255,255,255,0.9), 0 0 0 4px rgba(255,215,0,0.1);
+            transform: translateY(-1px);
+        }
+        .input-group input::placeholder, .input-group textarea::placeholder {
+            color: #888;
+            font-style: italic;
+            font-family: 'Georgia', serif;
+        }
+        
+        .file-upload { position: relative; width: 100%; }
+        .file-upload input[type="file"] { position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; z-index: 2; }
+        .file-upload-label { 
+            background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(248,249,250,0.9)); 
+            border: 2px dashed rgba(255,215,0,0.4); 
+            padding: 15px; 
+            text-align: center; 
+            border-radius: 8px; 
+            transition: 0.2s;
+            color: #666;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .file-upload:hover .file-upload-label { 
+            border-color: #FFD700; 
+            background: linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,255,255,0.95));
+            color: #333;
+            box-shadow: 0 4px 15px rgba(255,215,0,0.2);
+        }
+        
+        .color-selector { display: flex; gap: 10px; flex-wrap: wrap; }
+        .color-btn { 
+            width: 32px; 
+            height: 32px; 
+            border-radius: 50%; 
+            cursor: pointer; 
+            border: 3px solid transparent; 
+            transition: transform 0.2s; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .color-btn:hover, .color-btn.active { 
+            transform: scale(1.15); 
+            border-color: #FFD700; 
+            box-shadow: 0 4px 15px rgba(255,215,0,0.3);
+        }
+        
+        .preview-box { 
+            width: 100%; 
+            aspect-ratio: 1; 
+            border: 2px solid rgba(255,215,0,0.3); 
+            border-radius: 12px; 
+            position: relative; 
+            overflow: hidden; 
+            background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(248,249,250,0.9)); 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .modal-footer { 
+            padding: 20px 30px; 
+            border-top: 2px solid rgba(255,215,0,0.2); 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            background: linear-gradient(135deg, rgba(255,215,0,0.05), rgba(255,255,255,0.95));
+            border-radius: 0 0 18px 18px;
+        }
+        .confirm-btn { 
+            background: linear-gradient(135deg, #FFD700, #FFA500); 
+            color: white; 
+            font-weight: 800; 
+            padding: 14px 35px; 
+            border-radius: 12px; 
+            border: none; 
+            cursor: pointer; 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+            transition: 0.2s; 
+            font-size: 0.85rem;
+            box-shadow: 0 4px 15px rgba(255,215,0,0.3);
+        }
+        .confirm-btn:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 8px 25px rgba(255,215,0,0.4); 
+            background: linear-gradient(135deg, #FFA500, #FF69B4);
+        }
 
+        /* --- PREMIUM PROFILE DESIGN (The Update) --- */
+        .prof-cover { 
+            height: 140px; 
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 25%, #FF69B4 50%, #00CED1 75%, #9370DB 100%);
+            position: relative; 
+            border-bottom: 2px solid #FFD700;
+        }
+        .prof-cover::after {
+            content: ''; position: absolute; inset: 0;
+            background-image: radial-gradient(circle at 30% 50%, rgba(255,255,255,0.8) 0%, transparent 50%);
+            mix-blend-mode: overlay;
+        }
+        
+        .prof-header-value { position: absolute; top: 15px; left: 15px; background: rgba(255,255,255,0.95); color: #333; padding: 8px 16px; border-radius: 20px; font-weight: 700; font-size: 0.9rem; border: 2px solid #FFD700; box-shadow: 0 4px 15px rgba(255,215,0,0.2); }
+        .prof-purchase-count { position: absolute; top: 15px; right: 60px; background: rgba(255,255,255,0.95); color: #333; padding: 8px 16px; border-radius: 20px; font-weight: 700; font-size: 0.9rem; border: 2px solid #FFD700; box-shadow: 0 4px 15px rgba(255,215,0,0.2); }
+        .prof-close { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.9); border: 2px solid #FFD700; color: #333; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; z-index: 5; font-weight: bold; }
+        .prof-close:hover { background: #FFD700; color: white; transform: scale(1.1); }
+
+        .prof-content { 
+            padding: 0 30px 30px 30px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            margin-top: -60px; 
+            position: relative; 
+            z-index: 2;
+            height: calc(75vh - 140px);
+            overflow: visible;
+        }
+        
+        .prof-avatar { 
+            width: 120px; height: 120px; 
+            border-radius: 50%; 
+            background: linear-gradient(135deg, #FFD700, #FFA500); 
+            border: 4px solid #FFD700; 
+            box-shadow: 0 10px 30px rgba(255,215,0,0.3), 0 0 20px rgba(255,215,0,0.2);
+            object-fit: cover;
+            margin-bottom: 15px;
+        }
+        
+        .prof-name { font-family: 'Georgia', serif; font-size: 1.5rem; color: #333; margin: 0; text-align: center; line-height: 1.2; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        
+        .prof-stats-grid { 
+            display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; width: 100%; margin: 25px 0; 
+        }
+        .stat-card { background: linear-gradient(135deg, #ffffff, #f8f9fa); border: 2px solid #FFD700; border-radius: 12px; padding: 12px 5px; text-align: center; transition: 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .stat-card:hover { background: linear-gradient(135deg, #FFD700, #FFA500); border-color: #FFA500; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(255,215,0,0.3); }
+        .stat-card:hover .stat-val { color: white; }
+        .stat-card:hover .stat-label { color: rgba(255,255,255,0.9); }
+        .stat-val { font-size: 1.1rem; font-weight: 700; color: #333; margin-bottom: 4px; transition: color 0.3s; }
+        .stat-label { font-size: 0.6rem; color: #666; text-transform: uppercase; letter-spacing: 1px; transition: color 0.3s; }
+
+        .prof-message-container { 
+            width: 100%; 
+            max-height: 250px;
+            margin: 20px 0;
+            position: relative;
+        }
+        .prof-message { 
+            width: 100%; 
+            background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(248,249,250,0.9)); 
+            border: 2px solid #FFD700; 
+            border-radius: 15px; 
+            padding: 20px; 
+            box-sizing: border-box;
+            text-align: center;
+            font-style: italic; color: #333; line-height: 1.6; font-size: 0.95rem;
+            position: relative;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            max-height: 250px;
+            overflow-y: auto;
+            word-wrap: break-word;
+            scrollbar-width: thin;
+            scrollbar-color: #FFD700 rgba(255,215,0,0.2);
+        }
+        .prof-message::-webkit-scrollbar {
+            width: 8px;
+        }
+        .prof-message::-webkit-scrollbar-track {
+            background: rgba(255,215,0,0.1);
+            border-radius: 4px;
+        }
+        .prof-message::-webkit-scrollbar-thumb {
+            background: #FFD700;
+            border-radius: 4px;
+        }
+        .prof-message::-webkit-scrollbar-thumb:hover {
+            background: #FFA500;
+        }
+        .prof-message::before { content: '"'; font-family: 'Georgia', serif; font-size: 3rem; position: absolute; top: -10px; left: 10px; color: #FFD700; opacity: 0.6; }
+        
+        .prof-action-area { width: 100%; margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+        .prof-link-desc { text-align: center; font-size: 0.8rem; color: #666; margin-bottom: 8px; }
+        .prof-btn-visit { 
+            width: 100%; padding: 14px; 
+            background: linear-gradient(135deg, #FFD700, #FFA500); color: white; 
+            border: none; border-radius: 12px; 
+            font-weight: 800; text-transform: uppercase; letter-spacing: 1px; 
+            cursor: pointer; transition: 0.3s; text-decoration: none; text-align: center; display: block; box-sizing: border-box; font-size: 0.85rem;
+            box-shadow: 0 4px 15px rgba(255,215,0,0.3);
+        }
+        .prof-btn-visit:hover { background: linear-gradient(135deg, #FFA500, #FF69B4); box-shadow: 0 8px 25px rgba(255,165,0,0.4); transform: translateY(-2px); }
+
+        /* Loader */
         #loader { position: fixed; inset: 0; background: var(--bg-dark); z-index: 999; display: flex; flex-direction: column; justify-content: center; align-items: center; color: var(--gold); transition: opacity 0.5s; font-family: monospace; letter-spacing: 2px; }
         .spinner { width: 40px; height: 40px; border: 2px solid #333; border-top-color: var(--gold); border-radius: 50%; animation: spin 1s infinite linear; margin-bottom: 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
         
-        @media(max-width: 800px) { .modal-body { flex-direction: column; } .col-right { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 30px; } }
+        @media(max-width: 800px) { 
+            .modal-body { flex-direction: column; padding: 20px; } 
+            .col-right { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 20px; }
+            .preview-box { height: 200px; }
+        }
     </style>
 </head>
 <body>
@@ -123,7 +417,7 @@
         </div>
 
         <div class="sales-counter interactive">
-            <div class="sales-label">Blocks Sold</div>
+            <div class="sales-label">Blocks Claimed</div>
             <div class="sales-stats" id="sales-count">0 / 10,011</div>
             <div class="sales-progress">
                 <div class="sales-progress-bar" id="sales-progress-bar" style="width: 0%"></div>
@@ -131,15 +425,20 @@
         </div>
 
         <div class="controls interactive">
-            <button class="btn" onclick="app.resetCamera()">⟲ Reset</button>
-            <button class="btn btn-accent" onclick="app.simulate()">🎨 Full Simulation</button>
+            <div style="display: flex; gap: 12px; margin-bottom: 8px;">
+                <button class="btn" onclick="app.resetCamera()">⟲ Reset View</button>
+                <button class="btn btn-accent" onclick="app.simulate()">⚡ Simulate</button>
+            </div>
+            <button class="toggle-btn" onclick="app.toggleExplore()">👁️ Hide/Show Explore</button>
         </div>
 
         <div class="center-controls interactive">
-            <button class="profile-btn" onclick="app.viewRandom()"> View Random Profile</button>
+            <button class="profile-btn" onclick="app.viewRandom()">
+                <span>★ Explore Profiles</span>
+            </button>
         </div>
         
-        <div class="instructions" style="position: absolute; bottom: 30px; right: 30px; color: #444; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;">
+        <div style="position: absolute; bottom: 30px; right: 30px; color: #333; font-size: 0.65rem; font-weight: 700; letter-spacing: 1px; pointer-events: none; background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(248,249,250,0.9)); padding: 8px 12px; border-radius: 8px; border: 2px solid rgba(255,215,0,0.3); box-shadow: 0 4px 15px rgba(255,215,0,0.2);">
              SCROLL TO ZOOM • DRAG TO PAN
         </div>
     </div>
@@ -162,12 +461,11 @@
         LOD_THRESHOLD: 0.35, 
         CHUNK_SIZE: 25,
         MAX_ZOOM: 50.0,
-        MIN_ZOOM: 0.05,
+        MIN_ZOOM: 0.005,
         FRICTION: 0.9,
         COLORS: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8']
     };
     
-    // Calculate Pyramid Dimensions for Bounds
     const PYRAMID_WIDTH = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
     const PYRAMID_HEIGHT = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
 
@@ -176,8 +474,8 @@
     // =========================================================================
     const state = {
         pixi: null,
-        previewApp: null, // NEW: Dedicated Preview Engine
-        previewBlock: null, // NEW: The specific sprite in the modal
+        previewApp: null,
+        previewBlock: null,
         world: null,
         chunks: [],
         blocks: new Array(CONFIG.TOTAL_BLOCKS + 1),
@@ -198,13 +496,12 @@
         simulating: false
     };
 
-    let formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: '' };
+    let formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: '', linkUrl: '', linkDescription: '' };
 
     // =========================================================================
     // 3. ENGINE INITIALIZATION
     // =========================================================================
     async function init() {
-        // --- Main Engine ---
         state.pixi = new PIXI.Application();
         await state.pixi.init({
             resizeTo: window,
@@ -216,7 +513,6 @@
         });
         document.getElementById('canvas-container').appendChild(state.pixi.canvas);
 
-        // --- Font Loading ---
         PIXI.BitmapFont.install({
             name: 'ImmortalFont',
             style: { fontFamily: 'Arial', fontSize: 256, fontWeight: '900', fill: 'white', stroke: { color: 'black', width: 12 } }
@@ -224,6 +520,7 @@
 
         createSharedTextures();
 
+        createStarfield();
         state.world = new PIXI.Container();
         state.world.eventMode = 'none';
         state.pixi.stage.addChild(state.world);
@@ -232,11 +529,11 @@
         setupInput();
         centerCamera(); 
 
-        // --- NEW: Initialize Preview Engine ---
         await initPreviewApp();
 
         state.pixi.ticker.add((ticker) => {
             updatePhysics(ticker.deltaTime);
+            updateStarfield();
             cullWorld();
             updateLOD();
         });
@@ -245,10 +542,8 @@
         setTimeout(() => document.getElementById('loader').remove(), 1000);
     }
 
-    // NEW: Real-Time Preview Engine Initialization
     async function initPreviewApp() {
         state.previewApp = new PIXI.Application();
-        // Create a 400x400 canvas for high-quality preview
         await state.previewApp.init({
             width: 400,
             height: 400,
@@ -257,11 +552,9 @@
             autoDensity: true
         });
         
-        // Create container for preview content
         const previewContainer = new PIXI.Container();
         state.previewApp.stage.addChild(previewContainer);
         
-        // Create block with exact same dimensions as grid blocks
         const g = new PIXI.Graphics()
             .rect(0, 0, CONFIG.BLOCK_SIZE - CONFIG.GAP, CONFIG.BLOCK_SIZE - CONFIG.GAP)
             .fill(0xFFFFFF);
@@ -269,9 +562,7 @@
         const texture = state.previewApp.renderer.generateTexture(g);
         const sprite = new PIXI.Sprite(texture);
         
-        // Calculate scale to make block visible in 400x400 preview
-        // Ensure perfect square proportions like pyramid grid
-        const targetPreviewSize = 280; // Perfect square size
+        const targetPreviewSize = 280; 
         const scaleFactor = targetPreviewSize / (CONFIG.BLOCK_SIZE - CONFIG.GAP);
         
         sprite.anchor.set(0.5);
@@ -280,7 +571,6 @@
         sprite.scale.set(scaleFactor);
         sprite.tint = 0xFFD700;
         
-        // Store both sprite and container for text rendering
         state.previewBlock = { 
             container: previewContainer,
             sprite: sprite, 
@@ -304,6 +594,34 @@
             std: make(0x2a2a2a, 0xFFD700),
             sold: make(0xFFFFFF, 0xFFD700)
         };
+    }
+
+    function createStarfield() {
+        const starfield = new PIXI.Container();
+        const starCount = 200;
+        
+        for (let i = 0; i < starCount; i++) {
+            const star = new PIXI.Graphics().circle(0, 0, Math.random() * 2).fill(0xFFFFFF);
+            star.x = Math.random() * window.innerWidth;
+            star.y = Math.random() * window.innerHeight;
+            star.alpha = Math.random();
+            star.parallax = 0.1 + Math.random() * 0.5;
+            starfield.addChild(star);
+        }
+        
+        state.pixi.stage.addChildAt(starfield, 0);
+        state.starfield = starfield;
+    }
+
+    function updateStarfield() {
+        if (!state.starfield) return;
+        
+        // Simple parallax effect based on camera movement
+        const offsetX = (state.cam.x - (window.innerWidth/2)) * 0.05;
+        const offsetY = (state.cam.y - (window.innerHeight/2)) * 0.05;
+        
+        state.starfield.x = offsetX;
+        state.starfield.y = offsetY;
     }
 
     function buildPyramid() {
@@ -337,8 +655,6 @@
                 blockId--;
             }
         }
-        
-        // Initialize sales counter
         updateSalesCounter();
     }
 
@@ -349,53 +665,62 @@
                 soldCount++;
             }
         }
-        
         const percentage = (soldCount / CONFIG.TOTAL_BLOCKS) * 100;
         const countElement = document.getElementById('sales-count');
         const progressBar = document.getElementById('sales-progress-bar');
         
-        if (countElement) {
-            countElement.textContent = `${soldCount.toLocaleString()} / ${CONFIG.TOTAL_BLOCKS.toLocaleString()}`;
-        }
-        if (progressBar) {
-            progressBar.style.width = `${percentage}%`;
-        }
+        if (countElement) countElement.textContent = `${soldCount.toLocaleString()} / ${CONFIG.TOTAL_BLOCKS.toLocaleString()}`;
+        if (progressBar) progressBar.style.width = `${percentage}%`;
     }
 
     // =========================================================================
     // 4. PHYSICS & CAMERA
     // =========================================================================
     function constrainCamera() {
-        const padding = 50; 
-        const fitW = state.pixi.screen.width / (PYRAMID_WIDTH + padding * 2);
-        const fitH = state.pixi.screen.height / (PYRAMID_HEIGHT + padding * 2);
-        const minAllowedZoom = Math.min(fitW, fitH);
+        // Calculate the ratio needed to fit the pyramid exactly on screen
+        const fitW = state.pixi.screen.width / PYRAMID_WIDTH;
+        const fitH = state.pixi.screen.height / PYRAMID_HEIGHT;
+        const fullFitZoom = Math.min(fitW, fitH);
         
-        if (state.target.zoom < minAllowedZoom) {
-            state.target.zoom = minAllowedZoom;
-        }
+        // Updated: Allow zooming out much further than just "fitting" the screen.
+        // We allow zooming out until the pyramid takes up about 40% of the screen dimension max.
+        const minAllowedZoom = fullFitZoom * 0.4; 
+        
+        if (state.target.zoom < minAllowedZoom) state.target.zoom = minAllowedZoom;
 
+        // Bounding Logic
+        // We calculate the pyramid bounds in World Space
         const pyLeft = -(PYRAMID_WIDTH / 2);
         const pyRight = (PYRAMID_WIDTH / 2);
         const pyTop = 0;
         const pyBottom = PYRAMID_HEIGHT;
 
+        // Current Center of the screen in World Coordinates
         const screenCX = state.pixi.screen.width / 2;
         const screenCY = state.pixi.screen.height / 2;
-        
         let worldCX = (screenCX - state.target.x) / state.target.zoom;
         let worldCY = (screenCY - state.target.y) / state.target.zoom;
 
-        let clampedWX = Math.max(pyLeft, Math.min(pyRight, worldCX));
-        let clampedWY = Math.max(pyTop, Math.min(pyBottom, worldCY));
+        // Add a small margin of approximately 500px around the pyramid
+        const marginX = 1;
+        const marginY = 1;
 
-        if (clampedWX !== worldCX) {
-            state.target.x = screenCX - (clampedWX * state.target.zoom);
-            state.vel.x = 0; 
+        let clampedWX = Math.max(pyLeft - marginX, Math.min(pyRight + marginX, worldCX));
+        let clampedWY = Math.max(pyTop - marginY, Math.min(pyBottom + marginY, worldCY));
+
+        // If the calculation pushed the camera out of bounds, snap it back
+        // But only applies velocity reset if we are actually correcting it
+        const correctionX = screenCX - (clampedWX * state.target.zoom);
+        const correctionY = screenCY - (clampedWY * state.target.zoom);
+
+        // Gentle correction
+        if (Math.abs(correctionX - state.target.x) > 1) {
+             state.target.x += (correctionX - state.target.x) * 0.1;
+             state.vel.x *= 0.5;
         }
-        if (clampedWY !== worldCY) {
-            state.target.y = screenCY - (clampedWY * state.target.zoom);
-            state.vel.y = 0; 
+        if (Math.abs(correctionY - state.target.y) > 1) {
+             state.target.y += (correctionY - state.target.y) * 0.1;
+             state.vel.y *= 0.5;
         }
     }
 
@@ -450,7 +775,7 @@
             const worldPos = { x: (mouseX - state.target.x) / state.target.zoom, y: (mouseY - state.target.y) / state.target.zoom };
             const delta = -e.deltaY * 0.001;
             let newZoom = state.target.zoom * (1 + delta);
-            newZoom = Math.min(Math.max(newZoom, 0.001), CONFIG.MAX_ZOOM);
+            newZoom = Math.min(Math.max(newZoom, CONFIG.MIN_ZOOM), CONFIG.MAX_ZOOM);
             state.target.zoom = newZoom;
             state.target.x = mouseX - (worldPos.x * newZoom);
             state.target.y = mouseY - (worldPos.y * newZoom);
@@ -527,7 +852,7 @@
                     const worldY = (centerY - state.target.y) / state.target.zoom;
                     const scaleFactor = dist / state.lastTouchDistance;
                     let newZoom = state.target.zoom * scaleFactor;
-                    newZoom = Math.min(Math.max(newZoom, 0.001), CONFIG.MAX_ZOOM);
+                    newZoom = Math.min(Math.max(newZoom, CONFIG.MIN_ZOOM), CONFIG.MAX_ZOOM);
                     state.target.zoom = newZoom;
                     state.target.x = centerX - (worldX * newZoom);
                     state.target.y = centerY - (worldY * newZoom);
@@ -571,7 +896,7 @@
                 document.body.style.cursor = 'pointer';
                 tt.style.display = 'block';
                 if (b.sold) {
-                    tt.innerHTML = `<div class="tt-label">OWNER</div><span style="color:${b.data.owner_color}">●</span> ${b.data.owner_name}<br><div class="tt-label" style="margin-top:4px">PURCHASED</div><span style="color:var(--gold)">$${b.price.toFixed(2)}</span>`;
+                    tt.innerHTML = `<div class="tt-label">OWNER</div><span style="color:${b.data.owner_color}">●</span> ${b.data.owner_name}<br><div class="tt-label" style="margin-top:4px">VALUE</div><span style="color:var(--gold)">$${b.price.toFixed(2)}</span>`;
                     tt.style.borderColor = b.data.owner_color;
                 } else {
                     tt.innerHTML = `<div class="tt-label">AVAILABLE</div>Block #${b.id} &bull; <span style="color:var(--gold)">$${b.price.toFixed(2)}</span>`;
@@ -591,10 +916,8 @@
     }
 
     // =========================================================================
-    // 6. CORE LOGIC (SHARED BETWEEN PREVIEW & WORLD)
+    // 6. CORE LOGIC
     // =========================================================================
-    
-    // Helper: Injects spaces to force wrapping on massive strings
     function smartBreakText(text) {
         if (!text) return '';
         const limit = 15; 
@@ -606,16 +929,12 @@
         }).join(' ');
     }
 
-    // The Renderer Logic - Used for both Grid Blocks AND Preview Block
     function renderBlockText(sprite, textData, isPreview = false) {
         let textObj;
         
         if (isPreview) {
             textObj = state.previewBlock.textRef;
-            // Remove old text if it exists
-            if (textObj && textObj.parent) {
-                textObj.parent.removeChild(textObj);
-            }
+            if (textObj && textObj.parent) textObj.parent.removeChild(textObj);
         } else {
             textObj = sprite.children.find(c => c instanceof PIXI.BitmapText);
         }
@@ -627,7 +946,6 @@
 
         const safeText = smartBreakText(textData);
 
-        // Create new text object
         textObj = new PIXI.BitmapText({ 
             text: safeText, 
             style: { 
@@ -642,34 +960,27 @@
         });
         
         if (isPreview) {
-            // For preview: position relative to scaled block center
             textObj.anchor.set(0.5);
-            textObj.x = 200; // Center of 400x400 canvas
-            textObj.y = 200; // Center of 400x400 canvas
-            
+            textObj.x = 200; 
+            textObj.y = 200; 
             state.previewBlock.container.addChild(textObj);
             state.previewBlock.textRef = textObj;
         } else {
-            // For grid blocks: position relative to block
             textObj.anchor.set(0.5);
             textObj.x = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
             textObj.y = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
-            
             sprite.addChild(textObj);
             state.textPool.push(textObj);
         }
         
-        // Scale text to fit
         textObj.scale.set(1);
         
         if (isPreview) {
-            // For preview: scale to fit within the scaled block
             const scaledBlockSize = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * state.previewBlock.scaleFactor;
             const targetSize = scaledBlockSize * 0.8;
             const scale = Math.min(targetSize / textObj.width, targetSize / textObj.height);
             textObj.scale.set(scale);
         } else {
-            // For grid: use original scaling logic
             const targetSize = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * 0.9;
             const scale = Math.min(targetSize / textObj.width, targetSize / textObj.height);
             textObj.scale.set(scale);
@@ -687,20 +998,21 @@
         if (data.owner_text) {
             renderBlockText(b.sprite, data.owner_text);
         } else {
-            // clear text
             const t = b.sprite.children.find(c => c instanceof PIXI.BitmapText);
             if(t) t.visible = false;
         }
-        
-        // Update sales counter
         updateSalesCounter();
     }
 
     // =========================================================================
-    // 7. APP INTERFACE
+    // 7. APP INTERFACE & UI
     // =========================================================================
     window.app = {
         resetCamera: () => centerCamera(),
+        toggleExplore: () => {
+            const centerControls = document.querySelector('.center-controls');
+            centerControls.classList.toggle('hidden');
+        },
         simulate: () => {
             if(state.simulating) return;
             state.simulating = true;
@@ -718,8 +1030,10 @@
                     updateBlock(id, {
                         owner_name: "Sim " + id,
                         owner_color: CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)],
-                        owner_text: ["CRYPTO", "HODL", "BTC", "LONG TEXT HERE"][Math.floor(Math.random()*4)],
-                        message: "Simulation"
+                        owner_text: ["CRYPTO", "HODL", "BTC", "ETH"][Math.floor(Math.random()*4)],
+                        message: "This block is part of the simulation. " + "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis.",
+                        link_url: "https://example.com/sim" + id,
+                        link_description: ["Visit my profile", "My business", "Check out my work", "My portfolio"][Math.floor(Math.random()*4)]
                     });
                     count++;
                 }
@@ -728,7 +1042,7 @@
         viewRandom: () => {
             const sold = [];
             for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) if(state.blocks[i].sold) sold.push(i);
-            if(sold.length === 0) return alert("Run Simulation first!");
+            if(sold.length === 0) return alert("No profiles found!");
             state.selectedId = sold[Math.floor(Math.random() * sold.length)];
             openModal();
         },
@@ -736,15 +1050,30 @@
             formData[f] = v;
             if (f === 'text') {
                 document.getElementById('char-counter').innerText = `${v.length}/150`;
-                // REAL-TIME PIXI PREVIEW
                 renderBlockText(state.previewBlock.sprite, v, true);
+            } else if (f === 'message') {
+                document.getElementById('msg-counter').innerText = `${v.length}/1000`;
+            } else if (f === 'linkDescription') {
+                document.getElementById('link-desc-counter').innerText = `${v.length}/100`;
+            }
+        },
+        handleImageUpload: (input) => {
+            const file = input.files[0];
+            if (file) {
+                if (file.size > 5 * 1024 * 1024) return alert('File size must be less than 5MB');
+                if (!file.type.startsWith('image/')) return alert('Please upload an image file');
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    formData.imageUrl = e.target.result;
+                    input.nextElementSibling.innerHTML = `<div style="color: var(--gold)">✓ ${file.name}</div><div style="font-size: 0.8rem; color: #666; margin-top: 5px;">Change photo</div>`;
+                };
+                reader.readAsDataURL(file);
             }
         },
         setColor: (c, el) => {
             formData.color = c;
             document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
             el.classList.add('active');
-            // Update the preview sprite tint
             if (state.previewBlock && state.previewBlock.sprite) {
                 state.previewBlock.sprite.tint = c.replace('#', '0x');
             }
@@ -755,17 +1084,33 @@
                 owner_name: formData.name,
                 owner_color: formData.color,
                 owner_text: formData.text.substring(0, 150),
-                message: formData.message || "Owned forever."
+                message: formData.message || "Owned forever.",
+                image_url: formData.imageUrl,
+                link_url: formData.linkUrl,
+                link_description: formData.linkDescription
             });
             closeModal();
         }
     };
+
+    function getUserStats(ownerName) {
+        let count = 0;
+        let totalValue = 0;
+        for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) {
+            if(state.blocks[i] && state.blocks[i].sold && state.blocks[i].data && state.blocks[i].data.owner_name === ownerName) {
+                count++;
+                totalValue += state.blocks[i].price;
+            }
+        }
+        return { count, totalValue };
+    }
 
     window.openModal = () => {
         const id = state.selectedId;
         const b = state.blocks[id];
         const backdrop = document.getElementById('modal-backdrop');
         const content = document.getElementById('modal-content');
+        
         backdrop.style.display = 'flex';
         void backdrop.offsetWidth; 
         backdrop.classList.add('visible');
@@ -774,55 +1119,100 @@
         if (b.sold) {
             content.classList.add('premium');
             const d = b.data;
-            const img = d.imageUrl || `https://ui-avatars.com/api/?name=${d.owner_name}&background=random&size=256`;
+            const img = d.image_url || `https://ui-avatars.com/api/?name=${d.owner_name}&background=random&size=256`;
+            const stats = getUserStats(d.owner_name);
+            
             content.innerHTML = `
-                <div class="profile-header-bg"><button class="close-icon" onclick="closeModal()">✕</button></div>
-                <div class="profile-content">
-                    <img src="${img}" class="avatar">
-                    <h2 class="p-name">${d.owner_name}</h2>
-                    <div class="p-badge" style="color:${d.owner_color}; border-color:${d.owner_color}">BLOCK #${b.id}</div>
-                    <div class="p-msg">"${d.message}"</div>
-                    <button class="visit-btn" style="background:${d.owner_color}">View Link 🔗</button>
+                <div class="prof-cover">
+                    <button class="prof-close" onclick="closeModal()">✕</button>
+                    <div class="prof-header-value">Block Value: $${b.price.toFixed(2)}</div>
+                    <div class="prof-purchase-count">Blocks Owned: ${stats.count}</div>
+                </div>
+                <div class="prof-content">
+                    <img src="${img}" class="prof-avatar">
+                    <h2 class="prof-name">${d.owner_name}</h2>
+
+                    <div class="prof-message-container">
+                        <div class="prof-message">${d.message}</div>
+                    </div>
+
+                    ${d.link_url ? `
+                        <div class="prof-action-area">
+                            ${d.link_description ? `<div class="prof-link-desc">${d.link_description}</div>` : ''}
+                            <a href="${d.link_url}" target="_blank" class="prof-btn-visit">
+                                ${d.link_description || 'Visit My Profile'} ↗
+                            </a>
+                        </div>
+                    ` : ''}
                 </div>`;
         } else {
-            formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: '' };
+            formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: '', linkUrl: '', linkDescription: '' };
             content.innerHTML = `
-                <div class="modal-header"><h2>Claim Block <span style="color:var(--gold)">#${b.id}</span></h2><div class="price-tag">$${b.price.toFixed(2)}</div><button class="close-icon" onclick="closeModal()">✕</button></div>
+                <div class="modal-header">
+                    <div class="modal-header-value">Block Price: $${b.price.toFixed(2)}</div>
+                    <h2>Claim Block <span style="color:white">#${b.id}</span></h2>
+                    <button class="close-icon" onclick="closeModal()">✕</button>
+                </div>
                 <div class="modal-body">
                     <div class="col-left">
-                        <div class="input-group"><label>Name</label><input type="text" maxlength="30" oninput="app.updateForm('name', this.value)"></div>
-                        <div class="input-group"><label>Message</label><input type="text" maxlength="100" oninput="app.updateForm('message', this.value)"></div>
-                        <div class="input-group"><label>Color</label><div class="color-selector">${CONFIG.COLORS.map(c => `<div class="color-btn" style="background:${c}" onclick="app.setColor('${c}', this)"></div>`).join('')}</div></div>
+                        <div class="input-group">
+                            <label>Name</label>
+                            <input type="text" maxlength="30" oninput="app.updateForm('name', this.value)">
+                        </div>
+                        <div class="input-group">
+                            <label>Message <span id="msg-counter" class="char-count">0/1000</span></label>
+                            <textarea maxlength="1000" oninput="app.updateForm('message', this.value)" style="height:100px"></textarea>
+                        </div>
+                        <div class="input-group">
+                            <label>Link URL</label>
+                            <input type="url" placeholder="https://example.com" oninput="app.updateForm('linkUrl', this.value)">
+                        </div>
+                        <div class="input-group">
+                            <label>Link Description <span id="link-desc-counter" class="char-count">0/100</span></label>
+                            <input type="text" maxlength="100" placeholder="Visit my profile..." oninput="app.updateForm('linkDescription', this.value)">
+                        </div>
+                        <div class="input-group">
+                            <label>Profile Photo</label>
+                            <div class="file-upload">
+                                <input type="file" accept="image/*" onchange="app.handleImageUpload(this)">
+                                <div class="file-upload-label">
+                                    <div>📷 Upload Photo</div>
+                                    <div style="font-size: 0.7rem; color: #666; margin-top: 5px;">Max 5MB</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>Color</label>
+                            <div class="color-selector">${CONFIG.COLORS.map(c => `<div class="color-btn" style="background:${c}" onclick="app.setColor('${c}', this)"></div>`).join('')}</div>
+                        </div>
                     </div>
                     <div class="col-right">
                         <div class="input-group">
-                            <label>Block Text <span id="char-counter" class="char-count">0/150</span></label>
-                            <textarea maxlength="150" oninput="app.updateForm('text', this.value)" style="height:80px; text-align:center; font-weight:900; font-size:1.5rem"></textarea>
+                            <label>Engrave Text <span id="char-counter" class="char-count">0/150</span></label>
+                            <textarea maxlength="150" oninput="app.updateForm('text', this.value)" style="height:80px; text-align:center; font-weight:900; font-size:1.5rem" placeholder="..."></textarea>
                         </div>
-                        <div class="preview-box" id="block-preview">
-                            </div>
+                        <div class="preview-box" id="block-preview"></div>
                     </div>
                 </div>
-                <div class="modal-footer"><button class="confirm-btn" onclick="app.submit()">Mint Block</button></div>`;
+                <div class="modal-footer">
+                    <div style="font-size:1.2rem; font-weight:800; color:var(--gold)">$${b.price.toFixed(2)}</div>
+                    <button class="confirm-btn" onclick="app.submit()">Purchase Block</button>
+                </div>`;
             
-            // RESET PREVIEW ON OPEN
-            // We append the dedicated preview canvas to the new modal DOM
             setTimeout(() => {
                 const previewDiv = document.getElementById('block-preview');
                 if (previewDiv && state.previewApp) {
                     previewDiv.innerHTML = '';
                     previewDiv.appendChild(state.previewApp.canvas);
-                    
-                    // Reset preview state: Tint gold by default for visibility
                     state.previewBlock.sprite.tint = 0xFFD700;
-                    renderBlockText(state.previewBlock.sprite, ""); // Clear Text
+                    renderBlockText(state.previewBlock.sprite, ""); 
                 }
             }, 50);
         }
     };
 
     window.closeModal = (e) => {
-        if (!e || e.target.id === 'modal-backdrop' || e.target.classList.contains('close-icon')) {
+        if (!e || e.target.id === 'modal-backdrop' || e.target.classList.contains('close-icon') || e.target.classList.contains('prof-close')) {
             const el = document.getElementById('modal-backdrop');
             el.classList.remove('visible');
             setTimeout(() => el.style.display = 'none', 300);
@@ -830,14 +1220,37 @@
     };
 
     function centerCamera() {
-        const padding = 100; 
-        const w = PYRAMID_WIDTH + (padding * 2);
-        const h = PYRAMID_HEIGHT + (padding * 2);
-        const s = Math.min(state.pixi.screen.width / w, state.pixi.screen.height / h);
-        state.target.zoom = s;
-        state.target.x = state.pixi.screen.width / 2;
-        state.target.y = state.pixi.screen.height / 2 - (PYRAMID_HEIGHT / 2 * s);
-        state.cam.zoom = state.target.zoom;
+        // Updated: Center logic for standard screens and mobile
+        // 1. Determine screen center
+        const screenCX = state.pixi.screen.width / 2;
+        const screenCY = state.pixi.screen.height / 2;
+        
+        // 2. Determine Scale to fit
+        // Add padding (100px) so it's not touching edges
+        const availableW = state.pixi.screen.width - 60;
+        const availableH = state.pixi.screen.height - 180; // Account for UI headers
+        
+        const zoomX = availableW / PYRAMID_WIDTH;
+        const zoomY = availableH / PYRAMID_HEIGHT;
+        
+        // Use the smaller zoom to ensure it fits, then scale slightly down (0.9)
+        // for breathing room.
+        const targetZoom = Math.min(zoomX, zoomY) * 0.9;
+        
+        state.target.zoom = targetZoom;
+        state.cam.zoom = targetZoom;
+
+        // 3. Center Position
+        // The pyramid geometry centers X at 0.
+        // Y goes from 0 to PYRAMID_HEIGHT.
+        // To center the pyramid visually, we align the pyramid's geometric center (0, Height/2)
+        // with the screen center.
+        
+        const pyramidCenterY = PYRAMID_HEIGHT / 2;
+        
+        state.target.x = screenCX; // Since pyramid X is centered at 0
+        state.target.y = screenCY - (pyramidCenterY * targetZoom);
+
         state.cam.x = state.target.x;
         state.cam.y = state.target.y;
     }
@@ -846,4 +1259,3 @@
     init();
 </script>
 </body>
-</html>
