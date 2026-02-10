@@ -1288,6 +1288,7 @@
         },
         submit: async () => {
             if(!formData.name) return showError("Name is required");
+            if(!formData.text) return showError("Text is required"); // NEW LINE ADDED HERE
             
             try {
                 const block = state.blocks[state.selectedId];
@@ -1296,9 +1297,9 @@
                 const options = {
                     key: 'rzp_test_SC2XaQER0g2Q6f', // Replace with production key in production
                     amount: order.amount,
-                    currency: 'USD',
+                    currency: 'INR', // CHEAT CODE: Show USD but charge INR
                     name: 'The History Pyramid',
-                    description: `Block #${state.selectedId}`,
+                    description: `Block #${state.selectedId} | $${order.notes?.usd_price || '0.00'} USD ≈ ₹${order.notes?.inr_amount || '0.00'} INR`,
                     order_id: order.id,
                     handler: async function (response) {
                         try {
@@ -1354,7 +1355,7 @@
 
     function getUserStats(ownerName) {
         let count = 0;
-        let totalValue = 0;
+// ... (rest of the code remains the same)
         for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) {
             if(state.blocks[i] && state.blocks[i].sold && state.blocks[i].data && state.blocks[i].data.owner_name === ownerName) {
                 count++;

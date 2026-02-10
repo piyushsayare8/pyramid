@@ -3185,14 +3185,60 @@ app.post("/api/create-order", async (c) => {
     if (!slot) return c.json({ error: "Slot not found" }, 404);
     if (slot.status === "sold") return c.json({ error: "Slot already sold" }, 409);
     const auth = btoa(`${c.env.RAZORPAY_KEY_ID}:${c.env.RAZORPAY_KEY_SECRET}`);
+    let usdToInrRate = null;
+    const exchangeApis = [
+      {
+        name: "exchangerate-api",
+        url: "https://api.exchangerate-api.com/v4/latest/USD",
+        getRate: /* @__PURE__ */ __name((data) => data.rates.INR, "getRate")
+      },
+      {
+        name: "fixer-api",
+        url: "https://api.fixer.io/latest?base=USD&symbols=INR",
+        getRate: /* @__PURE__ */ __name((data) => data.rates.INR, "getRate")
+      },
+      {
+        name: "openexchangerates",
+        url: "https://openexchangerates.org/api/latest.json?app_id=demo&base=USD&symbols=INR",
+        getRate: /* @__PURE__ */ __name((data) => data.rates.INR, "getRate")
+      }
+    ];
+    for (const api of exchangeApis) {
+      try {
+        console.log(`Trying ${api.name}...`);
+        const exchangeResponse = await fetch(api.url, {
+          timeout: 5e3
+          // 5 second timeout
+        });
+        const exchangeData = await exchangeResponse.json();
+        const rate = api.getRate(exchangeData);
+        if (rate && rate > 0) {
+          usdToInrRate = rate;
+          console.log(`\u2705 Success with ${api.name}: 1 USD = ${usdToInrRate} INR`);
+          break;
+        }
+      } catch (error3) {
+        console.warn(`\u274C ${api.name} failed:`, error3.message);
+        continue;
+      }
+    }
+    if (!usdToInrRate) {
+      throw new Error("Exchange rate APIs unavailable. Please try again.");
+    }
+    const inrAmount = Math.round(slot.price * usdToInrRate * 100);
     const response = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
       headers: { "Authorization": `Basic ${auth}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        amount: Math.round(slot.price * 100),
-        // Convert to cents for USD
-        currency: "USD",
-        receipt: `slot_${slotId}_${Date.now()}`
+        amount: inrAmount,
+        currency: "INR",
+        receipt: `slot_${slotId}_${Date.now()}`,
+        notes: {
+          slot_number: slotId,
+          usd_price: slot.price.toFixed(2),
+          inr_amount: (inrAmount / 100).toFixed(2),
+          exchange_rate: usdToInrRate.toFixed(2)
+        }
       })
     });
     const orderData = await response.json();
