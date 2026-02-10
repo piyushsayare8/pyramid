@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>The History Pyramid | Immortal Edition</title>
+    <title>The History Pyramid | True Immortal Edition</title>
     
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.x/dist/pixi.min.js"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
     <style>
         /* --- CORE THEME --- */
@@ -29,7 +30,7 @@
         
         /* --- HUD ELEMENTS --- */
         .header { position: absolute; top: 30px; left: 30px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,249,250,0.95)); padding: 20px 30px; border-radius: 15px; border: 2px solid #FFD700; box-shadow: 0 8px 30px rgba(255,215,0,0.3); }
-        .header h1 { font-family: 'Georgia', serif; font-size: 2.2rem; background: linear-gradient(135deg, #FFD700, #FFA500, #FF69B4, #00CED1, #9370DB); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0; letter-spacing: 1px; }
+        .header h1 { font-family: 'Georgia', serif; font-size: 2.2rem; background: linear-gradient(135deg, #FFD700, #FFA500, #FF69B4, #00CED1, #9370DB); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; text-fill-color: transparent; margin: 0; letter-spacing: 1px; }
         .subtitle { font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 3px; margin-top: 5px; font-weight: 700; }
         
         .controls { position: absolute; top: 30px; right: 30px; display: flex; gap: 12px; flex-direction: column; align-items: flex-end; }
@@ -286,7 +287,7 @@
             background: linear-gradient(135deg, #FFA500, #FF69B4);
         }
 
-        /* --- PREMIUM PROFILE DESIGN (The Update) --- */
+        /* --- PREMIUM PROFILE DESIGN --- */
         .prof-cover { 
             height: 140px; 
             background: linear-gradient(135deg, #FFD700 0%, #FFA500 25%, #FF69B4 50%, #00CED1 75%, #9370DB 100%);
@@ -451,7 +452,7 @@
 
 <script type="module">
     // =========================================================================
-    // 1. ENGINE CONFIGURATION
+    // 1. ENGINE CONFIGURATION & IMMORTAL CONSTANTS
     // =========================================================================
     const CONFIG = {
         ROWS: 141,
@@ -459,11 +460,15 @@
         GAP: 2,
         TOTAL_BLOCKS: 10011,
         LOD_THRESHOLD: 0.35, 
+        LOD_BATCH_SIZE: 1000, // Process this many LOD updates per frame (Time Slicing)
         CHUNK_SIZE: 25,
         MAX_ZOOM: 50.0,
         MIN_ZOOM: 0.005,
-        FRICTION: 0.9,
-        COLORS: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8']
+        FRICTION: 0.92, // Increased for smoother glide
+        COLORS: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8'],
+        API_BASE: 'https://pyramid-api.piyushsayare8.workers.dev',
+        RETRY_ATTEMPTS: 3,
+        RETRY_DELAY: 1000
     };
     
     const PYRAMID_WIDTH = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
@@ -479,7 +484,10 @@
         world: null,
         chunks: [],
         blocks: new Array(CONFIG.TOTAL_BLOCKS + 1),
-        textPool: [],
+        
+        // --- IMMORTAL TEXT POOL ---
+        textPool: [],     // Dense array of text objects
+        
         baseTextures: {},
         cam: { x: 0, y: 0, zoom: 0.1 },
         target: { x: 0, y: 0, zoom: 0.1 },
@@ -493,20 +501,155 @@
         selectedId: -1,
         touches: [],
         lastTouchDistance: 0,
-        simulating: false
+        simulating: false,
+
+        // LOD State
+        lodVisible: false,
+        lodQueueIndex: 0
     };
 
     let formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: '', linkUrl: '', linkDescription: '' };
 
     // =========================================================================
+    // 3. API INTEGRATION LAYER
+    // =========================================================================
+    async function apiCall(endpoint, options = {}) {
+        const url = `${CONFIG.API_BASE}${endpoint}`;
+        const defaultOptions = {
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        };
+        
+        for (let attempt = 0; attempt < CONFIG.RETRY_ATTEMPTS; attempt++) {
+            try {
+                const response = await fetch(url, { ...defaultOptions, ...options });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({ error: 'Network error' }));
+                    throw new Error(error.error || `HTTP ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                if (attempt === CONFIG.RETRY_ATTEMPTS - 1) throw error;
+                await new Promise(resolve => setTimeout(resolve, CONFIG.RETRY_DELAY * (attempt + 1)));
+            }
+        }
+    }
+
+    async function loadGridData() {
+        try {
+            const data = await apiCall('/api/grid');
+            if (data.slots) {
+                data.slots.forEach(slot => {
+                    if (slot.status === 'sold') {
+                        updateBlock(slot.slot_number, {
+                            owner_name: slot.owner_name,
+                            owner_color: slot.owner_color,
+                            owner_text: slot.owner_text,
+                            message: slot.owner_message,
+                            image_url: slot.image_url,
+                            link_url: slot.link_url,
+                            link_description: slot.link_description
+                        });
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load grid data:', error);
+            showError('Failed to load pyramid data. Please refresh.');
+        }
+    }
+
+    async function createRazorpayOrder(slotId) {
+        try {
+            showLoading('Creating payment order...');
+            const order = await apiCall('/api/create-order', {
+                method: 'POST',
+                body: JSON.stringify({ slotId })
+            });
+            return order;
+        } catch (error) {
+            console.error('Failed to create order:', error);
+            showError('Failed to create payment order. Please try again.');
+            throw error;
+        }
+    }
+
+    async function completePurchase(paymentData) {
+        try {
+            showLoading('Completing purchase...');
+            const result = await apiCall('/api/purchase', {
+                method: 'POST',
+                body: JSON.stringify(paymentData)
+            });
+            
+            if (result.success) {
+                showSuccess('Block purchased successfully!');
+                return result;
+            } else {
+                throw new Error(result.error || 'Purchase failed');
+            }
+        } catch (error) {
+            console.error('Failed to complete purchase:', error);
+            showError('Purchase failed. Please contact support.');
+            throw error;
+        }
+    }
+
+    // =========================================================================
+    // 4. UI HELPERS
+    // =========================================================================
+    function showLoading(message) {
+        const loader = document.getElementById('loader');
+        if (loader) {
+            loader.querySelector('div:last-child').textContent = message;
+            loader.style.display = 'flex';
+            loader.style.opacity = '1';
+        }
+    }
+
+    function hideLoading() {
+        const loader = document.getElementById('loader');
+        if (loader) {
+            loader.style.opacity = '0';
+            setTimeout(() => loader.style.display = 'none', 500);
+        }
+    }
+
+    function showError(message) {
+        hideLoading();
+        alert(`Error: ${message}`);
+    }
+
+    function showSuccess(message) {
+        hideLoading();
+        const successDiv = document.createElement('div');
+        successDiv.style.cssText = `
+            position: fixed; top: 20px; right: 20px; z-index: 1000;
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white; padding: 15px 25px; border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+            font-weight: 600; animation: slideIn 0.3s ease;
+        `;
+        successDiv.textContent = message;
+        document.body.appendChild(successDiv);
+        setTimeout(() => successDiv.remove(), 3000);
+    }
+
+    // =========================================================================
     // 3. ENGINE INITIALIZATION
     // =========================================================================
     async function init() {
+        // --- IMMORTAL UPGRADE: UNLOCKED RESOLUTION ---
+        // We use window.devicePixelRatio directly but cap at 3 to save battery on 4K mobiles
+        // while still looking extremely sharp.
+        const pixelRatio = Math.min(window.devicePixelRatio, 3);
+
         state.pixi = new PIXI.Application();
         await state.pixi.init({
             resizeTo: window,
             backgroundColor: 0x050508,
-            resolution: Math.min(window.devicePixelRatio, 2),
+            resolution: pixelRatio,
             autoDensity: true,
             antialias: false,
             powerPreference: 'high-performance'
@@ -515,13 +658,17 @@
 
         PIXI.BitmapFont.install({
             name: 'ImmortalFont',
-            style: { fontFamily: 'Arial', fontSize: 256, fontWeight: '900', fill: 'white', stroke: { color: 'black', width: 12 } }
+            style: { fontFamily: 'Arial', fontSize: 128, fontWeight: '900', fill: 'white', stroke: { color: 'black', width: 8 } }
         });
 
         createSharedTextures();
 
         createStarfield();
         state.world = new PIXI.Container();
+        
+        // --- IMMORTAL UPGRADE: Render Group for Pixi v8 ---
+        state.world.isRenderGroup = true;
+        
         state.world.eventMode = 'none';
         state.pixi.stage.addChild(state.world);
         buildPyramid();
@@ -535,11 +682,14 @@
             updatePhysics(ticker.deltaTime);
             updateStarfield();
             cullWorld();
-            updateLOD();
+            processLODQueue(); // Replaces the old updateLOD loop
         });
 
         setTimeout(() => document.getElementById('loader').style.opacity = '0', 500);
         setTimeout(() => document.getElementById('loader').remove(), 1000);
+        
+        // Load real data from backend
+        await loadGridData();
     }
 
     async function initPreviewApp() {
@@ -616,7 +766,6 @@
     function updateStarfield() {
         if (!state.starfield) return;
         
-        // Simple parallax effect based on camera movement
         const offsetX = (state.cam.x - (window.innerWidth/2)) * 0.05;
         const offsetY = (state.cam.y - (window.innerHeight/2)) * 0.05;
         
@@ -674,53 +823,46 @@
     }
 
     // =========================================================================
-    // 4. PHYSICS & CAMERA
+    // 4. PHYSICS & CAMERA (UPDATED FOR MOMENTUM)
     // =========================================================================
     function constrainCamera() {
-        // Calculate the ratio needed to fit the pyramid exactly on screen
         const fitW = state.pixi.screen.width / PYRAMID_WIDTH;
         const fitH = state.pixi.screen.height / PYRAMID_HEIGHT;
         const fullFitZoom = Math.min(fitW, fitH);
         
-        // Updated: Allow zooming out much further than just "fitting" the screen.
-        // We allow zooming out until the pyramid takes up about 40% of the screen dimension max.
         const minAllowedZoom = fullFitZoom * 0.4; 
         
         if (state.target.zoom < minAllowedZoom) state.target.zoom = minAllowedZoom;
 
-        // Bounding Logic
-        // We calculate the pyramid bounds in World Space
         const pyLeft = -(PYRAMID_WIDTH / 2);
         const pyRight = (PYRAMID_WIDTH / 2);
         const pyTop = 0;
         const pyBottom = PYRAMID_HEIGHT;
 
-        // Current Center of the screen in World Coordinates
         const screenCX = state.pixi.screen.width / 2;
         const screenCY = state.pixi.screen.height / 2;
         let worldCX = (screenCX - state.target.x) / state.target.zoom;
         let worldCY = (screenCY - state.target.y) / state.target.zoom;
 
-        // Add a small margin of approximately 500px around the pyramid
-        const marginX = 1;
-        const marginY = 1;
+        // Allow some overscroll ("Bounce") feeling
+        const marginX = 10;
+        const marginY = 10;
 
         let clampedWX = Math.max(pyLeft - marginX, Math.min(pyRight + marginX, worldCX));
         let clampedWY = Math.max(pyTop - marginY, Math.min(pyBottom + marginY, worldCY));
 
-        // If the calculation pushed the camera out of bounds, snap it back
-        // But only applies velocity reset if we are actually correcting it
         const correctionX = screenCX - (clampedWX * state.target.zoom);
         const correctionY = screenCY - (clampedWY * state.target.zoom);
 
-        // Gentle correction
+        // Soft correction: Don't kill velocity, just gently push back
         if (Math.abs(correctionX - state.target.x) > 1) {
              state.target.x += (correctionX - state.target.x) * 0.1;
-             state.vel.x *= 0.5;
+             // Damping velocity gently instead of halving it
+             state.vel.x *= 0.8; 
         }
         if (Math.abs(correctionY - state.target.y) > 1) {
              state.target.y += (correctionY - state.target.y) * 0.1;
-             state.vel.y *= 0.5;
+             state.vel.y *= 0.8;
         }
     }
 
@@ -741,6 +883,9 @@
 
         state.world.scale.set(state.cam.zoom);
         state.world.position.set(state.cam.x, state.cam.y);
+        
+        // --- IMMORTAL UPGRADE: Trigger LOD Transition Check ---
+        checkLODTransition();
     }
 
     function cullWorld() {
@@ -753,17 +898,44 @@
         }
     }
 
-    function updateLOD() {
+    // =========================================================================
+    // 5. IMMORTAL LOD SYSTEM (TIME-SLICED)
+    // =========================================================================
+    
+    function checkLODTransition() {
         const showText = state.cam.zoom > CONFIG.LOD_THRESHOLD;
-        for (const text of state.textPool) {
-            if (text.parent.parent.visible) {
-                text.visible = showText;
-            }
+        
+        // If the desired state is different from current state, reset the queue
+        if (showText !== state.lodVisible) {
+            state.lodVisible = showText;
+            state.lodQueueIndex = 0; // Restart processing from index 0
         }
     }
 
+    function processLODQueue() {
+        // If we have processed everyone, stop.
+        if (state.lodQueueIndex >= state.textPool.length) return;
+
+        let processed = 0;
+        const limit = CONFIG.LOD_BATCH_SIZE;
+
+        // Process a chunk of the array
+        while (processed < limit && state.lodQueueIndex < state.textPool.length) {
+            const text = state.textPool[state.lodQueueIndex];
+            
+            // Only update if it actually needs changing
+            if (text.visible !== state.lodVisible) {
+                text.visible = state.lodVisible;
+            }
+            
+            state.lodQueueIndex++;
+            processed++;
+        }
+        // If we finished the loop, we wait for next frame to continue
+    }
+
     // =========================================================================
-    // 5. INPUT SYSTEM
+    // 6. INPUT SYSTEM
     // =========================================================================
     function setupInput() {
         const dom = document.getElementById('canvas-container');
@@ -916,7 +1088,7 @@
     }
 
     // =========================================================================
-    // 6. CORE LOGIC
+    // 7. CORE LOGIC (O(1) OPTIMIZED)
     // =========================================================================
     function smartBreakText(text) {
         if (!text) return '';
@@ -929,24 +1101,54 @@
         }).join(' ');
     }
 
+    // --- IMMORTAL POOL MANAGEMENT (Swap & Pop) ---
+    function addToPool(textObj) {
+        textObj._poolIndex = state.textPool.length;
+        state.textPool.push(textObj);
+        
+        // Init visibility based on current global LOD state
+        textObj.visible = state.lodVisible;
+    }
+
+    function removeFromPool(textObj) {
+        const idx = textObj._poolIndex;
+        // 1. Get the last item in the array
+        const lastItem = state.textPool[state.textPool.length - 1];
+        
+        // 2. Overwrite the item to remove with the last item
+        state.textPool[idx] = lastItem;
+        
+        // 3. Update the last item's internal index reference
+        lastItem._poolIndex = idx;
+        
+        // 4. Remove the last item (now duplicate)
+        state.textPool.pop();
+        
+        // Note: If textObj was the last one, idx == length-1, so it just overwrites itself then pops. Safe.
+    }
+
     function renderBlockText(sprite, textData, isPreview = false) {
-        let textObj;
-        
         if (isPreview) {
-            textObj = state.previewBlock.textRef;
-            if (textObj && textObj.parent) textObj.parent.removeChild(textObj);
+            // Preview mode is simple, no pool needed
+            if (state.previewBlock.textRef) {
+                state.previewBlock.textRef.destroy();
+                state.previewBlock.textRef = null;
+            }
         } else {
-            textObj = sprite.children.find(c => c instanceof PIXI.BitmapText);
+            // --- O(1) CLEANUP ---
+            // If the sprite already has text, we must remove it from the pool efficiently
+            if (sprite.textRef) {
+                removeFromPool(sprite.textRef); // O(1)
+                sprite.textRef.destroy();       // Destroy Pixi object
+                sprite.textRef = null;
+            }
         }
         
-        if (!textData) {
-            if (textObj) textObj.visible = false;
-            return;
-        }
+        if (!textData) return;
 
         const safeText = smartBreakText(textData);
 
-        textObj = new PIXI.BitmapText({ 
+        const textObj = new PIXI.BitmapText({ 
             text: safeText, 
             style: { 
                 fontFamily: 'ImmortalFont', 
@@ -970,7 +1172,10 @@
             textObj.x = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
             textObj.y = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
             sprite.addChild(textObj);
-            state.textPool.push(textObj);
+            sprite.textRef = textObj; // Store reference on sprite for fast access
+            
+            // --- O(1) ADDITION ---
+            addToPool(textObj);
         }
         
         textObj.scale.set(1);
@@ -995,17 +1200,17 @@
         b.sprite.texture = state.baseTextures.sold;
         b.sprite.tint = data.owner_color.replace('#', '0x');
 
+        // This function now internally handles O(1) pool updates
         if (data.owner_text) {
             renderBlockText(b.sprite, data.owner_text);
         } else {
-            const t = b.sprite.children.find(c => c instanceof PIXI.BitmapText);
-            if(t) t.visible = false;
+            renderBlockText(b.sprite, null);
         }
         updateSalesCounter();
     }
 
     // =========================================================================
-    // 7. APP INTERFACE & UI
+    // 8. APP INTERFACE & UI
     // =========================================================================
     window.app = {
         resetCamera: () => centerCamera(),
@@ -1026,14 +1231,17 @@
                     if(unsold.length === 0) break;
                     const randIdx = Math.floor(Math.random() * unsold.length);
                     const id = unsold[randIdx];
-                    unsold.splice(randIdx, 1);
+                    // "Swap and Pop" logic for the simulation array (simulation only runs once, so simple splice is okay here, but let's be consistent)
+                    unsold[randIdx] = unsold[unsold.length - 1];
+                    unsold.pop();
+                    
                     updateBlock(id, {
                         owner_name: "Sim " + id,
                         owner_color: CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)],
                         owner_text: ["CRYPTO", "HODL", "BTC", "ETH"][Math.floor(Math.random()*4)],
-                        message: "This block is part of the simulation. " + "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis.",
+                        message: "This block is part of the simulation.",
                         link_url: "https://example.com/sim" + id,
-                        link_description: ["Visit my profile", "My business", "Check out my work", "My portfolio"][Math.floor(Math.random()*4)]
+                        link_description: "Visit Profile"
                     });
                     count++;
                 }
@@ -1078,18 +1286,69 @@
                 state.previewBlock.sprite.tint = c.replace('#', '0x');
             }
         },
-        submit: () => {
-            if(!formData.name) return alert("Name is required");
-            updateBlock(state.selectedId, {
-                owner_name: formData.name,
-                owner_color: formData.color,
-                owner_text: formData.text.substring(0, 150),
-                message: formData.message || "Owned forever.",
-                image_url: formData.imageUrl,
-                link_url: formData.linkUrl,
-                link_description: formData.linkDescription
-            });
-            closeModal();
+        submit: async () => {
+            if(!formData.name) return showError("Name is required");
+            
+            try {
+                const block = state.blocks[state.selectedId];
+                const order = await createRazorpayOrder(state.selectedId);
+                
+                const options = {
+                    key: 'rzp_test_SC2XaQER0g2Q6f', // Replace with production key in production
+                    amount: order.amount,
+                    currency: 'USD',
+                    name: 'The History Pyramid',
+                    description: `Block #${state.selectedId}`,
+                    order_id: order.id,
+                    handler: async function (response) {
+                        try {
+                            await completePurchase({
+                                slotId: state.selectedId,
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature,
+                                userData: {
+                                    name: formData.name,
+                                    message: formData.message || "Owned forever.",
+                                    color: formData.color,
+                                    text: formData.text.substring(0, 150),
+                                    imageUrl: formData.imageUrl,
+                                    linkUrl: formData.linkUrl,
+                                    linkDescription: formData.linkDescription
+                                }
+                            });
+                            
+                            updateBlock(state.selectedId, {
+                                owner_name: formData.name,
+                                owner_color: formData.color,
+                                owner_text: formData.text.substring(0, 150),
+                                message: formData.message || "Owned forever.",
+                                image_url: formData.imageUrl,
+                                link_url: formData.linkUrl,
+                                link_description: formData.linkDescription
+                            });
+                            
+                            closeModal();
+                        } catch (error) {
+                            showError('Payment verification failed. Please contact support.');
+                        }
+                    },
+                    modal: {
+                        ondismiss: function() {
+                            hideLoading();
+                        }
+                    },
+                    theme: {
+                        color: '#FFD700'
+                    }
+                };
+                
+                const rzp = new Razorpay(options);
+                rzp.open();
+                
+            } catch (error) {
+                console.error('Purchase error:', error);
+            }
         }
     };
 
@@ -1220,35 +1479,23 @@
     };
 
     function centerCamera() {
-        // Updated: Center logic for standard screens and mobile
-        // 1. Determine screen center
         const screenCX = state.pixi.screen.width / 2;
         const screenCY = state.pixi.screen.height / 2;
         
-        // 2. Determine Scale to fit
-        // Add padding (100px) so it's not touching edges
         const availableW = state.pixi.screen.width - 60;
-        const availableH = state.pixi.screen.height - 180; // Account for UI headers
+        const availableH = state.pixi.screen.height - 180;
         
         const zoomX = availableW / PYRAMID_WIDTH;
         const zoomY = availableH / PYRAMID_HEIGHT;
         
-        // Use the smaller zoom to ensure it fits, then scale slightly down (0.9)
-        // for breathing room.
         const targetZoom = Math.min(zoomX, zoomY) * 0.9;
         
         state.target.zoom = targetZoom;
         state.cam.zoom = targetZoom;
 
-        // 3. Center Position
-        // The pyramid geometry centers X at 0.
-        // Y goes from 0 to PYRAMID_HEIGHT.
-        // To center the pyramid visually, we align the pyramid's geometric center (0, Height/2)
-        // with the screen center.
-        
         const pyramidCenterY = PYRAMID_HEIGHT / 2;
         
-        state.target.x = screenCX; // Since pyramid X is centered at 0
+        state.target.x = screenCX;
         state.target.y = screenCY - (pyramidCenterY * targetZoom);
 
         state.cam.x = state.target.x;
@@ -1259,3 +1506,4 @@
     init();
 </script>
 </body>
+</html>

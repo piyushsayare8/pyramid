@@ -1,5 +1,5 @@
-name = "pyramid-single-file"
-main = "single-file-worker.ts"
+name = "pyramid-api"
+main = "index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
