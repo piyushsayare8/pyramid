@@ -15,12 +15,13 @@
   "dependencies": {
     "hono": "^4.6.0",
     "pixi.js": "^8.16.0",
+    "razorpay": "^2.9.6",
     "three": "^0.182.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260131.0",
-    "wrangler": "^4.62.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "wrangler": "^4.62.0"
   },
   "description": "The History Pyramid - 5,050 Blocks of Digital History",
   "main": "index.html",

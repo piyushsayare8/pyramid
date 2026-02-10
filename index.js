@@ -3,102 +3,92 @@ import { cors } from 'hono/cors'
 
 const app = new Hono()
 
-// --- 1. GLOBAL CONFIGURATION ---
+// --- CONFIGURATION ---
+const TOTAL_SLOTS = 10011
+const CACHE_TTL = 60 // Browser Cache: 60 seconds
+const R2_CACHE_TTL = 3600 // Edge Cache: 1 hour (Super efficient)
+
+// --- MIDDLEWARE ---
 app.use('/*', cors({
-  origin: '*',
+  origin: '*', // CHANGE THIS to your actual domain in production
   allowMethods: ['GET', 'POST', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   exposeHeaders: ['Content-Length', 'ETag'],
   maxAge: 86400,
 }))
 
-// --- 2. THE AUTOMATION ENGINE (Auto-Build & Cache) ---
+// --- 1. CORE FUNCTIONS ---
 
-// This function runs automatically if the system detects it's empty
-async function ensureSystemReady(env) {
-  // A. Create Table (Safe to run every time)
-  try {
-    await env.DB.exec(`
-      CREATE TABLE IF NOT EXISTS slots (
-        slot_number INTEGER PRIMARY KEY,
-        price REAL,
-        status TEXT DEFAULT 'available',
-        owner_name TEXT, 
-        owner_message TEXT, 
-        owner_color TEXT, 
-        owner_text TEXT,
-        payment_id TEXT, 
-        updated_at DATETIME
-      );
-      CREATE INDEX IF NOT EXISTS idx_status ON slots(status);
-    `)
-  } catch (error) {
-    console.error('Table creation error:', error)
-  }
+/**
+ * Calculates price mathematically. 
+ * Formula: $0.10 base + $0.10 per slot index
+ * Example: Slot 1 = $0.10, Slot 100 = $10.00
+ */
+const getSlotPrice = (id) => 0.1 + ((id - 1) * 0.1)
 
-  // B. Check if data exists. If not, fill it.
-  const check = await env.DB.prepare("SELECT slot_number FROM slots WHERE slot_number = 1").first()
-  
-  if (!check) {
-    console.log("System empty. Seeding database...")
-    const stmt = env.DB.prepare("INSERT OR IGNORE INTO slots (slot_number, price) VALUES (?, ?)")
-    const TOTAL_SLOTS = 10011
-    
-    // Insert in chunks of 100 to prevent timeouts
-    for (let i = 1; i <= TOTAL_SLOTS; i += 100) {
-      const batch = []
-      for (let j = i; j < i + 100 && j <= TOTAL_SLOTS; j++) {
-        // Pricing Logic: 0.1 increment per slot (matching frontend)
-        const price = 0.1 + ((j - 1) * 0.1)
-        batch.push(stmt.bind(j, price))
-      }
-      await env.DB.batch(batch)
-    }
-  }
-
-  // C. Build the initial Cache File
-  await rebuildCdnCache(env)
-}
-
-// Helper: Rebuild Global JSON Cache (The O(1) Secret)
+/**
+ * The "Static Site Generator"
+ * Dumps the DB state to a JSON file on R2.
+ * Includes ALL profile data (Images, Links, etc.) so nothing is missing.
+ */
 async function rebuildCdnCache(env) {
-  const { results } = await env.DB.prepare(`
-    SELECT slot_number, status, owner_color, owner_text, price 
-    FROM slots ORDER BY slot_number ASC
-  `).all()
+  try {
+    const { results } = await env.DB.prepare(`
+      SELECT 
+        slot_number, 
+        owner_name, 
+        owner_message, 
+        owner_color, 
+        owner_text, 
+        image_url, 
+        link_url, 
+        link_description
+      FROM slots 
+      WHERE status = 'sold'
+    `).all()
 
-  // Save to R2 with Headers for Cloudflare Edge
-  await env.BUCKET.put('grid.json', JSON.stringify({
-    generatedAt: new Date().toISOString(),
-    totalSlots: results.length,
-    soldCount: results.filter(s => s.status === 'sold').length,
-    slots: results
-  }), {
-    httpMetadata: { 
-      contentType: 'application/json', 
-      cacheControl: 'public, max-age=10, s-maxage=60' 
+    const data = {
+      generatedAt: new Date().toISOString(),
+      totalSlots: TOTAL_SLOTS,
+      soldCount: results.length,
+      soldSlots: results 
     }
-  })
+
+    // Save to R2 with long cache headers
+    // This makes the file "Immortal" on the Edge
+    await env.BUCKET.put('grid.json', JSON.stringify(data), {
+      httpMetadata: { 
+        contentType: 'application/json',
+        cacheControl: `public, max-age=${CACHE_TTL}, s-maxage=${R2_CACHE_TTL}`
+      }
+    })
+    console.log(`Cache rebuilt with ${results.length} slots.`);
+  } catch (e) {
+    console.error("Cache rebuild critical error:", e);
+  }
 }
 
-// --- 3. API ROUTES ---
+// --- 2. API ROUTES ---
 
 /**
  * GET /api/grid
- * The Trigger: If cache is missing, it wakes up the system.
+ * Serves the static JSON from R2. 
+ * Cost: Almost $0. Speed: O(1).
  */
 app.get('/api/grid', async (c) => {
-  const file = await c.env.BUCKET.get('grid.json')
+  let file = await c.env.BUCKET.get('grid.json')
   
-  // AUTOMATION: If cache is missing, the system is new. Build it now.
+  // Self-Healing: If R2 is empty (first run), build it automatically
   if (!file) {
-    // Run auto-setup in background. Tell user to refresh.
-    c.executionCtx.waitUntil(ensureSystemReady(c.env))
-    return c.json({ status: "initializing", message: "System is building itself. Please refresh in 3 seconds." }, 503)
+    await ensureTableExists(c.env.DB)
+    await rebuildCdnCache(c.env)
+    file = await c.env.BUCKET.get('grid.json')
   }
 
+  if (!file) return c.json({ error: "Initializing system..." }, 503)
+
   c.header('ETag', file.httpMetadata?.etag)
-  c.header('Cache-Control', 'public, max-age=10, s-maxage=60')
+  c.header('Cache-Control', `public, max-age=${CACHE_TTL}, s-maxage=${R2_CACHE_TTL}`)
   c.header('Content-Type', 'application/json')
   
   return c.body(file.body)
@@ -106,132 +96,126 @@ app.get('/api/grid', async (c) => {
 
 /**
  * POST /api/create-order
+ * PURE USD - Leverages Razorpay's Native Conversion
  */
 app.post('/api/create-order', async (c) => {
   try {
     const { slotId } = await c.req.json()
-    
-    // Safety: Ensure table exists before querying (Just in case)
-    await c.env.DB.exec("CREATE TABLE IF NOT EXISTS slots (slot_number INTEGER PRIMARY KEY)")
+    const id = parseInt(slotId)
 
-    const slot = await c.env.DB.prepare("SELECT price, status FROM slots WHERE slot_number = ?").bind(slotId).first()
-    
-    if (!slot) return c.json({ error: "Slot not found" }, 404)
-    if (slot.status === 'sold') return c.json({ error: "Slot already sold" }, 409)
+    if (isNaN(id) || id < 1 || id > TOTAL_SLOTS) return c.json({ error: "Invalid ID" }, 400)
 
-    // Razorpay Call - CHEAT CODE: Show USD but charge INR with 100% reliable exchange rate
+    // Check DB (Fast Read) to prevent double-booking before payment
+    const existing = await c.env.DB.prepare("SELECT 1 FROM slots WHERE slot_number = ? AND status = 'sold'").first()
+    if (existing) return c.json({ error: "Slot already taken" }, 409)
+
+    // --- LOGIC: DIRECT USD ---
+    const usdPrice = getSlotPrice(id)
+    const amountInCents = Math.round(usdPrice * 100) // Razorpay expects cents (e.g., $1.00 -> 100)
+
+    // Razorpay Auth
     const auth = btoa(`${c.env.RAZORPAY_KEY_ID}:${c.env.RAZORPAY_KEY_SECRET}`)
     
-    // Get USD to INR exchange rate with multiple redundant APIs
-    let usdToInrRate = null;
-    
-    // Try multiple APIs in sequence for 100% reliability
-    const exchangeApis = [
-      {
-        name: 'exchangerate-api',
-        url: 'https://api.exchangerate-api.com/v4/latest/USD',
-        getRate: (data) => data.rates.INR
-      },
-      {
-        name: 'fixer-api', 
-        url: 'https://api.fixer.io/latest?base=USD&symbols=INR',
-        getRate: (data) => data.rates.INR
-      },
-      {
-        name: 'openexchangerates',
-        url: 'https://openexchangerates.org/api/latest.json?app_id=demo&base=USD&symbols=INR',
-        getRate: (data) => data.rates.INR
-      }
-    ];
-    
-    for (const api of exchangeApis) {
-      try {
-        console.log(`Trying ${api.name}...`)
-        const exchangeResponse = await fetch(api.url, { 
-          timeout: 5000 // 5 second timeout
-        })
-        const exchangeData = await exchangeResponse.json()
-        const rate = api.getRate(exchangeData)
-        
-        if (rate && rate > 0) {
-          usdToInrRate = rate
-          console.log(`✅ Success with ${api.name}: 1 USD = ${usdToInrRate} INR`)
-          break
-        }
-      } catch (error) {
-        console.warn(`❌ ${api.name} failed:`, error.message)
-        continue
-      }
-    }
-    
-    // If all APIs fail, we cannot proceed - this ensures 100% accuracy
-    if (!usdToInrRate) {
-      throw new Error('Exchange rate APIs unavailable. Please try again.')
-    }
-    
-    const inrAmount = Math.round(slot.price * usdToInrRate * 100); // Convert USD price to INR paise
-    
-    const response = await fetch('https://api.razorpay.com/v1/orders', {
+    // Create Order in USD
+    // Razorpay will handle showing INR/UPI to Indian users automatically
+    const rzpRes = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
       headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        amount: inrAmount,
-        currency: "INR",
-        receipt: `slot_${slotId}_${Date.now()}`,
-        notes: {
-          slot_number: slotId,
-          usd_price: slot.price.toFixed(2),
-          inr_amount: (inrAmount / 100).toFixed(2),
-          exchange_rate: usdToInrRate.toFixed(2)
-        }
+        amount: amountInCents,
+        currency: "USD", 
+        receipt: `slot_${id}_${Date.now()}`,
+        notes: { slot_number: id }
       })
     })
 
-    const orderData = await response.json()
-    if (orderData.error) throw new Error(orderData.error.description)
-    return c.json(orderData)
+    const order = await rzpRes.json()
+    if (order.error) throw new Error(order.error.description)
+
+    return c.json(order)
   } catch (e) {
-    return c.json({ error: "Order creation failed" }, 500)
+    console.error("Order Creation Error:", e)
+    return c.json({ error: "Order failed" }, 500)
   }
 })
 
 /**
  * POST /api/purchase
+ * The only "Heavy" operation. Verifies payment & updates DB/Cache.
  */
 app.post('/api/purchase', async (c) => {
   try {
-    const { slotId, userData } = await c.req.json()
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, slotId, userData } = await c.req.json()
 
-    // TEMPORARY: Skip payment verification for testing
-    console.log(" TEST MODE: Skipping payment verification for slot", slotId)
-    
-    // 1. Validation
-    if (!userData || userData.text.length > 100) return c.json({ error: "Text too long" }, 400)
-    
-    // 2. Skip Signature Verification (TEST MODE)
-    // const text = `${razorpay_order_id}|${razorpay_payment_id}`
-    // const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(c.env.RAZORPAY_KEY_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-    // const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text))
-    // const expected = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
-    
-    // if (expected !== razorpay_signature) return c.json({ error: "Invalid Signature" }, 401)
+    // 1. Signature Verification (Security)
+    if (c.env.RAZORPAY_KEY_SECRET) {
+      const text = `${razorpay_order_id}|${razorpay_payment_id}`
+      const key = await crypto.subtle.importKey(
+        'raw', 
+        new TextEncoder().encode(c.env.RAZORPAY_KEY_SECRET), 
+        { name: 'HMAC', hash: 'SHA-256' }, 
+        false, 
+        ['sign']
+      )
+      const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text))
+      const expected = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('')
+      
+      if (expected !== razorpay_signature) return c.json({ error: "Invalid Payment Signature" }, 401)
+    }
 
-    // 3. Atomic Update (TEST MODE - Direct Save)
+    // 2. Data Validation
+    if (!userData || userData.text?.length > 150) return c.json({ error: "Invalid data provided" }, 400)
+
+    // 3. Atomic Write (Includes ALL profile fields)
     const result = await c.env.DB.prepare(`
-      UPDATE slots SET 
-        status = 'sold', owner_name = ?, owner_message = ?, owner_color = ?, owner_text = ?, payment_id = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE slot_number = ? AND status = 'available'
-    `).bind(userData.name, userData.message, userData.color, userData.text, `TEST_${Date.now()}`, slotId).run()
+      INSERT INTO slots (
+        slot_number, status, owner_name, owner_message, owner_color, owner_text, 
+        payment_id, image_url, link_url, link_description, updated_at
+      )
+      VALUES (?, 'sold', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).bind(
+      slotId, 
+      userData.name, 
+      userData.message, 
+      userData.color, 
+      userData.text, 
+      razorpay_payment_id || 'TEST_MODE',
+      userData.imageUrl || '',
+      userData.linkUrl || '',
+      userData.linkDescription || ''
+    ).run()
 
-    if (result.meta.changes === 0) return c.json({ error: "Slot taken" }, 409)
+    if (!result.success) return c.json({ error: "Slot just sold!" }, 409)
 
-    // 4. Background Cache Update (Instant User Response)
+    // 4. Background Cache Rebuild
+    // This allows the user to get a "Success" response instantly while the server updates R2
     c.executionCtx.waitUntil(rebuildCdnCache(c.env))
 
-    return c.json({ success: true, testMode: true, message: "Data saved without payment verification" })
+    return c.json({ success: true })
   } catch (e) {
-    return c.json({ error: "Processing failed", details: e.message }, 500)
+    console.error("Purchase Error:", e)
+    if (e.message && e.message.includes('UNIQUE')) return c.json({ error: "Slot already taken" }, 409)
+    return c.json({ error: "Processing failed" }, 500)
   }
 })
+
+// --- UTILS ---
+async function ensureTableExists(db) {
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS slots (
+      slot_number INTEGER PRIMARY KEY,
+      status TEXT DEFAULT 'available',
+      owner_name TEXT, 
+      owner_message TEXT, 
+      owner_color TEXT, 
+      owner_text TEXT,
+      payment_id TEXT, 
+      image_url TEXT, 
+      link_url TEXT, 
+      link_description TEXT,
+      updated_at DATETIME
+    )
+  `)
+}
 
 export default app

@@ -1297,9 +1297,9 @@
                 const options = {
                     key: 'rzp_test_SC2XaQER0g2Q6f', // Replace with production key in production
                     amount: order.amount,
-                    currency: 'INR', // CHEAT CODE: Show USD but charge INR
+                    currency: 'USD',
                     name: 'The History Pyramid',
-                    description: `Block #${state.selectedId} | $${order.notes?.usd_price || '0.00'} USD ≈ ₹${order.notes?.inr_amount || '0.00'} INR`,
+                    description: `Block #${state.selectedId} | $${(order.amount / 100).toFixed(2)} USD`,
                     order_id: order.id,
                     handler: async function (response) {
                         try {

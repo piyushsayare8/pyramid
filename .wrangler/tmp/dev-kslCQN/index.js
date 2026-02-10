@@ -3105,166 +3105,153 @@ var cors = /* @__PURE__ */ __name((options) => {
 
 // index.js
 var app = new Hono2();
+var TOTAL_SLOTS = 10011;
+var CACHE_TTL = 60;
+var R2_CACHE_TTL = 3600;
 app.use("/*", cors({
   origin: "*",
+  // CHANGE THIS to your actual domain in production
   allowMethods: ["GET", "POST", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization"],
   exposeHeaders: ["Content-Length", "ETag"],
   maxAge: 86400
 }));
-async function ensureSystemReady(env2) {
-  try {
-    await env2.DB.exec(`
-      CREATE TABLE IF NOT EXISTS slots (
-        slot_number INTEGER PRIMARY KEY,
-        price REAL,
-        status TEXT DEFAULT 'available',
-        owner_name TEXT, 
-        owner_message TEXT, 
-        owner_color TEXT, 
-        owner_text TEXT,
-        payment_id TEXT, 
-        updated_at DATETIME
-      );
-      CREATE INDEX IF NOT EXISTS idx_status ON slots(status);
-    `);
-  } catch (error3) {
-    console.error("Table creation error:", error3);
-  }
-  const check = await env2.DB.prepare("SELECT slot_number FROM slots WHERE slot_number = 1").first();
-  if (!check) {
-    console.log("System empty. Seeding database...");
-    const stmt = env2.DB.prepare("INSERT OR IGNORE INTO slots (slot_number, price) VALUES (?, ?)");
-    const TOTAL_SLOTS = 10011;
-    for (let i = 1; i <= TOTAL_SLOTS; i += 100) {
-      const batch = [];
-      for (let j = i; j < i + 100 && j <= TOTAL_SLOTS; j++) {
-        const price = 0.1 + (j - 1) * 0.1;
-        batch.push(stmt.bind(j, price));
-      }
-      await env2.DB.batch(batch);
-    }
-  }
-  await rebuildCdnCache(env2);
-}
-__name(ensureSystemReady, "ensureSystemReady");
+var getSlotPrice = /* @__PURE__ */ __name((id) => 0.1 + (id - 1) * 0.1, "getSlotPrice");
 async function rebuildCdnCache(env2) {
-  const { results } = await env2.DB.prepare(`
-    SELECT slot_number, status, owner_color, owner_text, price 
-    FROM slots ORDER BY slot_number ASC
-  `).all();
-  await env2.BUCKET.put("grid.json", JSON.stringify({
-    generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    totalSlots: results.length,
-    soldCount: results.filter((s) => s.status === "sold").length,
-    slots: results
-  }), {
-    httpMetadata: {
-      contentType: "application/json",
-      cacheControl: "public, max-age=10, s-maxage=60"
-    }
-  });
+  try {
+    const { results } = await env2.DB.prepare(`
+      SELECT 
+        slot_number, 
+        owner_name, 
+        owner_message, 
+        owner_color, 
+        owner_text, 
+        image_url, 
+        link_url, 
+        link_description
+      FROM slots 
+      WHERE status = 'sold'
+    `).all();
+    const data = {
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      totalSlots: TOTAL_SLOTS,
+      soldCount: results.length,
+      soldSlots: results
+    };
+    await env2.BUCKET.put("grid.json", JSON.stringify(data), {
+      httpMetadata: {
+        contentType: "application/json",
+        cacheControl: `public, max-age=${CACHE_TTL}, s-maxage=${R2_CACHE_TTL}`
+      }
+    });
+    console.log(`Cache rebuilt with ${results.length} slots.`);
+  } catch (e) {
+    console.error("Cache rebuild critical error:", e);
+  }
 }
 __name(rebuildCdnCache, "rebuildCdnCache");
 app.get("/api/grid", async (c) => {
-  const file = await c.env.BUCKET.get("grid.json");
+  let file = await c.env.BUCKET.get("grid.json");
   if (!file) {
-    c.executionCtx.waitUntil(ensureSystemReady(c.env));
-    return c.json({ status: "initializing", message: "System is building itself. Please refresh in 3 seconds." }, 503);
+    await ensureTableExists(c.env.DB);
+    await rebuildCdnCache(c.env);
+    file = await c.env.BUCKET.get("grid.json");
   }
+  if (!file) return c.json({ error: "Initializing system..." }, 503);
   c.header("ETag", file.httpMetadata?.etag);
-  c.header("Cache-Control", "public, max-age=10, s-maxage=60");
+  c.header("Cache-Control", `public, max-age=${CACHE_TTL}, s-maxage=${R2_CACHE_TTL}`);
   c.header("Content-Type", "application/json");
   return c.body(file.body);
 });
 app.post("/api/create-order", async (c) => {
   try {
     const { slotId } = await c.req.json();
-    await c.env.DB.exec("CREATE TABLE IF NOT EXISTS slots (slot_number INTEGER PRIMARY KEY)");
-    const slot = await c.env.DB.prepare("SELECT price, status FROM slots WHERE slot_number = ?").bind(slotId).first();
-    if (!slot) return c.json({ error: "Slot not found" }, 404);
-    if (slot.status === "sold") return c.json({ error: "Slot already sold" }, 409);
+    const id = parseInt(slotId);
+    if (isNaN(id) || id < 1 || id > TOTAL_SLOTS) return c.json({ error: "Invalid ID" }, 400);
+    const existing = await c.env.DB.prepare("SELECT 1 FROM slots WHERE slot_number = ? AND status = 'sold'").first();
+    if (existing) return c.json({ error: "Slot already taken" }, 409);
+    const usdPrice = getSlotPrice(id);
+    const amountInCents = Math.round(usdPrice * 100);
     const auth = btoa(`${c.env.RAZORPAY_KEY_ID}:${c.env.RAZORPAY_KEY_SECRET}`);
-    let usdToInrRate = null;
-    const exchangeApis = [
-      {
-        name: "exchangerate-api",
-        url: "https://api.exchangerate-api.com/v4/latest/USD",
-        getRate: /* @__PURE__ */ __name((data) => data.rates.INR, "getRate")
-      },
-      {
-        name: "fixer-api",
-        url: "https://api.fixer.io/latest?base=USD&symbols=INR",
-        getRate: /* @__PURE__ */ __name((data) => data.rates.INR, "getRate")
-      },
-      {
-        name: "openexchangerates",
-        url: "https://openexchangerates.org/api/latest.json?app_id=demo&base=USD&symbols=INR",
-        getRate: /* @__PURE__ */ __name((data) => data.rates.INR, "getRate")
-      }
-    ];
-    for (const api of exchangeApis) {
-      try {
-        console.log(`Trying ${api.name}...`);
-        const exchangeResponse = await fetch(api.url, {
-          timeout: 5e3
-          // 5 second timeout
-        });
-        const exchangeData = await exchangeResponse.json();
-        const rate = api.getRate(exchangeData);
-        if (rate && rate > 0) {
-          usdToInrRate = rate;
-          console.log(`\u2705 Success with ${api.name}: 1 USD = ${usdToInrRate} INR`);
-          break;
-        }
-      } catch (error3) {
-        console.warn(`\u274C ${api.name} failed:`, error3.message);
-        continue;
-      }
-    }
-    if (!usdToInrRate) {
-      throw new Error("Exchange rate APIs unavailable. Please try again.");
-    }
-    const inrAmount = Math.round(slot.price * usdToInrRate * 100);
-    const response = await fetch("https://api.razorpay.com/v1/orders", {
+    const rzpRes = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
       headers: { "Authorization": `Basic ${auth}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        amount: inrAmount,
-        currency: "INR",
-        receipt: `slot_${slotId}_${Date.now()}`,
-        notes: {
-          slot_number: slotId,
-          usd_price: slot.price.toFixed(2),
-          inr_amount: (inrAmount / 100).toFixed(2),
-          exchange_rate: usdToInrRate.toFixed(2)
-        }
+        amount: amountInCents,
+        currency: "USD",
+        receipt: `slot_${id}_${Date.now()}`,
+        notes: { slot_number: id }
       })
     });
-    const orderData = await response.json();
-    if (orderData.error) throw new Error(orderData.error.description);
-    return c.json(orderData);
+    const order = await rzpRes.json();
+    if (order.error) throw new Error(order.error.description);
+    return c.json(order);
   } catch (e) {
-    return c.json({ error: "Order creation failed" }, 500);
+    console.error("Order Creation Error:", e);
+    return c.json({ error: "Order failed" }, 500);
   }
 });
 app.post("/api/purchase", async (c) => {
   try {
-    const { slotId, userData } = await c.req.json();
-    console.log(" TEST MODE: Skipping payment verification for slot", slotId);
-    if (!userData || userData.text.length > 100) return c.json({ error: "Text too long" }, 400);
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, slotId, userData } = await c.req.json();
+    if (c.env.RAZORPAY_KEY_SECRET) {
+      const text = `${razorpay_order_id}|${razorpay_payment_id}`;
+      const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(c.env.RAZORPAY_KEY_SECRET),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"]
+      );
+      const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(text));
+      const expected = Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      if (expected !== razorpay_signature) return c.json({ error: "Invalid Payment Signature" }, 401);
+    }
+    if (!userData || userData.text?.length > 150) return c.json({ error: "Invalid data provided" }, 400);
     const result = await c.env.DB.prepare(`
-      UPDATE slots SET 
-        status = 'sold', owner_name = ?, owner_message = ?, owner_color = ?, owner_text = ?, payment_id = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE slot_number = ? AND status = 'available'
-    `).bind(userData.name, userData.message, userData.color, userData.text, `TEST_${Date.now()}`, slotId).run();
-    if (result.meta.changes === 0) return c.json({ error: "Slot taken" }, 409);
+      INSERT INTO slots (
+        slot_number, status, owner_name, owner_message, owner_color, owner_text, 
+        payment_id, image_url, link_url, link_description, updated_at
+      )
+      VALUES (?, 'sold', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).bind(
+      slotId,
+      userData.name,
+      userData.message,
+      userData.color,
+      userData.text,
+      razorpay_payment_id || "TEST_MODE",
+      userData.imageUrl || "",
+      userData.linkUrl || "",
+      userData.linkDescription || ""
+    ).run();
+    if (!result.success) return c.json({ error: "Slot just sold!" }, 409);
     c.executionCtx.waitUntil(rebuildCdnCache(c.env));
-    return c.json({ success: true, testMode: true, message: "Data saved without payment verification" });
+    return c.json({ success: true });
   } catch (e) {
-    return c.json({ error: "Processing failed", details: e.message }, 500);
+    console.error("Purchase Error:", e);
+    if (e.message && e.message.includes("UNIQUE")) return c.json({ error: "Slot already taken" }, 409);
+    return c.json({ error: "Processing failed" }, 500);
   }
 });
+async function ensureTableExists(db) {
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS slots (
+      slot_number INTEGER PRIMARY KEY,
+      status TEXT DEFAULT 'available',
+      owner_name TEXT, 
+      owner_message TEXT, 
+      owner_color TEXT, 
+      owner_text TEXT,
+      payment_id TEXT, 
+      image_url TEXT, 
+      link_url TEXT, 
+      link_description TEXT,
+      updated_at DATETIME
+    )
+  `);
+}
+__name(ensureTableExists, "ensureTableExists");
 var index_default = app;
 
 // node_modules/wrangler/templates/middleware/middleware-ensure-req-body-drained.ts
