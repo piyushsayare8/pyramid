@@ -627,7 +627,7 @@
         <div class="controls interactive">
             <div style="display: flex; gap: 12px; margin-bottom: 8px;">
                 <button class="btn" onclick="app.resetCamera()">⟲ Reset View</button>
-                <button class="btn btn-accent" onclick="app.simulate()">⚡ Simulate</button>
+                <button class="btn btn-accent" onclick="window.location.href='simulate.html'">🚀 Go to Simulate</button>
             </div>
             <button class="toggle-btn" onclick="app.toggleExplore()">👁️ Hide/Show Explore</button>
         </div>
@@ -1464,6 +1464,11 @@
             for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) if(state.blocks[i].sold) sold.push(i);
             if(sold.length === 0) return alert("No profiles found!");
             state.selectedId = sold[Math.floor(Math.random() * sold.length)];
+            
+            // Ensure explore button stays visible when viewing profiles
+            const centerControls = document.querySelector('.center-controls');
+            centerControls.classList.remove('hidden');
+            
             openModal();
         },
         updateForm: (f, v) => {

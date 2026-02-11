@@ -6,8 +6,7 @@
     <title>The History Pyramid | True Immortal Edition</title>
     
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.x/dist/pixi.min.js"></script>
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-
+    
     <style>
         /* --- CORE THEME --- */
         :root { 
@@ -628,6 +627,7 @@
             <div style="display: flex; gap: 12px; margin-bottom: 8px;">
                 <button class="btn" onclick="app.resetCamera()">⟲ Reset View</button>
                 <button class="btn btn-accent" onclick="app.simulate()">⚡ Simulate</button>
+                <button class="btn" onclick="window.location.href='index.html'">🏠 Go to Main</button>
             </div>
             <button class="toggle-btn" onclick="app.toggleExplore()">👁️ Hide/Show Explore</button>
         </div>
@@ -736,76 +736,8 @@
     }
 
     async function loadGridData() {
-        try {
-            const data = await apiCall('/api/grid');
-            if (data.slots) {
-                data.slots.forEach(slot => {
-                    if (slot.status === 'sold') {
-                        updateBlock(slot.slot_number, {
-                            owner_name: slot.owner_name,
-                            owner_color: slot.owner_color,
-                            owner_text: slot.owner_text,
-                            message: slot.owner_message,
-                            image_url: slot.image_url,
-                            link_url: slot.link_url,
-                            link_description: slot.link_description
-                        });
-                    }
-                });
-            }
-        } catch (error) {
-            console.error('Failed to load grid data:', error);
-            showError('Failed to load pyramid data. Please refresh.');
-        }
-    }
-
-    async function createRazorpayOrder(slotId) {
-        try {
-            showLoading('Creating payment order...');
-            const order = await apiCall('/api/create-order', {
-                method: 'POST',
-                body: JSON.stringify({ slotId })
-            });
-            return order;
-        } catch (error) {
-            console.error('Failed to create order:', error);
-            let errorMessage = 'Failed to create payment order. Please try again.';
-            
-            // Show more specific error messages based on the error
-            if (error.message.includes('Payment service not configured')) {
-                errorMessage = 'Payment service is not properly configured. Please contact support.';
-            } else if (error.message.includes('Payment gateway error')) {
-                errorMessage = 'Payment gateway is temporarily unavailable. Please try again in a few minutes.';
-            } else if (error.message.includes('Unavailable')) {
-                errorMessage = 'This slot is no longer available. Please select another slot.';
-            } else if (error.message.includes('Network error')) {
-                errorMessage = 'Network connection error. Please check your internet connection and try again.';
-            }
-            
-            showError(errorMessage);
-            throw error;
-        }
-    }
-
-    async function completePurchase(paymentData) {
-        try {
-            showLoading('Completing purchase...');
-            const result = await apiCall('/api/purchase', {
-                method: 'POST',
-                body: JSON.stringify(paymentData)
-            });
-            
-            if (result.success) {
-                showSuccess('Block purchased successfully!');
-                return result;
-            } else {
-                throw new Error(result.error || 'Purchase failed');
-            }
-        } catch (error) {
-            console.error('Failed to complete purchase:', error);
-            showError('Purchase failed. Please contact support.');
-            throw error;
-        }
+        // In simulation mode, start with empty pyramid for testing
+        // No pre-populated data - users can fill it themselves
     }
 
     // =========================================================================
@@ -1464,6 +1396,11 @@
             for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) if(state.blocks[i].sold) sold.push(i);
             if(sold.length === 0) return alert("No profiles found!");
             state.selectedId = sold[Math.floor(Math.random() * sold.length)];
+            
+            // Ensure explore button stays visible when viewing profiles
+            const centerControls = document.querySelector('.center-controls');
+            centerControls.classList.remove('hidden');
+            
             openModal();
         },
         updateForm: (f, v) => {
@@ -1477,39 +1414,21 @@
                 document.getElementById('link-desc-counter').innerText = `${v.length}/100`;
             }
         },
-        handleImageUpload: async (input) => {
+        handleImageUpload: (input) => {
             const file = input.files[0];
             if (file) {
                 if (file.size > 5 * 1024 * 1024) return alert('File size must be less than 5MB');
                 if (!file.type.startsWith('image/')) return alert('Please upload an image file');
                 
                 // Show uploading status
-                input.nextElementSibling.innerHTML = `<div style="color: var(--accent)">⏳ Uploading...</div>`;
+                input.nextElementSibling.innerHTML = `<div style="color: var(--accent)">⏳ Processing...</div>`;
                 
-                try {
-                    const formData = new FormData();
-                    formData.append('image', file);
-                    
-                    const response = await fetch('/api/upload-image', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        formData.imageUrl = result.imageUrl;
-                        input.nextElementSibling.innerHTML = `<div style="color: var(--gold)">✓ ${file.name}</div><div style="font-size: 0.8rem; color: #666; margin-top: 5px;">Change photo</div>`;
-                    } else {
-                        throw new Error(result.error || 'Upload failed');
-                    }
-                } catch (e) {
-                    console.error('Upload error:', e);
-                    alert('Image upload failed: ' + e.message);
-                    // Reset file input
-                    input.value = '';
-                    input.nextElementSibling.innerHTML = `<div>📷 Upload Photo</div><div style="font-size: 0.7rem; color: #666; margin-top: 5px;">Max 5MB</div>`;
-                }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    formData.imageUrl = e.target.result;
+                    input.nextElementSibling.innerHTML = `<div style="color: var(--gold)">✓ ${file.name}</div><div style="font-size: 0.8rem; color: #666; margin-top: 5px;">Change photo</div>`;
+                };
+                reader.readAsDataURL(file);
             }
         },
         setColor: (c, el) => {
@@ -1522,67 +1441,33 @@
         },
         submit: async () => {
             if(!formData.name) return showError("Name is required");
-            if(!formData.text) return showError("Text is required"); // NEW LINE ADDED HERE
+            if(!formData.text) return showError("Text is required");
             
             try {
-                const block = state.blocks[state.selectedId];
-                const order = await createRazorpayOrder(state.selectedId);
+                // Simulate direct purchase without payment
+                showLoading('Processing purchase...');
                 
-                const options = {
-                    key: order.key, // Use dynamic key from backend
-                    amount: order.amount,
-                    currency: order.currency || 'USD', // Use currency from backend response
-                    name: 'The History Pyramid',
-                    description: `Block #${state.selectedId} | $${order.notes?.usd_price || '0.00'} USD`,
-                    order_id: order.id,
-                    handler: async function (response) {
-                        try {
-                            await completePurchase({
-                                slotId: state.selectedId,
-                                razorpay_order_id: response.razorpay_order_id,
-                                razorpay_payment_id: response.razorpay_payment_id,
-                                razorpay_signature: response.razorpay_signature,
-                                userData: {
-                                    name: formData.name,
-                                    message: formData.message || "Owned forever.",
-                                    color: formData.color,
-                                    text: formData.text.substring(0, 150),
-                                    imageUrl: formData.imageUrl,
-                                    linkUrl: formData.linkUrl,
-                                    linkDescription: formData.linkDescription
-                                }
-                            });
-                            
-                            updateBlock(state.selectedId, {
-                                owner_name: formData.name,
-                                owner_color: formData.color,
-                                owner_text: formData.text.substring(0, 150),
-                                message: formData.message || "Owned forever.",
-                                image_url: formData.imageUrl,
-                                link_url: formData.linkUrl,
-                                link_description: formData.linkDescription
-                            });
-                            
-                            openModal();
-                        } catch (error) {
-                            showError('Payment verification failed. Please contact support.');
-                        }
-                    },
-                    modal: {
-                        ondismiss: function() {
-                            hideLoading();
-                        }
-                    },
-                    theme: {
-                        color: '#FFD700'
-                    }
-                };
+                // Simulate processing delay
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 
-                const rzp = new Razorpay(options);
-                rzp.open();
+                // Update block directly
+                updateBlock(state.selectedId, {
+                    owner_name: formData.name,
+                    owner_color: formData.color,
+                    owner_text: formData.text.substring(0, 150),
+                    message: formData.message || "Owned forever.",
+                    image_url: formData.imageUrl,
+                    link_url: formData.linkUrl,
+                    link_description: formData.linkDescription
+                });
+                
+                hideLoading();
+                showSuccess('Block purchased successfully!');
+                openModal();
                 
             } catch (error) {
                 console.error('Purchase error:', error);
+                showError('Purchase failed. Please try again.');
             }
         }
     };
