@@ -76,11 +76,13 @@
         /* Premium Profile Override */
         .modal.premium { 
             max-width: 450px; 
-            min-height: 75vh;
+            max-height: 90vh;
             background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
             border: 2px solid #FFD700;
             box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 30px rgba(255,215,0,0.2);
-            overflow: visible;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         /* --- BUY MODE LAYOUT --- */
@@ -298,6 +300,7 @@
             content: ''; position: absolute; inset: 0;
             background-image: radial-gradient(circle at 30% 50%, rgba(255,255,255,0.8) 0%, transparent 50%);
             mix-blend-mode: overlay;
+            border-radius: 18px 18px 0 0;
         }
         
         .prof-header-value { position: absolute; top: 15px; left: 15px; background: rgba(255,255,255,0.95); color: #333; padding: 8px 16px; border-radius: 20px; font-weight: 700; font-size: 0.9rem; border: 2px solid #FFD700; box-shadow: 0 4px 15px rgba(255,215,0,0.2); }
@@ -310,11 +313,12 @@
             display: flex; 
             flex-direction: column; 
             align-items: center; 
-            margin-top: -60px; 
+            margin-top: -50px; 
             position: relative; 
             z-index: 2;
-            height: calc(75vh - 140px);
-            overflow: visible;
+            flex: 1;
+            overflow: hidden;
+            min-height: 0;
         }
         
         .prof-avatar { 
@@ -324,7 +328,8 @@
             border: 4px solid #FFD700; 
             box-shadow: 0 10px 30px rgba(255,215,0,0.3), 0 0 20px rgba(255,215,0,0.2);
             object-fit: cover;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
+            flex-shrink: 0;
         }
         
         .prof-name { font-family: 'Georgia', serif; font-size: 1.5rem; color: #333; margin: 0; text-align: center; line-height: 1.2; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -341,9 +346,11 @@
 
         .prof-message-container { 
             width: 100%; 
-            max-height: 250px;
-            margin: 20px 0;
+            max-height: 200px;
+            margin: 15px 0;
             position: relative;
+            overflow-y: auto;
+            flex-shrink: 1;
         }
         .prof-message { 
             width: 100%; 
@@ -356,29 +363,13 @@
             font-style: italic; color: #333; line-height: 1.6; font-size: 0.95rem;
             position: relative;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            max-height: 250px;
-            overflow-y: auto;
+            height: auto;
+            overflow: hidden;
             word-wrap: break-word;
-            scrollbar-width: thin;
-            scrollbar-color: #FFD700 rgba(255,215,0,0.2);
-        }
-        .prof-message::-webkit-scrollbar {
-            width: 8px;
-        }
-        .prof-message::-webkit-scrollbar-track {
-            background: rgba(255,215,0,0.1);
-            border-radius: 4px;
-        }
-        .prof-message::-webkit-scrollbar-thumb {
-            background: #FFD700;
-            border-radius: 4px;
-        }
-        .prof-message::-webkit-scrollbar-thumb:hover {
-            background: #FFA500;
         }
         .prof-message::before { content: '"'; font-family: 'Georgia', serif; font-size: 3rem; position: absolute; top: -10px; left: 10px; color: #FFD700; opacity: 0.6; }
         
-        .prof-action-area { width: 100%; margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+        .prof-action-area { width: 100%; margin-top: 15px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
         .prof-link-desc { text-align: center; font-size: 0.8rem; color: #666; margin-bottom: 8px; }
         .prof-btn-visit { 
             width: 100%; padding: 14px; 
@@ -399,6 +390,214 @@
             .modal-body { flex-direction: column; padding: 20px; } 
             .col-right { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 20px; }
             .preview-box { height: 200px; }
+        }
+
+        /* Mobile Optimizations */
+        @media(max-width: 768px) {
+            /* Header adjustments */
+            .header { 
+                top: 10px; left: 10px; 
+                padding: 12px 16px; 
+                border-radius: 10px; 
+                max-width: calc(100% - 120px);
+            }
+            .header h1 { font-size: 1.4rem; }
+            .subtitle { font-size: 0.6rem; letter-spacing: 1.5px; }
+
+            /* Sales counter - move to top right to avoid header overlap */
+            .sales-counter { 
+                top: 10px; right: 10px; left: auto; 
+                padding: 8px 12px; 
+                min-width: 100px; 
+                max-width: 140px;
+            }
+            .sales-label { font-size: 0.55rem; }
+            .sales-stats { font-size: 0.85rem; }
+
+            /* Controls - move below header and sales counter */
+            .controls { 
+                top: 70px; right: 10px; 
+                gap: 6px; 
+            }
+            .btn { 
+                padding: 6px 12px; 
+                font-size: 0.7rem; 
+                border-radius: 6px; 
+            }
+            .toggle-btn { 
+                padding: 5px 10px; 
+                font-size: 0.65rem; 
+                margin-bottom: 5px; 
+            }
+
+            /* Center profile button */
+            .center-controls { bottom: 70px; }
+            .profile-btn { 
+                padding: 10px 20px; 
+                font-size: 0.7rem; 
+                border-radius: 35px; 
+            }
+
+            /* Instructions - move up to avoid profile button overlap */
+            .ui-layer > div:last-child { 
+                bottom: 15px; right: 10px; 
+                font-size: 0.5rem; 
+                padding: 5px 8px; 
+                border-radius: 5px; 
+            }
+
+            /* Modal adjustments */
+            .modal { 
+                width: 98%; 
+                max-width: none; 
+                margin: 10px; 
+                border-radius: 15px; 
+            }
+            .modal.premium { 
+                max-width: none; 
+                max-height: 95vh; 
+            }
+
+            /* Profile modal mobile */
+            .prof-cover { height: 120px; }
+            .prof-header-value { 
+                top: 10px; left: 10px; 
+                padding: 6px 12px; 
+                font-size: 0.8rem; 
+                border-radius: 15px; 
+            }
+            .prof-close { 
+                top: 10px; right: 10px; 
+                width: 28px; height: 28px; 
+                font-size: 1rem; 
+            }
+            .prof-content { 
+                padding: 0 20px 20px 20px; 
+                margin-top: -40px; 
+            }
+            .prof-avatar { 
+                width: 100px; height: 100px; 
+                margin-bottom: 15px; 
+            }
+            .prof-name { font-size: 1.3rem; }
+            .prof-stats-grid { 
+                grid-template-columns: 1fr 1fr; 
+                gap: 8px; 
+                margin: 20px 0; 
+            }
+            .stat-card { padding: 10px 4px; }
+            .stat-val { font-size: 0.95rem; }
+            .stat-label { font-size: 0.55rem; }
+            .prof-message-container { 
+                max-height: 150px; 
+                margin: 12px 0; 
+            }
+            .prof-message { 
+                padding: 15px; 
+                font-size: 0.85rem; 
+            }
+            .prof-btn-visit { 
+                padding: 12px; 
+                font-size: 0.8rem; 
+            }
+
+            /* Purchase modal mobile */
+            .modal-header { 
+                height: 120px; 
+                padding: 15px 20px; 
+                border-radius: 15px 15px 0 0; 
+            }
+            .modal-header-value { 
+                top: 10px; left: 10px; 
+                padding: 6px 12px; 
+                font-size: 0.8rem; 
+                border-radius: 15px; 
+            }
+            .close-icon { 
+                top: 10px; right: 10px; 
+                width: 28px; height: 28px; 
+                font-size: 1rem; 
+            }
+            .modal-header h2 { font-size: 1.3rem; }
+            .modal-body { 
+                padding: 20px; 
+                max-height: calc(95vh - 160px); 
+            }
+            .input-group label { font-size: 0.65rem; }
+            .input-group input, .input-group textarea { 
+                padding: 12px 16px; 
+                font-size: 0.9rem; 
+            }
+            .modal-footer { 
+                padding: 15px 20px; 
+                border-radius: 0 0 15px 15px; 
+            }
+            .confirm-btn { 
+                padding: 12px 28px; 
+                font-size: 0.8rem; 
+            }
+        }
+
+        /* Small mobile devices */
+        @media(max-width: 480px) {
+            .header { 
+                top: 8px; left: 8px; 
+                padding: 10px 12px; 
+                max-width: calc(100% - 100px);
+            }
+            .header h1 { font-size: 1.2rem; }
+            .subtitle { font-size: 0.55rem; letter-spacing: 1px; }
+            
+            .sales-counter { 
+                top: 8px; right: 8px; left: auto; 
+                padding: 6px 10px; 
+                min-width: 80px; 
+                max-width: 100px;
+            }
+            .sales-label { font-size: 0.5rem; }
+            .sales-stats { font-size: 0.75rem; }
+            
+            .controls { 
+                top: 60px; right: 8px; 
+                gap: 4px; 
+            }
+            .btn { 
+                padding: 5px 10px; 
+                font-size: 0.65rem; 
+                border-radius: 5px; 
+            }
+            .toggle-btn { 
+                padding: 4px 8px; 
+                font-size: 0.6rem; 
+                margin-bottom: 4px; 
+            }
+            
+            .center-controls { bottom: 60px; }
+            .profile-btn { 
+                padding: 8px 16px; 
+                font-size: 0.65rem; 
+                border-radius: 30px; 
+            }
+            
+            .ui-layer > div:last-child { 
+                bottom: 10px; right: 8px; 
+                font-size: 0.45rem; 
+                padding: 4px 6px; 
+                border-radius: 4px; 
+            }
+            
+            .modal.premium { max-height: 98vh; }
+            .prof-avatar { width: 90px; height: 90px; }
+            .prof-name { font-size: 1.2rem; }
+            .prof-stats-grid { grid-template-columns: 1fr; }
+            .stat-card { padding: 8px; }
+            
+            .modal-header { height: 100px; padding: 12px 16px; }
+            .modal-body { padding: 16px; }
+            .input-group input, .input-group textarea { 
+                padding: 10px 14px; 
+                font-size: 0.85rem; 
+            }
         }
     </style>
 </head>
@@ -466,7 +665,7 @@
         MIN_ZOOM: 0.005,
         FRICTION: 0.92, // Increased for smoother glide
         COLORS: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8'],
-        API_BASE: 'https://pyramid-api.piyushsayare8.workers.dev',
+        API_BASE: '', // Empty for same-origin requests (frontend + API on same worker)
         RETRY_ATTEMPTS: 3,
         RETRY_DELAY: 1000
     };
@@ -570,7 +769,20 @@
             return order;
         } catch (error) {
             console.error('Failed to create order:', error);
-            showError('Failed to create payment order. Please try again.');
+            let errorMessage = 'Failed to create payment order. Please try again.';
+            
+            // Show more specific error messages based on the error
+            if (error.message.includes('Payment service not configured')) {
+                errorMessage = 'Payment service is not properly configured. Please contact support.';
+            } else if (error.message.includes('Payment gateway error')) {
+                errorMessage = 'Payment gateway is temporarily unavailable. Please try again in a few minutes.';
+            } else if (error.message.includes('Unavailable')) {
+                errorMessage = 'This slot is no longer available. Please select another slot.';
+            } else if (error.message.includes('Network error')) {
+                errorMessage = 'Network connection error. Please check your internet connection and try again.';
+            }
+            
+            showError(errorMessage);
             throw error;
         }
     }
@@ -1265,17 +1477,39 @@
                 document.getElementById('link-desc-counter').innerText = `${v.length}/100`;
             }
         },
-        handleImageUpload: (input) => {
+        handleImageUpload: async (input) => {
             const file = input.files[0];
             if (file) {
                 if (file.size > 5 * 1024 * 1024) return alert('File size must be less than 5MB');
                 if (!file.type.startsWith('image/')) return alert('Please upload an image file');
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    formData.imageUrl = e.target.result;
-                    input.nextElementSibling.innerHTML = `<div style="color: var(--gold)">✓ ${file.name}</div><div style="font-size: 0.8rem; color: #666; margin-top: 5px;">Change photo</div>`;
-                };
-                reader.readAsDataURL(file);
+                
+                // Show uploading status
+                input.nextElementSibling.innerHTML = `<div style="color: var(--accent)">⏳ Uploading...</div>`;
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('image', file);
+                    
+                    const response = await fetch('/api/upload-image', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        formData.imageUrl = result.imageUrl;
+                        input.nextElementSibling.innerHTML = `<div style="color: var(--gold)">✓ ${file.name}</div><div style="font-size: 0.8rem; color: #666; margin-top: 5px;">Change photo</div>`;
+                    } else {
+                        throw new Error(result.error || 'Upload failed');
+                    }
+                } catch (e) {
+                    console.error('Upload error:', e);
+                    alert('Image upload failed: ' + e.message);
+                    // Reset file input
+                    input.value = '';
+                    input.nextElementSibling.innerHTML = `<div>📷 Upload Photo</div><div style="font-size: 0.7rem; color: #666; margin-top: 5px;">Max 5MB</div>`;
+                }
             }
         },
         setColor: (c, el) => {
@@ -1295,11 +1529,11 @@
                 const order = await createRazorpayOrder(state.selectedId);
                 
                 const options = {
-                    key: 'rzp_test_SC2XaQER0g2Q6f', // Replace with production key in production
+                    key: order.key, // Use dynamic key from backend
                     amount: order.amount,
-                    currency: 'USD',
+                    currency: order.currency || 'USD', // Use currency from backend response
                     name: 'The History Pyramid',
-                    description: `Block #${state.selectedId} | $${(order.amount / 100).toFixed(2)} USD`,
+                    description: `Block #${state.selectedId} | $${order.notes?.usd_price || '0.00'} USD`,
                     order_id: order.id,
                     handler: async function (response) {
                         try {
@@ -1329,7 +1563,7 @@
                                 link_description: formData.linkDescription
                             });
                             
-                            closeModal();
+                            openModal();
                         } catch (error) {
                             showError('Payment verification failed. Please contact support.');
                         }
@@ -1355,7 +1589,7 @@
 
     function getUserStats(ownerName) {
         let count = 0;
-// ... (rest of the code remains the same)
+        let totalValue = 0;
         for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) {
             if(state.blocks[i] && state.blocks[i].sold && state.blocks[i].data && state.blocks[i].data.owner_name === ownerName) {
                 count++;
@@ -1386,14 +1620,13 @@
                 <div class="prof-cover">
                     <button class="prof-close" onclick="closeModal()">✕</button>
                     <div class="prof-header-value">Block Value: $${b.price.toFixed(2)}</div>
-                    <div class="prof-purchase-count">Blocks Owned: ${stats.count}</div>
-                </div>
+                                    </div>
                 <div class="prof-content">
                     <img src="${img}" class="prof-avatar">
                     <h2 class="prof-name">${d.owner_name}</h2>
 
                     <div class="prof-message-container">
-                        <div class="prof-message">${d.message}</div>
+                        <div class="prof-message">${d.message || 'No message provided'}</div>
                     </div>
 
                     ${d.link_url ? `

@@ -1,0 +1,38 @@
+{
+	"name": "immortal-pyramid",
+	"main": "src/worker.js",
+	"compatibility_date": "2026-02-10",
+	// 1. HOSTING (Auto-Serve public/ folder)
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS"
+	},
+	// 2. DATABASE (Auto-create/use by name)
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "pyramid-db",
+			"database_id": "fe951a16-2faa-4c7d-9c1b-69037d873bb0"
+		}
+	],
+	// 3. STORAGE (Auto-create/use by name)
+	"r2_buckets": [
+		{
+			"binding": "BUCKET",
+			"bucket_name": "pyramid-files"
+		}
+	],
+	// 4. CACHE (Auto-create/use by name)
+	"kv_namespaces": [
+		{
+			"binding": "CACHE",
+			"id": "bfe3dd1033fd4ea99844a880c51cd9a9"
+		}
+	],
+	// 5. SECRETS (Your Razorpay keys)
+	"vars": {
+		"RAZORPAY_KEY_ID": "rzp_test_SEr0ZoNEEjJDFb",
+		"RAZORPAY_KEY_SECRET": "4Yf9aSLIl85jCrOqLrOSIUp7",
+		"NODE_ENV": "production"
+	}
+}
