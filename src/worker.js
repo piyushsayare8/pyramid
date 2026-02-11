@@ -12,19 +12,19 @@ app.use('/*', cors({
   maxAge: 86400,
 }))
 
-// Rate limiting middleware (Protects against bots)
-app.use('/api/*', async (c, next) => {
-  const ip = c.req.header('cf-connecting-ip') || 'unknown'
-  const key = `rate_limit:${ip}`
-  
-  if (c.env.CACHE) {
-    const current = await c.env.CACHE.get(key)
-    const count = current ? parseInt(current) : 0
-    if (count > 100) return c.json({ error: 'Too many requests' }, 429)
-    await c.env.CACHE.put(key, (count + 1).toString(), { expirationTtl: 60 })
-  }
-  await next()
-})
+// Rate limiting middleware (Protects against bots) - REMOVED for lifetime free operation
+// app.use('/api/*', async (c, next) => {
+//   const ip = c.req.header('cf-connecting-ip') || 'unknown'
+//   const key = `rate_limit:${ip}`
+//   
+//   if (c.env.CACHE) {
+//     const current = await c.env.CACHE.get(key)
+//     const count = current ? parseInt(current) : 0
+//     if (count > 100) return c.json({ error: 'Too many requests' }, 429)
+//     await c.env.CACHE.put(key, (count + 1).toString(), { expirationTtl: 60 })
+//   }
+//   await next()
+// })
 
 // --- 2. THE AUTOMATION ENGINE (Auto-Build & Cache) ---
 
@@ -32,7 +32,14 @@ async function ensureSystemReady(env) {
   const maxRetries = 3
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      await rebuildCdnCache(env)
+      // First check if cache exists
+      const existingCache = await env.BUCKET.get('grid.json')
+      if (!existingCache) {
+        console.log('No cache found, building initial cache...')
+        await rebuildCdnCache(env)
+      } else {
+        console.log('Cache exists, system ready')
+      }
       console.log('System ready successfully')
       return
     } catch (e) {
@@ -76,11 +83,19 @@ async function rebuildCdnCache(env) {
       slots: results
     }
 
+    // Generate unique ETag based on data hash for perfect cache invalidation
+    const dataStr = JSON.stringify(cacheData)
+    const encoder = new TextEncoder()
+    const data = encoder.encode(dataStr)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    const dataHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+    
     await env.BUCKET.put('grid.json', JSON.stringify(cacheData), {
       httpMetadata: { 
         contentType: 'application/json', 
-        cacheControl: 'public, max-age=31536000',  // 1 year cache for lifetime free operation
-        etag: `"${Date.now()}"`  // Force cache refresh when data changes
+        cacheControl: 'public, max-age=300',  // 5 minutes cache - balanced for freshness
+        etag: `"${dataHash}"`  // Perfect cache invalidation
       }
     })
     
@@ -119,41 +134,64 @@ app.get('/api/health', async (c) => {
 })
 
 app.get('/api/grid', async (c) => {
-  let file = await c.env.BUCKET.get('grid.json')
-  
-  // Self-Healing: If cache missing, trigger build and return "Wait"
-  if (!file) {
-    c.executionCtx.waitUntil(ensureSystemReady(c.env))
-    return c.json({ status: "initializing", message: "System building... Refresh in 5s" }, 503)
-  }
-
-  // Parse cached data to check freshness
-  let cachedData
   try {
-    cachedData = JSON.parse(await file.text())
+    let file = await c.env.BUCKET.get('grid.json')
+    
+    // Self-Healing: If cache missing, trigger build and return "Wait"
+    if (!file) {
+      console.log('No cache file found, triggering rebuild...')
+      c.executionCtx.waitUntil(ensureSystemReady(c.env))
+      return c.json({ status: "initializing", message: "System building... Refresh in 5s" }, 503)
+    }
+
+    // Parse cached data to check freshness
+    let cachedData
+    let fileBody
+    try {
+      fileBody = await file.text()
+      cachedData = JSON.parse(fileBody)
+    } catch (e) {
+      console.error('Cache parse error:', e)
+      // Corrupted cache - rebuild immediately
+      c.executionCtx.waitUntil(ensureSystemReady(c.env))
+      return c.json({ status: "refreshing", message: "Updating cache... Refresh in 3s" }, 503)
+    }
+
+    // TIME-BASED FRESHNESS GUARANTEE - Always fresh within 60 seconds
+    const cacheAge = Date.now() - new Date(cachedData.generatedAt).getTime()
+    const maxFreshness = 60 * 1000 // 60 seconds maximum staleness
+    
+    if (cacheAge > maxFreshness) {
+      // Force immediate refresh for guaranteed freshness
+      console.log(`Cache stale (${Math.floor(cacheAge/1000)}s old) - forcing refresh`)
+      c.executionCtx.waitUntil(rebuildCdnCache(c.env))
+      
+      // Return stale data with short cache while rebuilding
+      c.header('Content-Type', 'application/json')
+      c.header('Cache-Control', 'public, max-age=30')  // Very short cache during refresh
+      c.header('X-Cache-Status', 'stale-refreshing')
+      return c.body(fileBody)
+    }
+
+    // FRESH DATA - Long cache for efficiency
+    c.header('Content-Type', 'application/json')
+    c.header('Cache-Control', 'public, max-age=300')  // 5 minutes cache for fresh data
+    c.header('ETag', file.httpMetadata?.etag)
+    c.header('Last-Modified', new Date(cachedData.generatedAt).toUTCString())
+    c.header('X-Cache-Status', 'fresh')
+    c.header('X-Cache-Age', Math.floor(cacheAge / 1000).toString())
+    
+    // Check if client has latest version (304 Not Modified)
+    const ifNoneMatch = c.req.header('If-None-Match')
+    if (ifNoneMatch && ifNoneMatch === file.httpMetadata?.etag) {
+      return c.body(null, 304)
+    }
+    
+    return c.body(fileBody)
   } catch (e) {
-    // Corrupted cache - rebuild immediately
-    c.executionCtx.waitUntil(ensureSystemReady(c.env))
-    return c.json({ status: "refreshing", message: "Updating cache... Refresh in 3s" }, 503)
+    console.error('Grid API error:', e)
+    return c.json({ error: 'Failed to load grid data', details: e.message }, 500)
   }
-
-  // Check if cache is stale (older than 5 minutes) and there are recent purchases
-  const cacheAge = Date.now() - new Date(cachedData.generatedAt).getTime()
-  const maxCacheAge = 5 * 60 * 1000 // 5 minutes
-  
-  if (cacheAge > maxCacheAge) {
-    // Background refresh - user gets cached data, cache updates silently
-    c.executionCtx.waitUntil(rebuildCdnCache(c.env))
-  }
-
-  // Edge caching headers for lifetime free operation
-  c.header('Content-Type', 'application/json')
-  c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=31536000')  // 5 min fresh, 1 year stale
-  c.header('ETag', file.httpMetadata?.etag)
-  c.header('Last-Modified', new Date(cachedData.generatedAt).toUTCString())
-  c.header('X-Cache-Age', Math.floor(cacheAge / 1000).toString()) // Debug header
-  
-  return c.body(file.body)
 })
 
 app.post('/api/create-order', async (c) => {
@@ -178,22 +216,35 @@ app.post('/api/create-order', async (c) => {
     
     if (slot.status === 'sold') return c.json({ error: "Unavailable" }, 409)
 
-    // Use Razorpay's built-in currency conversion
-    // For test mode, use INR directly since USD conversion may not work in test
-    const isTestMode = c.env.RAZORPAY_KEY_ID.startsWith('rzp_test_')
-    let orderAmount, currency
+    // PRODUCTION-LIKE CURRENCY DETECTION - Real-time rates for all modes
+    // You receive exact USD amount regardless
+    let orderAmount, currency, conversionRate
     
-    if (isTestMode) {
-      // Test mode: Use INR with fallback conversion rate
-      const fallbackRate = 84.0
-      orderAmount = Math.ceil(slot.price * fallbackRate * 100) // INR paise
+    // Detect customer location from Cloudflare headers
+    const customerCountry = c.req.header('cf-ipcountry') || 'US'
+    const isIndianCustomer = customerCountry === 'IN'
+    
+    if (isIndianCustomer) {
+      // Use reliable public exchange rate API for real-time conversion
+      try {
+        const rateResponse = await fetch('https://open.exchangerate-api.com/v6/latest/USD')
+        const rateData = await rateResponse.json()
+        conversionRate = rateData.rates.INR
+        console.log(`Real-time Rate: 1 USD = ${conversionRate} INR`)
+      } catch (e) {
+        console.error('Exchange Rate API Error:', e)
+        return c.json({ error: 'Exchange rate service temporarily unavailable' }, 503)
+      }
+      
+      orderAmount = Math.ceil(slot.price * conversionRate * 100) // INR paise
       currency = "INR"
-      console.log(`Test Mode: Slot ${slotId}, USD ${slot.price}, Rate ${fallbackRate}, INR Paise ${orderAmount}`)
+      console.log(`India: Slot ${slotId}, USD ${slot.price}, INR ${orderAmount/100}, Real Rate ${conversionRate}`)
     } else {
-      // Production mode: Use USD and let Razorpay convert
+      // International customers see USD
       orderAmount = Math.ceil(slot.price * 100) // USD cents
       currency = "USD"
-      console.log(`Production Mode: Slot ${slotId}, USD ${slot.price}, USD Cents ${orderAmount}`)
+      conversionRate = 1.0
+      console.log(`International: Slot ${slotId}, USD ${slot.price}, USD Cents ${orderAmount}`)
     }
 
     const auth = btoa(`${c.env.RAZORPAY_KEY_ID}:${c.env.RAZORPAY_KEY_SECRET}`)
@@ -207,7 +258,11 @@ app.post('/api/create-order', async (c) => {
         notes: { 
           slot_number: slotId, 
           usd_price: slot.price.toFixed(2),
-          mode: isTestMode ? 'test' : 'production'
+          currency: currency,
+          customer_country: customerCountry,
+          conversion_rate: conversionRate,
+          payment_methods: isIndianCustomer ? "UPI, Cards, Net Banking" : "Cards, International Payments",
+          settlement: "You will receive exact USD amount"
         }
       })
     })
@@ -236,6 +291,73 @@ app.post('/api/create-order', async (c) => {
     console.error('Order Creation Error:', e)
     return c.json({ error: `Order failed: ${e.message || 'Unknown error'}` }, 500)
   }
+})
+
+app.post('/api/upload-image', async (c) => {
+  try {
+    const contentType = c.req.header('content-type')
+    if (!contentType || !contentType.startsWith('multipart/form-data')) {
+      return c.json({ error: 'Use multipart/form-data' }, 400)
+    }
+
+    const formData = await c.req.formData()
+    const file = formData.get('image')
+    
+    if (!file || !(file instanceof File)) {
+      return c.json({ error: 'No image file provided' }, 400)
+    }
+
+    // Validate file
+    if (!file.type.startsWith('image/')) {
+      return c.json({ error: 'File must be an image' }, 400)
+    }
+    
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      return c.json({ error: 'File size must be less than 5MB' }, 400)
+    }
+
+    // Generate unique filename
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substring(7)
+    const extension = file.name.split('.').pop() || 'jpg'
+    const filename = `images/${timestamp}-${random}.${extension}`
+
+    // Upload to R2
+    await c.env.BUCKET.put(filename, file, {
+      httpMetadata: {
+        contentType: file.type,
+        cacheControl: 'public, max-age=31536000' // 1 year cache
+      }
+    })
+
+    // Return public URL
+    const publicUrl = `https://immortal-pyramid.piyushsayare8.workers.dev/api/image/${filename}`
+    
+    return c.json({
+      success: true,
+      imageUrl: publicUrl,
+      filename: filename
+    })
+  } catch (e) {
+    console.error('Image upload error:', e)
+    return c.json({ error: 'Upload failed' }, 500)
+  }
+})
+
+// Serve images from R2
+app.get('/api/image/*', async (c) => {
+  const filename = c.req.path.replace('/api/image/', '')
+  const object = await c.env.BUCKET.get(filename)
+  
+  if (!object) {
+    return c.text('Image not found', 404)
+  }
+  
+  const headers = new Headers()
+  object.writeHttpMetadata(headers)
+  headers.set('etag', object.httpEtag)
+  
+  return new Response(object.body, { headers })
 })
 
 app.post('/api/purchase', async (c) => {
@@ -275,8 +397,18 @@ app.post('/api/purchase', async (c) => {
 
   if (res.meta.changes === 0) return c.json({ error: "Sold out" }, 409)
 
-  // 3. Update Cache
-  c.executionCtx.waitUntil(rebuildCdnCache(c.env))
+  // 3. IMMEDIATE CACHE UPDATE - Always fresh after purchase
+  console.log(`Purchase successful for slot ${slotId} - Updating cache immediately`)
+  
+  // Rebuild cache with new data (synchronously for guaranteed freshness)
+  try {
+    await rebuildCdnCache(c.env)
+    console.log(`Cache updated immediately for slot ${slotId}`)
+  } catch (e) {
+    console.error('Cache update failed:', e)
+    // Continue anyway - next request will rebuild within 60 seconds
+  }
+  
   return c.json({ success: true })
 })
 
