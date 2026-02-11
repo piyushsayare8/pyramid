@@ -1509,15 +1509,9 @@
                 const options = {
                     key: order.key, // Use dynamic key from backend
                     amount: order.amount,
-<<<<<<< HEAD:index.html
-                    currency: 'USD',
-                    name: 'The History Pyramid',
-                    description: `Block #${state.selectedId} | $${(order.amount / 100).toFixed(2)} USD`,
-=======
                     currency: order.currency || 'USD', // Use currency from backend response
                     name: 'The History Pyramid',
                     description: `Block #${state.selectedId} | $${order.notes?.usd_price || '0.00'} USD`,
->>>>>>> 9cd90fc:public/index.html
                     order_id: order.id,
                     handler: async function (response) {
                         try {
