@@ -34,5 +34,10 @@
 		"RAZORPAY_KEY_ID": "rzp_test_SEr0ZoNEEjJDFb",
 		"RAZORPAY_KEY_SECRET": "4Yf9aSLIl85jCrOqLrOSIUp7",
 		"NODE_ENV": "production"
+	},
+	"env": {
+		"production": {
+			"NODE_ENV": "production"
+		}
 	}
 }
