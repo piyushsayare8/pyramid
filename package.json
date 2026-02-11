@@ -6,21 +6,25 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy-api": "wrangler deploy",
+    "deploy": "node deploy-simple.js",
     "deploy-frontend": "wrangler pages deploy . --project-name=pyramid-5050",
+    "setup": "node setup-production.js",
     "build": "echo 'No build step needed - static files are ready'",
     "type-check": "tsc --noEmit",
     "lint": "echo 'Linting completed'",
-    "preview": "wrangler pages dev ."
+    "preview": "wrangler pages dev .",
+    "health": "curl -s https://pyramid-single-file.piyushsayare8.workers.dev/health | jq"
   },
   "dependencies": {
+    "dotenv": "^17.2.4",
     "hono": "^4.6.0",
     "pixi.js": "^8.16.0",
     "three": "^0.182.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260131.0",
-    "wrangler": "^4.62.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "wrangler": "^4.62.0"
   },
   "description": "The History Pyramid - 5,050 Blocks of Digital History",
   "main": "index.html",
