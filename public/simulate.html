@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>The History Pyramid | True Immortal Edition</title>
+    <title>The Pyramid of Emotions | True Immortal Edition</title>
     
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.x/dist/pixi.min.js"></script>
     
@@ -28,20 +28,24 @@
         .interactive { pointer-events: auto; }
         
         /* --- HUD ELEMENTS --- */
-        .header { position: absolute; top: 30px; left: 30px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,249,250,0.95)); padding: 20px 30px; border-radius: 15px; border: 2px solid #FFD700; box-shadow: 0 8px 30px rgba(255,215,0,0.3); }
-        .header h1 { font-family: 'Georgia', serif; font-size: 2.2rem; background: linear-gradient(135deg, #FFD700, #FFA500, #FF69B4, #00CED1, #9370DB); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; text-fill-color: transparent; margin: 0; letter-spacing: 1px; }
-        .subtitle { font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 3px; margin-top: 5px; font-weight: 700; }
+        .header { position: absolute; top: 30px; left: 30px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,249,250,0.95)); padding: 10px 20px; border-radius: 15px; border: 2px solid #FFD700; box-shadow: 0 8px 30px rgba(255,215,0,0.3); }
+        .header h1 { font-family: 'Georgia', serif; font-size: 1.4rem; background: linear-gradient(135deg, #FFD700, #FFA500, #FF69B4, #00CED1, #9370DB); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; text-fill-color: transparent; margin: 0; letter-spacing: 1px; }
+        .subtitle { font-size: 0.55rem; color: #666; text-transform: uppercase; letter-spacing: 3px; margin-top: 3px; font-weight: 700; }
         
-        .controls { position: absolute; top: 30px; right: 30px; display: flex; gap: 12px; flex-direction: column; align-items: flex-end; }
-        .btn { background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(248,249,250,0.9)); border: 2px solid rgba(255,215,0,0.3); color: #333; padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); font-weight: 600; backdrop-filter: blur(10px); font-size: 0.85rem; box-shadow: 0 4px 15px rgba(255,215,0,0.1); }
-        .btn:hover { border-color: #FFD700; color: #333; background: linear-gradient(135deg, #FFD700, #FFA500); transform: translateY(-2px); box-shadow: 0 8px 25px rgba(255,215,0,0.4); }
-        .btn-accent { background: linear-gradient(135deg, #FF69B4, #FF6B6B); border-color: #FF69B4; color: white; }
-        .btn-accent:hover { background: linear-gradient(135deg, #FF6B6B, #FF1493); color: white; box-shadow: 0 8px 25px rgba(255, 107, 107, 0.5); transform: translateY(-2px); }
+        .help-btn { position: absolute; bottom: 30px; left: 30px; width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, #FFD700, #FDB931); border: 2px solid rgba(255,255,255,0.2); color: #050508; font-size: 1.5rem; font-weight: bold; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(255,215,0,0.3); z-index: 20; }
+        .help-btn:hover { transform: scale(1.1); box-shadow: 0 6px 20px rgba(255,215,0,0.5); }
+        .help-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 1000; pointer-events: auto; }
+        .help-content { background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,249,250,0.95)); padding: 30px; border-radius: 15px; border: 2px solid #FFD700; max-width: 400px; text-align: center; box-shadow: 0 8px 30px rgba(255,215,0,0.3); pointer-events: auto; }
+        .help-content h3 { color: #050508; margin: 0 0 15px 0; font-size: 1.5rem; }
+        .help-content p { color: #666; margin: 0 0 20px 0; line-height: 1.5; }
+        .help-content .email { color: #FFD700; font-weight: bold; font-size: 1.1rem; margin: 0 0 20px 0; }
+        .help-content button { background: linear-gradient(135deg, #FFD700, #FDB931); color: #050508; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: all 0.3s ease; }
+        .help-content button:hover { transform: scale(1.05); }
         
-        .sales-counter { position: absolute; top: 140px; left: 30px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,249,250,0.95)); border: 2px solid rgba(255,215,0,0.3); padding: 12px 16px; border-radius: 12px; backdrop-filter: blur(10px); min-width: 140px; box-shadow: 0 4px 15px rgba(255,215,0,0.2); }
-        .sales-label { font-size: 0.65rem; color: #666; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 4px; font-weight: 700; }
-        .sales-stats { font-size: 1.1rem; color: #333; font-weight: 700; font-family: 'Georgia', serif; }
-        .sales-progress { width: 100%; height: 3px; background: rgba(255,255,255,0.3); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+        .sales-counter { position: absolute; top: 140px; left: 30px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,249,250,0.95)); border: 2px solid rgba(255,215,0,0.3); padding: 8px 12px; border-radius: 10px; backdrop-filter: blur(10px); min-width: 120px; box-shadow: 0 4px 15px rgba(255,215,0,0.2); }
+        .sales-label { font-size: 0.55rem; color: #666; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 3px; font-weight: 700; }
+        .sales-stats { font-size: 0.9rem; color: #333; font-weight: 700; font-family: 'Georgia', serif; }
+        .sales-progress { width: 100%; height: 2px; background: rgba(255,255,255,0.3); border-radius: 2px; margin-top: 6px; overflow: hidden; }
         .sales-progress-bar { height: 100%; background: linear-gradient(90deg, #FFD700, #FFA500, #FF69B4, #00CED1, #9370DB); transition: width 0.5s ease; box-shadow: 0 0 10px rgba(255,215,0,0.5); }
         
         .center-controls { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); }
@@ -50,6 +54,8 @@
         
         .toggle-btn { background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(248,249,250,0.9)); border: 2px solid rgba(255,215,0,0.3); color: #333; padding: 8px 16px; border-radius: 8px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); font-weight: 600; backdrop-filter: blur(10px); font-size: 0.75rem; box-shadow: 0 4px 15px rgba(255,215,0,0.1); margin-bottom: 8px; }
         .toggle-btn:hover { border-color: #FFD700; color: #333; background: linear-gradient(135deg, #FFD700, #FFA500); transform: translateY(-2px); box-shadow: 0 8px 25px rgba(255,215,0,0.4); }
+        
+        .controls { position: absolute; top: 30px; right: 30px; display: flex; gap: 12px; flex-direction: column; align-items: flex-end; }
         
         .center-controls.hidden { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(10px); }
         
@@ -604,15 +610,15 @@
 
     <div id="loader">
         <div class="spinner"></div>
-        <div>INITIALIZING IMMORTAL ENGINE</div>
+        <div>The pyramid is getting ready for you please wait</div>
     </div>
     
     <div id="canvas-container"></div>
 
     <div class="ui-layer">
         <div class="header interactive">
-            <h1>THE PYRAMID</h1>
-            <div class="subtitle">10,011 Blocks • Immortal Core</div>
+            <h1>The Pyramid of Emotions</h1>
+            <div class="subtitle">Get permanant spot in the pyramid world</div>
         </div>
 
         <div class="sales-counter interactive">
@@ -623,6 +629,17 @@
             </div>
         </div>
 
+        <button class="help-btn interactive" onclick="showHelp()">?</button>
+        
+        <div class="help-modal" id="help-modal" onclick="hideHelp(event)">
+            <div class="help-content" onclick="event.stopPropagation()">
+                <h3>Need Help?</h3>
+                <p>If any payment or any issue occurs contact freely with us with data, we will help you as soon as possible</p>
+                <div class="email">thegoodguy08@gmail.com</div>
+                <button onclick="hideHelp()">Close</button>
+            </div>
+        </div>
+        
         <div class="controls interactive">
             <div style="display: flex; gap: 12px; margin-bottom: 8px;">
                 <button class="btn" onclick="app.resetCamera()">⟲ Reset View</button>
@@ -1620,6 +1637,23 @@
         state.cam.x = state.target.x;
         state.cam.y = state.target.y;
     }
+
+    window.showHelp = () => {
+        const modal = document.getElementById('help-modal');
+        modal.style.display = 'flex';
+        // Prevent background interactions
+        document.body.style.pointerEvents = 'none';
+        modal.style.pointerEvents = 'auto';
+    };
+    
+    window.hideHelp = (event) => {
+        const modal = document.getElementById('help-modal');
+        if (!event || event.target.id === 'help-modal' || event.target.tagName === 'BUTTON') {
+            modal.style.display = 'none';
+            // Restore background interactions
+            document.body.style.pointerEvents = 'auto';
+        }
+    };
 
     window.addEventListener('resize', () => { state.pixi.resize(); centerCamera(); });
     init();

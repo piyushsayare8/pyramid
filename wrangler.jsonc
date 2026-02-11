@@ -33,8 +33,16 @@
 	"vars": {
 		"RAZORPAY_KEY_ID": "rzp_test_SEr0ZoNEEjJDFb",
 		"RAZORPAY_KEY_SECRET": "4Yf9aSLIl85jCrOqLrOSIUp7",
-		"NODE_ENV": "production"
+		"NODE_ENV": "production",
+		"CUSTOM_DOMAIN": "https://immortal-pyramid.piyushsayare8.workers.dev"
 	},
+	// 6. SCHEDULED EVENTS (Daily cleanup)
+	"triggers": [
+		{
+			"cron": "0 2 * * *",
+			"name": "cleanup-temp-images"
+		}
+	],
 	"env": {
 		"production": {
 			"NODE_ENV": "production"
