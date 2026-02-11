@@ -111,38 +111,97 @@ async function uploadBase64ToR2(base64Data, env, permanentPath = null) {
 
 async function moveTempToPermanent(tempUrl, env) {
   try {
+    console.log(`[IMAGE MOVE] Starting move operation: ${tempUrl}`)
+    
     // Extract temp filename from URL
     const tempFilename = tempUrl.replace(/.*\/api\/image\//, '')
+    console.log(`[IMAGE MOVE] Extracted temp filename: ${tempFilename}`)
     
     // Skip if not a temp file
     if (!tempFilename.startsWith('temp-images/')) {
+      console.log(`[IMAGE MOVE] Not a temp file, returning original URL: ${tempUrl}`)
       return tempUrl // Already permanent
     }
     
-    // Get temp file
+    // Validate temp filename
+    if (!tempFilename || tempFilename.includes('..') || tempFilename.includes('//')) {
+      throw new Error(`Invalid temp filename: ${tempFilename}`)
+    }
+    
+    // Check if temp file exists
     const tempObject = await env.BUCKET.get(tempFilename)
-    if (!tempObject) throw new Error('Temp image not found')
+    if (!tempObject) {
+      console.error(`[IMAGE MOVE] Temp file not found: ${tempFilename}`)
+      throw new Error(`Temp image not found: ${tempFilename}`)
+    }
     
-    // Generate permanent filename
-    const timestamp = Date.now()
-    const random = Math.random().toString(36).substring(7)
-    const extension = tempFilename.split('.').pop() || 'jpg'
-    const permanentFilename = `images/${timestamp}-${random}.${extension}`
+    console.log(`[IMAGE MOVE] Temp file found, size: ${tempObject.size} bytes`)
     
-    // Copy to permanent location
-    await env.BUCKET.put(permanentFilename, tempObject.body, {
-      httpMetadata: tempObject.httpMetadata
-    })
+    // Generate permanent filename with retry logic for uniqueness
+    let permanentFilename
+    let attempts = 0
+    const maxAttempts = 3
     
-    // Delete temp file
-    await env.BUCKET.delete(tempFilename)
+    do {
+      const timestamp = Date.now()
+      const random = Math.random().toString(36).substring(7)
+      const extension = tempFilename.split('.').pop() || 'jpg'
+      permanentFilename = `images/${timestamp}-${random}.${extension}`
+      
+      // Check if permanent filename already exists (very rare but possible)
+      const existingPermanent = await env.BUCKET.get(permanentFilename)
+      if (!existingPermanent) break
+      
+      attempts++
+      console.log(`[IMAGE MOVE] Filename collision detected, retrying (${attempts}/${maxAttempts})`)
+      await new Promise(resolve => setTimeout(resolve, 100)) // Small delay
+    } while (attempts < maxAttempts)
+    
+    if (attempts >= maxAttempts) {
+      throw new Error('Failed to generate unique permanent filename after 3 attempts')
+    }
+    
+    console.log(`[IMAGE MOVE] Generated permanent filename: ${permanentFilename}`)
+    
+    // Copy to permanent location with full metadata
+    const copyOptions = {
+      httpMetadata: {
+        contentType: tempObject.httpMetadata?.contentType || 'image/jpeg',
+        cacheControl: 'public, max-age=31536000' // 1 year cache
+      }
+    }
+    
+    await env.BUCKET.put(permanentFilename, tempObject.body, copyOptions)
+    console.log(`[IMAGE MOVE] Successfully copied to permanent location`)
+    
+    // Verify the copy was successful
+    const verification = await env.BUCKET.get(permanentFilename)
+    if (!verification) {
+      throw new Error('Failed to verify permanent file copy')
+    }
+    
+    // Delete temp file (with error handling - don't fail if this fails)
+    try {
+      await env.BUCKET.delete(tempFilename)
+      console.log(`[IMAGE MOVE] Temp file deleted successfully`)
+    } catch (deleteError) {
+      console.error(`[IMAGE MOVE] Warning: Failed to delete temp file ${tempFilename}:`, deleteError)
+      // Continue anyway - the permanent copy exists
+    }
     
     // Return permanent URL
     const origin = env.CUSTOM_DOMAIN || 'https://immortal-pyramid.piyushsayare8.workers.dev'
-    return `${origin}/api/image/${permanentFilename}`
+    const permanentUrl = `${origin}/api/image/${permanentFilename}`
+    
+    console.log(`[IMAGE MOVE] SUCCESS: ${tempUrl} -> ${permanentUrl}`)
+    return permanentUrl
     
   } catch (e) {
-    console.error('Move temp to permanent failed:', e)
+    console.error(`[IMAGE MOVE] FAILED: ${e.message}`, {
+      tempUrl,
+      stack: e.stack,
+      timestamp: new Date().toISOString()
+    })
     throw e
   }
 }
@@ -208,7 +267,7 @@ async function rebuildCdnCache(env) {
     // Fetch ALL slots
     const { results } = await env.DB.prepare(`
       SELECT 
-        slot_number, status, owner_name, owner_message, owner_color, 
+        slot_number, status, owner_name, owner_message, owner_color, owner_text,
         image_url, link_url, link_description, price 
       FROM slots 
       ORDER BY slot_number ASC
@@ -445,6 +504,190 @@ app.post('/api/upload-image', async (c) => {
   }
 })
 
+// DIAGNOSTIC ENDPOINT: Debug image issues
+app.get('/api/diagnose-images', async (c) => {
+  try {
+    console.log('[DIAGNOSTIC] Starting image diagnosis...')
+    
+    // Get all sold slots
+    const allSlots = await c.env.DB.prepare(`
+      SELECT slot_number, owner_name, image_url, updated_at 
+      FROM slots 
+      WHERE status = 'sold'
+      ORDER BY slot_number ASC
+    `).all()
+    
+    // Get all temp images
+    const tempImages = await c.env.BUCKET.list({
+      prefix: 'temp-images/'
+    })
+    
+    // Get all permanent images
+    const permanentImages = await c.env.BUCKET.list({
+      prefix: 'images/'
+    })
+    
+    const diagnosis = {
+      timestamp: new Date().toISOString(),
+      summary: {
+        totalSoldSlots: allSlots.results.length,
+        slotsWithImages: allSlots.results.filter(s => s.image_url && s.image_url.trim() !== '').length,
+        slotsWithoutImages: allSlots.results.filter(s => !s.image_url || s.image_url.trim() === '').length,
+        tempImagesCount: tempImages.objects.length,
+        permanentImagesCount: permanentImages.objects.length
+      },
+      slots: allSlots.results.map(slot => ({
+        slot: slot.slot_number,
+        owner: slot.owner_name,
+        hasImage: !!(slot.image_url && slot.image_url.trim() !== ''),
+        imageUrl: slot.image_url || null,
+        imageType: slot.image_url ? (
+          slot.image_url.includes('temp-images/') ? 'temp' :
+          slot.image_url.startsWith('data:') ? 'base64' :
+          'permanent'
+        ) : null,
+        updated_at: slot.updated_at
+      })),
+      tempImages: tempImages.objects.map(img => ({
+        key: img.key,
+        size: img.size,
+        uploaded: img.uploaded,
+        url: `${c.env.CUSTOM_DOMAIN || 'https://immortal-pyramid.piyushsayare8.workers.dev'}/api/image/${img.key}`
+      })),
+      permanentImages: permanentImages.objects.map(img => ({
+        key: img.key,
+        size: img.size,
+        uploaded: img.uploaded,
+        url: `${c.env.CUSTOM_DOMAIN || 'https://immortal-pyramid.piyushsayare8.workers.dev'}/api/image/${img.key}`
+      }))
+    }
+    
+    console.log('[DIAGNOSTIC] Diagnosis completed')
+    return c.json(diagnosis)
+    
+  } catch (e) {
+    console.error('[DIAGNOSTIC] Failed:', e)
+    return c.json({ 
+      error: 'Diagnosis failed', 
+      details: e.message 
+    }, 500)
+  }
+})
+
+// RECOVERY ENDPOINT: Fix existing profiles with missing images
+app.post('/api/recover-images', async (c) => {
+  try {
+    console.log('[RECOVERY] Starting image recovery process...')
+    
+    // Get all sold slots with empty image URLs
+    const soldSlots = await c.env.DB.prepare(`
+      SELECT slot_number, owner_name, image_url, updated_at 
+      FROM slots 
+      WHERE status = 'sold' AND (image_url IS NULL OR image_url = '')
+      ORDER BY slot_number ASC
+    `).all()
+    
+    if (soldSlots.results.length === 0) {
+      return c.json({ 
+        success: true, 
+        message: 'No profiles need recovery',
+        recovered: 0
+      })
+    }
+    
+    console.log(`[RECOVERY] Found ${soldSlots.results.length} profiles needing recovery`)
+    
+    // List all temp images to find potential matches
+    const tempImages = await c.env.BUCKET.list({
+      prefix: 'temp-images/'
+    })
+    
+    console.log(`[RECOVERY] Found ${tempImages.objects.length} temp images available`)
+    
+    let recoveredCount = 0
+    const recoveryResults = []
+    
+    // Strategy 1: Try to match temp images by timestamp proximity
+    for (const slot of soldSlots.results) {
+      const slotTime = new Date(slot.updated_at).getTime()
+      let bestMatch = null
+      let bestTimeDiff = Infinity
+      
+      // Find temp image uploaded closest to slot update time
+      for (const tempImage of tempImages.objects) {
+        const tempTime = new Date(tempImage.uploaded).getTime()
+        const timeDiff = Math.abs(slotTime - tempTime)
+        
+        // Only consider images uploaded within 1 hour of slot update
+        if (timeDiff < 60 * 60 * 1000 && timeDiff < bestTimeDiff) {
+          bestTimeDiff = timeDiff
+          bestMatch = tempImage
+        }
+      }
+      
+      if (bestMatch) {
+        const origin = c.env.CUSTOM_DOMAIN || 'https://immortal-pyramid.piyushsayare8.workers.dev'
+        const tempUrl = `${origin}/api/image/${bestMatch.key}`
+        
+        try {
+          // Move the temp image to permanent
+          const permanentUrl = await moveTempToPermanent(tempUrl, c.env)
+          
+          // Update the database
+          await c.env.DB.prepare(`
+            UPDATE slots SET image_url = ? WHERE slot_number = ?
+          `).bind(permanentUrl, slot.slot_number).run()
+          
+          recoveredCount++
+          recoveryResults.push({
+            slot: slot.slot_number,
+            owner: slot.owner_name,
+            tempImage: bestMatch.key,
+            permanentUrl: permanentUrl,
+            timeDiff: bestTimeDiff
+          })
+          
+          console.log(`[RECOVERY] ✓ Recovered image for slot ${slot.slot_number} (${slot.owner_name})`)
+        } catch (recoverError) {
+          console.error(`[RECOVERY] ✗ Failed to recover slot ${slot.slot_number}:`, recoverError.message)
+          recoveryResults.push({
+            slot: slot.slot_number,
+            owner: slot.owner_name,
+            error: recoverError.message
+          })
+        }
+      } else {
+        console.log(`[RECOVERY] ⚠ No matching temp image found for slot ${slot.slot_number}`)
+        recoveryResults.push({
+          slot: slot.slot_number,
+          owner: slot.owner_name,
+          error: 'No matching temp image found'
+        })
+      }
+    }
+    
+    // Trigger cache rebuild to update frontend
+    c.executionCtx.waitUntil(rebuildCdnCache(c.env))
+    
+    console.log(`[RECOVERY] Process completed: ${recoveredCount}/${soldSlots.results.length} profiles recovered`)
+    
+    return c.json({
+      success: true,
+      message: `Recovered ${recoveredCount} out of ${soldSlots.results.length} profiles`,
+      recovered: recoveredCount,
+      total: soldSlots.results.length,
+      results: recoveryResults
+    })
+    
+  } catch (e) {
+    console.error('[RECOVERY] Process failed:', e)
+    return c.json({ 
+      error: 'Recovery process failed', 
+      details: e.message 
+    }, 500)
+  }
+})
+
 // Serve images from R2 with security
 app.get('/api/image/*', async (c) => {
   const filename = c.req.path.replace('/api/image/', '')
@@ -486,28 +729,69 @@ app.post('/api/purchase', async (c) => {
       return c.json({ error: "Security check failed: Invalid Signature" }, 403)
     }
 
-    // 2. IMAGE PROCESSING: Move temp to permanent if needed
-    let finalImageUrl = userData.imageUrl
-    if (userData.imageUrl && userData.imageUrl.includes('temp-images/')) {
+    // 2. BULLETPROOF IMAGE PROCESSING: Triple fallback system
+    let originalImageUrl = userData.imageUrl || ''
+    let finalImageUrl = originalImageUrl
+    console.log(`[PURCHASE] Original image URL: "${finalImageUrl}"`)
+    
+    // Layer 1: Try to move temp to permanent
+    if (finalImageUrl && finalImageUrl.includes('temp-images/')) {
       try {
-        console.log(`Moving temp image to permanent: ${userData.imageUrl}`)
-        finalImageUrl = await moveTempToPermanent(userData.imageUrl, c.env)
-        console.log(`Image moved to permanent: ${finalImageUrl}`)
-      } catch (e) {
-        console.error('Failed to move temp image:', e)
-        // Continue with original URL if move fails
+        console.log(`[PURCHASE] Moving temp image to permanent: ${finalImageUrl}`)
+        const movedUrl = await moveTempToPermanent(finalImageUrl, c.env)
+        if (movedUrl && movedUrl !== finalImageUrl) {
+          finalImageUrl = movedUrl
+          console.log(`[PURCHASE] ✓ Image moved to permanent: ${finalImageUrl}`)
+        } else {
+          console.log(`[PURCHASE] ⚠ Move returned same URL, keeping original`)
+        }
+      } catch (moveError) {
+        console.error(`[PURCHASE] ✗ Failed to move temp image:`, moveError.message)
+        // CRITICAL: Keep original temp URL as fallback - don't lose the image!
+        console.log(`[PURCHASE] ⚠ Keeping original temp URL as fallback: ${finalImageUrl}`)
+        // The temp URL will still work, it just won't be "permanent"
       }
-    } else if (userData.imageUrl && userData.imageUrl.startsWith('data:image/')) {
+    } 
+    // Layer 2: Handle base64 images
+    else if (finalImageUrl && finalImageUrl.startsWith('data:image/')) {
       try {
-        console.log('Processing base64 image upload')
-        finalImageUrl = await uploadBase64ToR2(userData.imageUrl, c.env)
-        console.log(`Base64 image uploaded: ${finalImageUrl}`)
-      } catch (e) {
-        console.error('Failed to process base64 image:', e)
-        // Continue with empty URL if upload fails
+        console.log(`[PURCHASE] Processing base64 image upload`)
+        const uploadedUrl = await uploadBase64ToR2(finalImageUrl, c.env)
+        if (uploadedUrl) {
+          finalImageUrl = uploadedUrl
+          console.log(`[PURCHASE] ✓ Base64 image uploaded: ${finalImageUrl}`)
+        }
+      } catch (base64Error) {
+        console.error(`[PURCHASE] ✗ Failed to process base64 image:`, base64Error.message)
+        // Fallback: Keep empty string - user can upload later
         finalImageUrl = ''
+        console.log(`[PURCHASE] ⚠ Base64 upload failed, using empty URL`)
       }
     }
+    // Layer 3: Handle permanent URLs (already good)
+    else if (finalImageUrl && !finalImageUrl.includes('temp-images/') && !finalImageUrl.startsWith('data:')) {
+      console.log(`[PURCHASE] ✓ Using existing permanent URL: ${finalImageUrl}`)
+    }
+    // Layer 4: Empty URL case
+    else {
+      console.log(`[PURCHASE] ℹ No image URL provided`)
+      finalImageUrl = ''
+    }
+    
+    // FINAL SAFEGUARD: Never lose the original URL
+    if (!finalImageUrl && originalImageUrl) {
+      console.log(`[PURCHASE] 🚨 SAFEGUARD: Restoring original URL: ${originalImageUrl}`)
+      finalImageUrl = originalImageUrl
+    }
+    
+    // Final validation and logging
+    if (finalImageUrl && typeof finalImageUrl !== 'string') {
+      console.error(`[PURCHASE] ✗ Invalid final image URL type: ${typeof finalImageUrl}`)
+      finalImageUrl = ''
+    }
+    
+    console.log(`[PURCHASE] Final image URL for database: "${finalImageUrl}"`)
+    console.log(`[PURCHASE] Image processing completed successfully`)
 
     // 3. ATOMIC DB UPDATE
     const res = await c.env.DB.prepare(`
