@@ -1239,7 +1239,6 @@ window.openModal = () => {
                         <div class="prof-message-container">
                             <div class="prof-message">
                                 <div class="prof-message-text">${d.message || 'No message provided.'}</div>
-                                <div class="prof-message-length">${(d.message || '').length} characters</div>
                             </div>
                         </div>
 
