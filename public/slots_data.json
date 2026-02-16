@@ -1,0 +1,164 @@
+{
+  "1": {
+    "id": "btc_001",
+    "sold": true,
+    "owner_name": "John Doe",
+    "owner_color": "#FFD700",
+    "owner_text": "BTC",
+    "message": "Bitcoin will change world!",
+    "image_url": "./assets/profiles/john-doe.jpg",
+    "link_url": "https://twitter.com/johndoe",
+    "link_description": "Follow me on Twitter",
+    "price": 0.10
+  },
+  "2": {
+    "id": "eth_002", 
+    "sold": false,
+    "price": 0.20
+  },
+  "3": {
+    "id": "hodl_003",
+    "sold": true,
+    "owner_name": "Alice Smith",
+    "owner_color": "#FF69B4",
+    "owner_text": "HODL",
+    "message": "Never selling! Diamond hands forever 💎🙌",
+    "image_url": "./assets/profiles/alice-smith.png",
+    "link_url": "https://github.com/alicesmith",
+    "link_description": "Check out my GitHub",
+    "price": 0.30
+  },
+  "10": {
+    "id": "crypto_010",
+    "sold": true,
+    "owner_name": "Crypto King",
+    "owner_color": "#4ECDC4",
+    "owner_text": "CRYPTO",
+    "message": "To the moon! 🚀🌙",
+    "image_url": "./assets/profiles/crypto-king.jpg",
+    "link_url": "https://cryptoking.com",
+    "link_description": "Visit my crypto blog",
+    "price": 1.00
+  },
+  "25": {
+    "id": "diamond_025",
+    "sold": true,
+    "owner_name": "Diamond Hands",
+    "owner_color": "#45B7D1",
+    "owner_text": "DIAMOND",
+    "message": "Diamond hands are forever! 💎",
+    "image_url": "./assets/profiles/diamond-hands.jpg",
+    "link_url": "https://diamondhands.io",
+    "link_description": "Join the diamond hands community",
+    "price": 2.50
+  },
+  "50": {
+    "id": "moon_050",
+    "sold": true,
+    "owner_name": "Moon Shooter",
+    "owner_color": "#96CEB4",
+    "owner_text": "MOON",
+    "message": "We're going to the moon! 🌙",
+    "image_url": "./assets/profiles/moon-shooter.jpg",
+    "link_url": "https://moonshooter.xyz",
+    "link_description": "Moon mission starts here",
+    "price": 5.00
+  },
+  "100": {
+    "id": "gold_100",
+    "sold": true,
+    "owner_name": "Gold Bug",
+    "owner_color": "#FECA57",
+    "owner_text": "GOLD",
+    "message": "Gold is real money! 🏆",
+    "image_url": "./assets/profiles/gold-bug.jpg",
+    "link_url": "https://goldbug.com",
+    "link_description": "Learn about real money",
+    "price": 10.00
+  },
+  "200": {
+    "id": "silver_200",
+    "sold": true,
+    "owner_name": "Silver Fox",
+    "owner_color": "#B983FF",
+    "owner_text": "SILVER",
+    "message": "Silver is the people's money! 🦊",
+    "image_url": "./assets/profiles/silver-fox.jpg",
+    "link_url": "https://silverfox.io",
+    "link_description": "Silver investment tips",
+    "price": 20.00
+  },
+  "500": {
+    "id": "platinum_500",
+    "sold": true,
+    "owner_name": "Platinum Trader",
+    "owner_color": "#FD79A8",
+    "owner_text": "PLAT",
+    "message": "Platinum is the future! 💎",
+    "image_url": "./assets/profiles/platinum-trader.jpg",
+    "link_url": "https://platinumtrader.com",
+    "link_description": "Platinum trading strategies",
+    "price": 50.00
+  },
+  "1000": {
+    "id": "elite_1000",
+    "sold": true,
+    "owner_name": "Elite Trader",
+    "owner_color": "#FF6B6B",
+    "owner_text": "ELITE",
+    "message": "Elite trading for elite people! 👑",
+    "image_url": "./assets/profiles/elite-trader.jpg",
+    "link_url": "https://elitetrader.pro",
+    "link_description": "Elite trading signals",
+    "price": 100.00
+  },
+  "5000": {
+    "id": "whale_5000",
+    "sold": true,
+    "owner_name": "Crypto Whale",
+    "owner_color": "#FFD700",
+    "owner_text": "WHALE",
+    "message": "Whale moves markets! 🐋",
+    "image_url": "./assets/profiles/crypto-whale.jpg",
+    "link_url": "https://cryptowale.io",
+    "link_description": "Follow the whale",
+    "price": 500.00
+  },
+  "9000": {
+    "id": "legend_9000",
+    "sold": true,
+    "owner_name": "Legend Trader",
+    "owner_color": "#FFD700",
+    "owner_text": "LEGEND",
+    "message": "Legendary trader in the pyramid! 🏆",
+    "image_url": "./assets/profiles/legend-trader.jpg",
+    "link_url": "https://legendtrader.com",
+    "link_description": "Learn from legends",
+    "price": 900.00
+  },
+  
+  "10000": {
+    "id": "top_10011",
+    "sold": true,
+    "owner_name": "Pyramid King",
+    "owner_color": "#FFD700",
+    "owner_text": "hii i am here",
+    "message": "King of the Pyramid! 👑",
+    "image_url": "./assets/profiles/pyramid-king.jpg",
+    "link_url": "https://pyramidking.com",
+    "link_description": "The king's domain",
+    "price": 10000
+  },
+  "10011": {
+    "id": "top_10011",
+    "sold": true,
+    "owner_name": "Pyramid King",
+    "owner_color": "#FFD700",
+    "owner_text": "KING",
+    "message": "King of the Pyramid! 👑",
+    "image_url": "./assets/profiles/pyramid-king.jpg",
+    "link_url": "https://pyramidking.com",
+    "link_description": "The king's domain",
+    "price": 1001.10
+  }
+}
