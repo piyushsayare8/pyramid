@@ -135,25 +135,22 @@ async function loadStaticData() {
             if (slotData && slotData.sold) {
                 updateBlock(slotId, {
                     sold: true,
-                    unique_id: slotData.id || `slot_${slotId}`,
                     owner_name: slotData.owner_name || 'Anonymous',
                     owner_color: slotData.owner_color || '#FFD700',
                     owner_text: slotData.owner_text || '',
                     message: slotData.message || '',
                     image_url: slotData.image_url || '',
                     link_url: slotData.link_url || '',
-                    link_description: slotData.link_description || ''
+                    link_description: slotData.link_description || '',
+                    youtube_url: slotData.youtube_url || ''
                 });
             } else if (slotData) {
-                // Update unsold block price
-                updateBlock(slotId, {
-                    sold: false,
-                    unique_id: slotData.id || `slot_${slotId}`
-                });
-                
+                // Update unsold block price and payment link
                 if (state.blocks[slotId]) {
                     state.blocks[slotId].price = slotData.price || (0.1 + (slotId - 1) * 0.1);
-                    state.blocks[slotId].unique_id = slotData.id || `slot_${slotId}`;
+                    if (slotData.payment_link) {
+                        state.blocks[slotId].payment_link = slotData.payment_link;
+                    }
                 }
             }
         }
@@ -493,7 +490,6 @@ function buildPyramid() {
 
             state.blocks[blockId] = { 
                 id: blockId, 
-                unique_id: `slot_${blockId}`, // Default unique ID
                 price: price, 
                 tier: type, 
                 sold: false, 
@@ -785,7 +781,16 @@ function handleHover(x, y) {
 
 function handleClick(x, y) {
     const id = getBlockId(x, y);
-    if (id !== -1) { state.selectedId = id; openModal(); }
+    if (id !== -1) {
+        const b = state.blocks[id];
+        // If block is unsold and has a Razorpay payment link, redirect instead of opening modal
+        if (b && !b.sold && b.payment_link) {
+            window.open(b.payment_link, '_blank');
+            return;
+        }
+        state.selectedId = id;
+        openModal();
+    }
 }
 
 // =========================================================================
@@ -1084,6 +1089,11 @@ function handleBlockClick(id) {
         state.selectedId = id;
         openModal();
     } else {
+        // If block has a Razorpay payment link, redirect to it
+        if (b.payment_link) {
+            window.open(b.payment_link, '_blank');
+            return;
+        }
         // Show purchase form for empty blocks
         state.selectedId = id;
         openModal();
@@ -1254,6 +1264,31 @@ window.openModal = () => {
                                 </a>
                             </div>
                         ` : ''}
+
+                        ${(() => {
+                            const vidId = getYouTubeVideoId(d.youtube_url);
+                            if (!vidId) return '';
+                            return `
+                            <div class="prof-section-title prof-section-title--yt">Featured Video</div>
+                            <div class="prof-youtube-section">
+                                <div class="prof-youtube-player" onclick="loadYouTubeVideo(this, '${vidId}')" role="button" aria-label="Play video">
+                                    <img
+                                        class="prof-youtube-thumb"
+                                        src="https://img.youtube.com/vi/${vidId}/maxresdefault.jpg"
+                                        onerror="this.src='https://img.youtube.com/vi/${vidId}/hqdefault.jpg'"
+                                        alt="Video thumbnail"
+                                    >
+                                    <div class="prof-youtube-overlay"></div>
+                                    <div class="prof-youtube-play-btn" aria-hidden="true">
+                                        <svg viewBox="0 0 68 48" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M66.52 7.74c-.78-2.93-2.49-5.41-5.42-6.19C55.79.13 34 0 34 0S12.21.13 6.9 1.55c-2.93.78-4.63 3.26-5.42 6.19C.06 13.05 0 24 0 24s.06 10.95 1.48 16.26c.78 2.93 2.49 5.41 5.42 6.19C12.21 47.87 34 48 34 48s21.79-.13 27.1-1.55c2.93-.78 4.64-3.26 5.42-6.19C67.94 34.95 68 24 68 24s-.06-10.95-1.48-16.26z" fill="#FF0000"/>
+                                            <path d="M45 24L27 14v20z" fill="#FFFFFF"/>
+                                        </svg>
+                                    </div>
+                                    <div class="prof-youtube-label">Click to Play</div>
+                                </div>
+                            </div>`;
+                        })()}
                     </div>
                 </div>
             </div>
@@ -1686,6 +1721,25 @@ function hideSearchResults() {
     searchResults = [];
     currentSearchTerm = '';
 }
+
+// Extract YouTube video ID from various YouTube URL formats
+function getYouTubeVideoId(url) {
+    if (!url) return null;
+    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ \s]{11})/;
+    const match = url.match(regex);
+    return match ? match[1] : null;
+}
+
+// Replace YouTube thumbnail with embedded player on click
+window.loadYouTubeVideo = function(container, videoId) {
+    container.innerHTML = `<iframe
+        src="https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1"
+        frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen
+        style="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:12px;"
+    ></iframe>`;
+};
 
 // Escape HTML to prevent XSS
 function escapeHtml(text) {

@@ -1,23 +1,21 @@
 {
   "1": {
-    "id": "btc_001",
-    "sold": true,
-    "owner_name": "John Doe",
-    "owner_color": "#FFD700",
+    "sold": false,
+    "price": 0.1,    "payment_link": "https://rzp.io/rzp/B4bILRj",    "owner_name": "hii",
     "owner_text": "BTC",
-    "message": "Bitcoin will change world!",
+    "owner_color": "#FFD700",
+    "message": "my name is piyush and i am here to test the pyramid",
     "image_url": "./assets/profiles/john-doe.jpg",
     "link_url": "https://twitter.com/johndoe",
     "link_description": "Follow me on Twitter",
-    "price": 0.10
+    "youtube_url": "https://www.youtube.com/watch?v=HZvj8T5_oUE"
   },
   "2": {
-    "id": "eth_002", 
     "sold": false,
-    "price": 0.20
+    "price": 0.2,
+    "payment_link": "https://rzp.io/rzp/tnP0IMVv"
   },
   "3": {
-    "id": "hodl_003",
     "sold": true,
     "owner_name": "Alice Smith",
     "owner_color": "#FF69B4",
@@ -26,10 +24,9 @@
     "image_url": "./assets/profiles/alice-smith.png",
     "link_url": "https://github.com/alicesmith",
     "link_description": "Check out my GitHub",
-    "price": 0.30
+    "price": 0.3
   },
   "10": {
-    "id": "crypto_010",
     "sold": true,
     "owner_name": "Crypto King",
     "owner_color": "#4ECDC4",
@@ -38,10 +35,9 @@
     "image_url": "./assets/profiles/crypto-king.jpg",
     "link_url": "https://cryptoking.com",
     "link_description": "Visit my crypto blog",
-    "price": 1.00
+    "price": 1
   },
   "25": {
-    "id": "diamond_025",
     "sold": true,
     "owner_name": "Diamond Hands",
     "owner_color": "#45B7D1",
@@ -50,10 +46,9 @@
     "image_url": "./assets/profiles/diamond-hands.jpg",
     "link_url": "https://diamondhands.io",
     "link_description": "Join the diamond hands community",
-    "price": 2.50
+    "price": 2.5
   },
   "50": {
-    "id": "moon_050",
     "sold": true,
     "owner_name": "Moon Shooter",
     "owner_color": "#96CEB4",
@@ -62,10 +57,9 @@
     "image_url": "./assets/profiles/moon-shooter.jpg",
     "link_url": "https://moonshooter.xyz",
     "link_description": "Moon mission starts here",
-    "price": 5.00
+    "price": 5
   },
   "100": {
-    "id": "gold_100",
     "sold": true,
     "owner_name": "Gold Bug",
     "owner_color": "#FECA57",
@@ -74,10 +68,19 @@
     "image_url": "./assets/profiles/gold-bug.jpg",
     "link_url": "https://goldbug.com",
     "link_description": "Learn about real money",
-    "price": 10.00
+    "price": 10
+  },
+  "122": {
+    "sold": true,
+    "price": 12.2,
+    "owner_name": "piyush",
+    "owner_text": "piyush",
+    "owner_color": "#96CEB4",
+    "message": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "link_description": "t",
+    "youtube_url": "https://www.youtube.com/watch?v=HZvj8T5_oUE"
   },
   "200": {
-    "id": "silver_200",
     "sold": true,
     "owner_name": "Silver Fox",
     "owner_color": "#B983FF",
@@ -86,10 +89,9 @@
     "image_url": "./assets/profiles/silver-fox.jpg",
     "link_url": "https://silverfox.io",
     "link_description": "Silver investment tips",
-    "price": 20.00
+    "price": 20
   },
   "500": {
-    "id": "platinum_500",
     "sold": true,
     "owner_name": "Platinum Trader",
     "owner_color": "#FD79A8",
@@ -98,10 +100,9 @@
     "image_url": "./assets/profiles/platinum-trader.jpg",
     "link_url": "https://platinumtrader.com",
     "link_description": "Platinum trading strategies",
-    "price": 50.00
+    "price": 50
   },
   "1000": {
-    "id": "elite_1000",
     "sold": true,
     "owner_name": "Elite Trader",
     "owner_color": "#FF6B6B",
@@ -110,10 +111,9 @@
     "image_url": "./assets/profiles/elite-trader.jpg",
     "link_url": "https://elitetrader.pro",
     "link_description": "Elite trading signals",
-    "price": 100.00
+    "price": 100
   },
   "5000": {
-    "id": "whale_5000",
     "sold": true,
     "owner_name": "Crypto Whale",
     "owner_color": "#FFD700",
@@ -122,10 +122,9 @@
     "image_url": "./assets/profiles/crypto-whale.jpg",
     "link_url": "https://cryptowale.io",
     "link_description": "Follow the whale",
-    "price": 500.00
+    "price": 500
   },
   "9000": {
-    "id": "legend_9000",
     "sold": true,
     "owner_name": "Legend Trader",
     "owner_color": "#FFD700",
@@ -134,11 +133,9 @@
     "image_url": "./assets/profiles/legend-trader.jpg",
     "link_url": "https://legendtrader.com",
     "link_description": "Learn from legends",
-    "price": 900.00
+    "price": 900
   },
-  
   "10000": {
-    "id": "top_10011",
     "sold": true,
     "owner_name": "Pyramid King",
     "owner_color": "#FFD700",
@@ -150,7 +147,6 @@
     "price": 10000
   },
   "10011": {
-    "id": "top_10011",
     "sold": true,
     "owner_name": "Pyramid King",
     "owner_color": "#FFD700",
@@ -159,6 +155,6 @@
     "image_url": "./assets/profiles/pyramid-king.jpg",
     "link_url": "https://pyramidking.com",
     "link_description": "The king's domain",
-    "price": 1001.10
+    "price": 1001.1
   }
 }
