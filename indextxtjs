@@ -2,10 +2,10 @@
 // 1. ENGINE CONFIGURATION & IMMORTAL CONSTANTS
 // =========================================================================
 const CONFIG = {
-    ROWS: 100,
+    ROWS: 141,
     BLOCK_SIZE: 40,
     GAP: 2,
-    TOTAL_BLOCKS: 5050,
+    TOTAL_BLOCKS: 10011,
     LOD_THRESHOLD: 0.35, 
     LOD_BATCH_SIZE: 1000, // Process this many LOD updates per frame (Time Slicing)
     CHUNK_SIZE: 25,
@@ -147,7 +147,7 @@ async function loadStaticData() {
             } else if (slotData) {
                 // Update unsold block price and payment link
                 if (state.blocks[slotId]) {
-                    state.blocks[slotId].price = slotData.price || (slotId * 50);
+                    state.blocks[slotId].price = slotData.price || (0.1 + (slotId - 1) * 0.1);
                     if (slotData.payment_link) {
                         state.blocks[slotId].payment_link = slotData.payment_link;
                     }
@@ -281,9 +281,9 @@ function showInfo(message) {
     const infoDiv = document.createElement('div');
     infoDiv.style.cssText = `
         position: fixed; top: 20px; right: 20px; z-index: 1000;
-        background: linear-gradient(135deg, #4ECDC4, #45B7D1);
+        background: linear-gradient(135deg, #5B21B6, #7C3AED);
         color: white; padding: 15px 25px; border-radius: 8px;
-        box-shadow: 0 4px 15px rgba(78, 205, 196, 0.3);
+        box-shadow: 0 4px 15px rgba(91, 33, 182, 0.3);
         font-weight: 600; animation: slideIn 0.3s ease; max-width: 300px;
     `;
     infoDiv.textContent = message;
@@ -479,10 +479,10 @@ function buildPyramid() {
         const yPos = (row - 1) * CONFIG.BLOCK_SIZE;
 
         for (let col = 0; col < row; col++) {
-            let price = blockId * 50;
+            let price = 0.1 + ((blockId - 1) * 0.1);
             let type = 'std';
-            if (blockId >= 4500) type = 'gold';
-            else if (row <= 60) type = 'silver';
+            if (blockId >= 9000) type = 'gold';
+            else if (row <= 85) type = 'silver';
 
             const sprite = new PIXI.Sprite(state.baseTextures[type]);
             sprite.x = startX + (col * CONFIG.BLOCK_SIZE);
@@ -765,10 +765,10 @@ function handleHover(x, y) {
             document.body.style.cursor = 'pointer';
             tt.style.display = 'block';
             if (b.sold) {
-                tt.innerHTML = `<div class="tt-label">OWNER</div><span style="color:${b.data.owner_color}">●</span> ${b.data.owner_name}<br><div class="tt-label" style="margin-top:4px">VALUE</div><span style="color:var(--gold); text-shadow: 1px 1px 2px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8), 1px -1px 2px rgba(0,0,0,0.8), -1px 1px 2px rgba(0,0,0,0.8);">₹${b.price}</span>`;
+                tt.innerHTML = `<div class="tt-label">OWNER</div><span style="color:${b.data.owner_color}">●</span> ${b.data.owner_name}<br><div class="tt-label" style="margin-top:4px">VALUE</div><span style="color:var(--gold); text-shadow: 1px 1px 2px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8), 1px -1px 2px rgba(0,0,0,0.8), -1px 1px 2px rgba(0,0,0,0.8);">$${b.price.toFixed(2)}</span>`;
                 tt.style.borderColor = b.data.owner_color;
             } else {
-                tt.innerHTML = `<div class="tt-label">AVAILABLE</div>Block #${b.id} &bull; <span style="color:var(--gold); text-shadow: 1px 1px 2px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8), 1px -1px 2px rgba(0,0,0,0.8), -1px 1px 2px rgba(0,0,0,0.8);">₹${b.price}</span>`;
+                tt.innerHTML = `<div class="tt-label">AVAILABLE</div>Block #${b.id} &bull; <span style="color:var(--gold); text-shadow: 1px 1px 2px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8), 1px -1px 2px rgba(0,0,0,0.8), -1px 1px 2px rgba(0,0,0,0.8);">$${b.price.toFixed(2)}</span>`;
                 tt.style.borderColor = '#FFD700';
             }
         } else {
@@ -1221,7 +1221,7 @@ window.openModal = () => {
                     <div class="prof-header-content">
                         <div class="prof-block-info">
                             <div class="prof-block-id">Block #${b.id}</div>
-                            <div class="prof-block-value">₹${b.price || '0'}</div>
+                            <div class="prof-block-value">$${parseFloat(b.price || '0').toFixed(2)}</div>
                         </div>
                         <button class="prof-close-btn" onclick="closeModal()">×</button>
                     </div>
@@ -1236,9 +1236,21 @@ window.openModal = () => {
                         <h2 class="prof-name">${d.owner_name || 'Anonymous'}</h2>
                         <div class="prof-title">Pyramid Block Owner</div>
 
+                        ${d.link_url ? `
+                        <div class="prof-action-area prof-action-area--left">
+                            ${d.link_description ? `<div class="prof-link-desc">${d.link_description}</div>` : ''}
+                            <a href="${d.link_url}" target="_blank" rel="noopener noreferrer" class="prof-btn-visit">
+                                <span>Visit Link</span>
+                                <svg fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                                </svg>
+                            </a>
+                        </div>
+                        ` : ''}
+
                         <div class="prof-stats-grid">
                             <div class="stat-card">
-                                <span class="stat-val">₹${b.price || '0'}</span>
+                                <span class="stat-val">$${parseFloat(b.price || '0').toFixed(2)}</span>
                                 <span class="stat-label">Block Value</span>
                             </div>
                         </div>
@@ -1252,18 +1264,7 @@ window.openModal = () => {
                             </div>
                         </div>
 
-                        ${d.link_url ? `
-                            <div class="prof-section-title">External Link</div>
-                            <div class="prof-action-area">
-                                ${d.link_description ? `<div class="prof-link-desc">${d.link_description}</div>` : ''}
-                                <a href="${d.link_url}" target="_blank" rel="noopener noreferrer" class="prof-btn-visit">
-                                    <span>Visit Link</span>
-                                    <svg fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                                    </svg>
-                                </a>
-                            </div>
-                        ` : ''}
+
 
                         ${(() => {
                             const vidId = getYouTubeVideoId(d.youtube_url);
@@ -1344,7 +1345,7 @@ window.openModal = () => {
                 </div>
             </div>
             <div class="modal-footer">
-                <div style="font-size:1.2rem; font-weight:800; color:var(--gold)">₹${b.price}</div>
+                <div style="font-size:1.2rem; font-weight:800; color:var(--gold)">$${b.price.toFixed(2)}</div>
                 <button class="confirm-btn" onclick="app.submit()">Claim Block (Local)</button>
             </div>`;
         
@@ -1486,11 +1487,11 @@ function searchInBlock(block, searchTerm) {
     
     // Search in price (new functionality)
     if (block.price !== undefined && block.price !== null) {
-        const priceText = `₹${block.price}`;
-        const priceIntegerText = `₹${block.price}`;
+        const priceText = `$${block.price.toFixed(2)}`;
+        const priceIntegerText = `$${Math.floor(block.price)}`;
         const priceNumberText = block.price.toString();
         
-        // Check for exact price match (e.g., "50" matches ₹50)
+        // Check for exact price match (e.g., "5" matches $5.00)
         if (searchTerm === priceNumberText || searchTerm === priceIntegerText.substring(1)) {
             matches.push({ 
                 type: 'price', 
