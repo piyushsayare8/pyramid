@@ -1243,8 +1243,14 @@ window.openModal = () => {
             img = `https://ui-avatars.com/api/?name=${encodeURIComponent(d.owner_name || 'Anonymous')}&background=random&size=256`;
         }
         
+        const _blockColor = (d.owner_color && d.owner_color.startsWith('#') && d.owner_color.length === 7) ? d.owner_color : '#FF0000';
+        const _bcr = parseInt(_blockColor.slice(1, 3), 16);
+        const _bcg = parseInt(_blockColor.slice(3, 5), 16);
+        const _bcb = parseInt(_blockColor.slice(5, 7), 16);
+        const _colorVars = `--block-color:${_blockColor};--block-color-rgb:${_bcr} ${_bcg} ${_bcb}`;
+        
         content.innerHTML = `
-            <div class="profile-modal">
+            <div class="profile-modal" style="${_colorVars}">
                 <div class="prof-header">
                     <div class="prof-header-content">
                         <div class="prof-block-info">

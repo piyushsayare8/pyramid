@@ -4,27 +4,30 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pyramid Admin Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     /* ─── RESET & BASE ────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg:       #0a0a12;
-      --surface:  #12121e;
-      --card:     #1a1a2e;
-      --border:   #2a2a45;
-      --accent:   #6c63ff;
-      --accent2:  #ff6584;
-      --gold:     #ffd700;
+      --bg:       #0F0F0F;
+      --surface:  #212121;
+      --card:     #272727;
+      --border:   #373737;
+      --accent:   #FF0000;
+      --accent2:  #FF4500;
+      --gold:     #FF0000;
       --green:    #00e676;
       --red:      #ff5252;
       --yellow:   #ffd740;
-      --text:     #e8e8f0;
-      --muted:    #6b6b8a;
+      --text:     #F1F1F1;
+      --muted:    #AAAAAA;
       --radius:   10px;
       --shadow:   0 8px 32px rgba(0,0,0,0.5);
       --trans:    all .18s ease;
     }
-    html { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+    html { background: var(--bg); color: var(--text); font-family: 'Roboto', 'Arial', system-ui, sans-serif; font-size: 14px; }
     body { min-height: 100vh; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: var(--surface); }
@@ -36,7 +39,7 @@
 
     /* ─── TOPBAR ──────────────────────────────────────────────────────── */
     .topbar {
-      background: linear-gradient(135deg, #16163a 0%, #1a1034 100%);
+      background: linear-gradient(135deg, #212121 0%, #0F0F0F 100%);
       border-bottom: 1px solid var(--border);
       padding: 0 24px;
       height: 60px;
@@ -46,7 +49,7 @@
     }
     .topbar-logo { display: flex; align-items: center; gap: 10px; }
     .topbar-logo .crown { font-size: 26px; }
-    .topbar-logo h1 { font-size: 18px; font-weight: 700; background: linear-gradient(90deg, var(--gold), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .topbar-logo h1 { font-size: 18px; font-weight: 700; background: linear-gradient(90deg, #FF0000, #FF4500); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .topbar-logo span { font-size: 11px; color: var(--muted); margin-top: -2px; display: block; }
     .topbar-actions { display: flex; gap: 10px; align-items: center; }
 
@@ -58,7 +61,7 @@
     }
     .btn:disabled { opacity: .4; cursor: not-allowed; }
     .btn-primary   { background: var(--accent); color: #fff; }
-    .btn-primary:hover:not(:disabled)  { background: #7d75ff; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(108,99,255,.4); }
+    .btn-primary:hover:not(:disabled)  { background: #FF4500; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(255,0,0,0.4); }
     .btn-success   { background: var(--green); color: #000; }
     .btn-success:hover:not(:disabled)  { background: #33eb91; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,230,118,.35); }
     .btn-danger    { background: var(--red); color: #fff; }
@@ -66,7 +69,7 @@
     .btn-warning   { background: var(--yellow); color: #000; }
     .btn-warning:hover:not(:disabled)  { background: #ffe066; transform: translateY(-1px); }
     .btn-ghost     { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-    .btn-ghost:hover:not(:disabled)    { color: var(--text); border-color: var(--accent); background: rgba(108,99,255,.1); }
+    .btn-ghost:hover:not(:disabled)    { color: var(--text); border-color: var(--accent); background: rgba(255,0,0,0.1); }
     .btn-sm { padding: 4px 10px; font-size: 12px; }
     .btn-icon { padding: 6px 10px; }
 
@@ -77,10 +80,10 @@
     #import-zone {
       border: 2px dashed var(--border); border-radius: 16px;
       padding: 60px 40px; text-align: center;
-      background: linear-gradient(135deg, rgba(108,99,255,.05), rgba(255,101,132,.04));
+      background: linear-gradient(135deg, rgba(255,0,0,0.05), rgba(255,69,0,0.04));
       transition: var(--trans); cursor: pointer; margin-bottom: 24px;
     }
-    #import-zone.drag-over { border-color: var(--accent); background: rgba(108,99,255,.12); }
+    #import-zone.drag-over { border-color: var(--accent); background: rgba(255,0,0,0.12); }
     #import-zone .icon { font-size: 56px; margin-bottom: 16px; }
     #import-zone h2 { font-size: 22px; margin-bottom: 8px; color: var(--text); }
     #import-zone p  { color: var(--muted); margin-bottom: 24px; }
@@ -93,7 +96,7 @@
       padding: 16px 20px; position: relative; overflow: hidden;
     }
     .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
-    .stat-card.s1::before { background: linear-gradient(90deg, var(--accent), #9c96ff); }
+    .stat-card.s1::before { background: linear-gradient(90deg, var(--accent), #FF4500); }
     .stat-card.s2::before { background: linear-gradient(90deg, var(--green), #69f0ae); }
     .stat-card.s3::before { background: linear-gradient(90deg, var(--red), #ff8a80); }
     .stat-card.s4::before { background: linear-gradient(90deg, var(--gold), #ffee58); }
@@ -136,7 +139,7 @@
     .table-wrap thead th.sorted .sort-icon { opacity: 1; color: var(--accent); }
     .table-wrap tbody tr { border-bottom: 1px solid rgba(255,255,255,.04); transition: background .12s; }
     .table-wrap tbody tr:last-child { border-bottom: none; }
-    .table-wrap tbody tr:hover { background: rgba(108,99,255,.06); }
+    .table-wrap tbody tr:hover { background: rgba(255,0,0,0.06); }
     .table-wrap tbody td { padding: 10px 14px; vertical-align: middle; }
 
     .slot-id { font-weight: 700; font-size: 15px; color: var(--gold); font-family: monospace; }
