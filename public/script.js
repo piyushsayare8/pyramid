@@ -147,7 +147,7 @@ async function loadStaticData() {
             } else if (slotData) {
                 // Update unsold block price and payment link
                 if (state.blocks[slotId]) {
-                    state.blocks[slotId].price = slotData.price || (slotId * 50);
+                    state.blocks[slotId].price = slotData.price || (slotId * 30);
                     if (slotData.payment_link) {
                         state.blocks[slotId].payment_link = slotData.payment_link;
                     }
@@ -479,7 +479,7 @@ function buildPyramid() {
         const yPos = (row - 1) * CONFIG.BLOCK_SIZE;
 
         for (let col = 0; col < row; col++) {
-            let price = blockId * 50;
+            let price = blockId * 30;
             let type = 'std';
             if (blockId >= 4500) type = 'gold';
             else if (row <= 60) type = 'silver';
@@ -798,13 +798,36 @@ function handleClick(x, y) {
 // =========================================================================
 function smartBreakText(text) {
     if (!text) return '';
-    const limit = 15; 
-    return text.split(' ').map(word => {
-        if (word.length > limit) {
-            return word.match(new RegExp(`.{1,${limit}}`, 'g')).join(' ');
+
+    // Break any single word longer than 12 chars
+    const words = text.split(' ').flatMap(word =>
+        word.length > 12 ? word.match(/.{1,12}/g) : [word]
+    );
+
+    if (words.length <= 1) return words[0] || '';
+
+    // Find the optimal chars-per-line so the resulting text block
+    // is as close to a square as possible (charWidth ≈ 0.55 × lineHeight)
+    const totalChars = words.reduce((s, w) => s + w.length, 0) + words.length - 1;
+    const optimalLines = Math.max(1, Math.round(Math.sqrt(totalChars * 0.6)));
+    const charsPerLine = Math.ceil(totalChars / optimalLines);
+
+    // Greedy packing into lines
+    const lines = [];
+    let cur = '';
+    for (const word of words) {
+        if (!cur) {
+            cur = word;
+        } else if ((cur + ' ' + word).length <= charsPerLine) {
+            cur += ' ' + word;
+        } else {
+            lines.push(cur);
+            cur = word;
         }
-        return word;
-    }).join(' ');
+    }
+    if (cur) lines.push(cur);
+
+    return lines.join('\n');
 }
 
 // --- IMMORTAL POOL MANAGEMENT (Swap & Pop) ---
@@ -860,10 +883,8 @@ function renderBlockText(sprite, textData, isPreview = false) {
             fontFamily: 'ImmortalFont', 
             fontSize: 54,
             align: 'center',
-            wordWrap: true,     
-            wordWrapWidth: 440,
-            lineHeight: 58,
-            breakWords: false
+            wordWrap: false,
+            lineHeight: 64
         } 
     });
     
@@ -875,10 +896,12 @@ function renderBlockText(sprite, textData, isPreview = false) {
         state.previewBlock.textRef = textObj;
     } else {
         textObj.anchor.set(0.5);
-        textObj.x = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
-        textObj.y = (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
-        sprite.addChild(textObj);
-        sprite.textRef = textObj; // Store reference on sprite for fast access
+        // Parent to the chunk (sprite.parent), NOT the sprite itself.
+        // This prevents Pixi from multiplying the sprite's tint into the text color.
+        textObj.x = sprite.x + (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
+        textObj.y = sprite.y + (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
+        sprite.parent.addChild(textObj);
+        sprite.textRef = textObj;
         
         // --- O(1) ADDITION ---
         addToPool(textObj);
@@ -888,11 +911,11 @@ function renderBlockText(sprite, textData, isPreview = false) {
     
     if (isPreview) {
         const scaledBlockSize = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * state.previewBlock.scaleFactor;
-        const targetSize = scaledBlockSize * 0.8;
+        const targetSize = scaledBlockSize * 0.85;
         const scale = Math.min(targetSize / textObj.width, targetSize / textObj.height);
         textObj.scale.set(scale);
     } else {
-        const targetSize = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * 0.9;
+        const targetSize = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * 0.92;
         const scale = Math.min(targetSize / textObj.width, targetSize / textObj.height);
         textObj.scale.set(scale);
     }
@@ -1058,7 +1081,12 @@ window.app = {
                 updateBlock(id, {
                     owner_name: "Sim " + id,
                     owner_color: CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)],
-                    owner_text: ["CRYPTO", "HODL", "BTC", "ETH"][Math.floor(Math.random()*4)],
+                    owner_text: [
+                        "hii my name is daredevil",
+                        "there is the sun and there is the moon , which is best ",
+                        "the gif i sth emost used entertainment in the world ",
+                        "there is singnificant chance of the success comapre to the other low effort low esteem works"
+                    ][Math.floor(Math.random()*4)],
                     message: "This block is part of the simulation.",
                     link_url: "https://example.com/sim" + id,
                     link_description: "Visit Profile"
@@ -1331,7 +1359,7 @@ window.openModal = () => {
                         </div>
                     </div>
                     <div class="input-group">
-                        <label>Color</label>
+                        <label>Grid Color</label>
                         <div class="color-selector">${CONFIG.COLORS.map(c => `<div class="color-btn" style="background:${c}" onclick="app.setColor('${c}', this)"></div>`).join('')}</div>
                     </div>
                 </div>
@@ -1348,14 +1376,21 @@ window.openModal = () => {
                 <button class="confirm-btn" onclick="app.submit()">Claim Block (Local)</button>
             </div>`;
         
+        // Reset form state for fresh modal
+        formData.color = '#FFD700';
+        formData.text = '';
+        
         setTimeout(() => {
             const previewDiv = document.getElementById('block-preview');
             if (previewDiv && state.previewApp) {
                 previewDiv.innerHTML = '';
                 previewDiv.appendChild(state.previewApp.canvas);
                 state.previewBlock.sprite.tint = 0xFFD700;
-                renderBlockText(state.previewBlock.sprite, ""); 
+                renderBlockText(state.previewBlock.sprite, '');
             }
+            // Mark default active swatch
+            const firstColorBtn = document.querySelector('.color-btn');
+            if (firstColorBtn) firstColorBtn.classList.add('active');
         }, 50);
     }
 };
