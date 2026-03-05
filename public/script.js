@@ -1251,67 +1251,39 @@ window.openModal = () => {
         
         content.innerHTML = `
             <div class="profile-modal" style="${_colorVars}">
-                <div class="prof-header">
-                    <div class="prof-header-content">
-                        <div class="prof-block-info">
-                            <div class="prof-block-id">Block #${b.id}</div>
-                            <div class="prof-block-value">₹${b.price || '0'}</div>
-                        </div>
-                        <button class="prof-close-btn" onclick="closeModal()">×</button>
-                    </div>
+                <div class="prof-topbar">
+                    <div class="prof-price-badge">₹${b.price || '0'}</div>
+                    <button class="prof-close-btn" onclick="closeModal()">×</button>
                 </div>
 
                 <div class="prof-content">
                     <div class="prof-left-section">
                         <div class="prof-avatar-container">
-                            <div class="prof-avatar-ring"></div>
                             <img src="${img}" class="prof-avatar" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(d.owner_name || 'Anonymous')}&background=random&size=256';" alt="Profile">
                         </div>
                         <h2 class="prof-name">${d.owner_name || 'Anonymous'}</h2>
-                        <div class="prof-title">Pyramid Block Owner</div>
-
-                        <div class="prof-stats-grid">
-                            <div class="stat-card">
-                                <span class="stat-val">₹${b.price || '0'}</span>
-                                <span class="stat-label">Block Value</span>
-                            </div>
-                        </div>
+                        ${d.link_url ? `
+                            ${d.link_description ? `<div class="prof-link-desc">${d.link_description}</div>` : ''}
+                            <a href="${d.link_url}" target="_blank" rel="noopener noreferrer" class="prof-btn-visit">
+                                <span>Visit Link</span>
+                                <svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                            </a>
+                        ` : ''}
                     </div>
 
                     <div class="prof-right-section">
-                        <div class="prof-section-title">Personal Message</div>
-                        <div class="prof-message-container">
+                        <div class="prof-right-top">
                             <div class="prof-message">
                                 <div class="prof-message-text">${d.message || 'No message provided.'}</div>
                             </div>
                         </div>
-
-                        ${d.link_url ? `
-                            <div class="prof-section-title">External Link</div>
-                            <div class="prof-action-area">
-                                ${d.link_description ? `<div class="prof-link-desc">${d.link_description}</div>` : ''}
-                                <a href="${d.link_url}" target="_blank" rel="noopener noreferrer" class="prof-btn-visit">
-                                    <span>Visit Link</span>
-                                    <svg fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                                    </svg>
-                                </a>
-                            </div>
-                        ` : ''}
-
-                        ${(() => {
-                            const vidId = getYouTubeVideoId(d.youtube_url);
-                            if (!vidId) return '';
-                            return `
-                            <div class="prof-section-title prof-section-title--yt">Featured Video</div>
-                            <div class="prof-youtube-section">
+                        <div class="prof-right-bottom">
+                            ${(() => {
+                                const vidId = getYouTubeVideoId(d.youtube_url);
+                                if (!vidId) return '<div class="prof-no-video">No video added</div>';
+                                return `
                                 <div class="prof-youtube-player" onclick="loadYouTubeVideo(this, '${vidId}')" role="button" aria-label="Play video">
-                                    <img
-                                        class="prof-youtube-thumb"
-                                        src="https://img.youtube.com/vi/${vidId}/maxresdefault.jpg"
-                                        onerror="this.src='https://img.youtube.com/vi/${vidId}/hqdefault.jpg'"
-                                        alt="Video thumbnail"
-                                    >
+                                    <img class="prof-youtube-thumb" src="https://img.youtube.com/vi/${vidId}/maxresdefault.jpg" onerror="this.src='https://img.youtube.com/vi/${vidId}/hqdefault.jpg'" alt="Video thumbnail">
                                     <div class="prof-youtube-overlay"></div>
                                     <div class="prof-youtube-play-btn" aria-hidden="true">
                                         <svg viewBox="0 0 68 48" xmlns="http://www.w3.org/2000/svg">
@@ -1320,9 +1292,9 @@ window.openModal = () => {
                                         </svg>
                                     </div>
                                     <div class="prof-youtube-label">Click to Play</div>
-                                </div>
-                            </div>`;
-                        })()}
+                                </div>`;
+                            })()}
+                        </div>
                     </div>
                 </div>
             </div>
