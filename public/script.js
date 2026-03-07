@@ -147,7 +147,7 @@ async function loadStaticData() {
             } else if (slotData) {
                 // Update unsold block price and payment link
                 if (state.blocks[slotId]) {
-                    state.blocks[slotId].price = slotData.price || (slotId * 30);
+                    state.blocks[slotId].price = slotData.price || (slotId * 40);
                     if (slotData.payment_link) {
                         state.blocks[slotId].payment_link = slotData.payment_link;
                     }
@@ -479,7 +479,7 @@ function buildPyramid() {
         const yPos = (row - 1) * CONFIG.BLOCK_SIZE;
 
         for (let col = 0; col < row; col++) {
-            let price = blockId * 30;
+            let price = blockId * 40;
             let type = 'std';
             if (blockId >= 4500) type = 'gold';
             else if (row <= 60) type = 'silver';
@@ -764,12 +764,29 @@ function handleHover(x, y) {
             b.sprite.alpha = 0.6;
             document.body.style.cursor = 'pointer';
             tt.style.display = 'block';
+            tt.style.borderColor = '';
             if (b.sold) {
-                tt.innerHTML = `<div class="tt-label">OWNER</div><span style="color:${b.data.owner_color}">●</span> ${b.data.owner_name}<br><div class="tt-label" style="margin-top:4px">VALUE</div><span style="color:var(--gold); text-shadow: 1px 1px 2px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8), 1px -1px 2px rgba(0,0,0,0.8), -1px 1px 2px rgba(0,0,0,0.8);">₹${b.price}</span>`;
-                tt.style.borderColor = b.data.owner_color;
+                const _name = b.data.owner_name || 'Owner';
+                const _color = b.data.owner_color || '#FF0000';
+                const _fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(_name)}&background=${_color.replace('#','')}&color=fff&size=80&bold=true&rounded=true`;
+                const _src = b.data.image_url ? b.data.image_url : _fallback;
+                tt.innerHTML = `<div class="tt-yt-card">
+  <img class="tt-yt-avatar" src="${_src}" onerror="this.onerror=null;this.src='${_fallback}'" style="border-color:${_color}" alt="${_name}">
+  <div class="tt-yt-info">
+    <div class="tt-yt-name">${_name}</div>
+    <div class="tt-yt-sub">Block #${b.id}</div>
+    <div class="tt-yt-price" style="color:${_color}">₹${b.price}</div>
+  </div>
+</div>`;
             } else {
-                tt.innerHTML = `<div class="tt-label">AVAILABLE</div>Block #${b.id} &bull; <span style="color:var(--gold); text-shadow: 1px 1px 2px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.8), 1px -1px 2px rgba(0,0,0,0.8), -1px 1px 2px rgba(0,0,0,0.8);">₹${b.price}</span>`;
-                tt.style.borderColor = '#FFD700';
+                tt.innerHTML = `<div class="tt-yt-card">
+  <div class="tt-yt-avatar-icon">🔓</div>
+  <div class="tt-yt-info">
+    <div class="tt-yt-name">Block #${b.id}</div>
+    <div class="tt-yt-sub">Available</div>
+    <div class="tt-yt-price" style="color:#FFD700">₹${b.price}</div>
+  </div>
+</div>`;
             }
         } else {
             document.body.style.cursor = 'grab';

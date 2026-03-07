@@ -405,19 +405,79 @@ body {
 .tooltip { 
     position: absolute; 
     display: none; 
-    padding: 10px 14px; 
     background: #212121; 
-    border: 1px solid #FF0000; 
-    border-radius: 6px; 
+    border: none;
+    border-radius: 12px; 
     color: #F1F1F1; 
-    font-weight: 500; 
-    font-size: 0.85rem; 
     pointer-events: none; 
     z-index: 20; 
-    white-space: nowrap; 
     transform: translate(15px, -50%); 
-    backdrop-filter: blur(10px); 
-    box-shadow: 0 4px 12px rgba(255,0,0,0.4), 0 0 20px rgba(255,0,0,0.2); 
+    box-shadow: 0 8px 28px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.07);
+    overflow: hidden;
+    min-width: 210px;
+    max-width: 270px;
+}
+
+/* YouTube-style tooltip card */
+.tt-yt-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+}
+
+.tt-yt-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 2.5px solid transparent;
+    background: #373737;
+    display: block;
+}
+
+.tt-yt-avatar-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 2.5px solid #FFD700;
+    background: #2a2a2a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
+.tt-yt-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.tt-yt-name {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #F1F1F1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+}
+
+.tt-yt-sub {
+    font-size: 0.75rem;
+    color: #AAAAAA;
+    margin-top: 2px;
+    line-height: 1.3;
+}
+
+.tt-yt-price {
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-top: 4px;
+    line-height: 1.3;
 }
 
 .tt-label { 
@@ -1600,6 +1660,7 @@ border-color: #F1F1F1;
         line-height: 1.6;
         border-radius: 8px;
     }
+}
 
 /* Mobile Optimizations */
 @media(max-width: 768px) {
