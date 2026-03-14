@@ -6,8 +6,9 @@ const CONFIG = {
     BLOCK_SIZE: 40,
     GAP: 2,
     TOTAL_BLOCKS: 5050,
-    LOD_THRESHOLD: 0.35, 
-    LOD_BATCH_SIZE: 1000, // Process this many LOD updates per frame (Time Slicing)
+    LOD_THRESHOLD: 0.35,
+    MOBILE_LOD_THRESHOLD: 1.35,
+    LOD_BATCH_SIZE: 250,
     CHUNK_SIZE: 25,
     MAX_ZOOM: 50.0,
     MIN_ZOOM: 0.005,
@@ -52,6 +53,7 @@ const state = {
     lastTouchTapTime: 0,
     simulating: false,
     gridPriceMap: {},
+    isMobileDevice: false,
 
     // LOD State
     lodVisible: false,
@@ -354,6 +356,8 @@ function showSuccess(message) {
 // 3. ENGINE INITIALIZATION
 // =========================================================================
 async function init() {
+    state.isMobileDevice = window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
+
     // --- IMMORTAL UPGRADE: UNLOCKED RESOLUTION ---
     // We use window.devicePixelRatio directly but cap at 3 to save battery on 4K mobiles
     // while still looking extremely sharp.
@@ -465,7 +469,7 @@ function createSharedTextures() {
 
 function createStarfield() {
     const starfield = new PIXI.Container();
-    const starCount = 200;
+    const starCount = state.isMobileDevice ? 80 : 200;
     
     for (let i = 0; i < starCount; i++) {
         const star = new PIXI.Graphics().circle(0, 0, Math.random() * 2).fill(0xFFFFFF);
@@ -498,6 +502,7 @@ function buildPyramid() {
             chunk.yStart = (row - 1) * CONFIG.BLOCK_SIZE;
             chunk.yEnd = chunk.yStart + (CONFIG.CHUNK_SIZE * CONFIG.BLOCK_SIZE);
             chunk.visible = false;
+            chunk.textRefs = new Set();
             state.chunks.push(chunk);
             state.world.addChild(chunk);
         }
@@ -515,6 +520,7 @@ function buildPyramid() {
             const sprite = new PIXI.Sprite(state.baseTextures[type]);
             sprite.x = startX + (col * CONFIG.BLOCK_SIZE);
             sprite.y = yPos;
+            sprite.blockId = blockId;
 
             state.blocks[blockId] = { 
                 id: blockId, 
@@ -628,12 +634,13 @@ function cullWorld() {
 // =========================================================================
 
 function checkLODTransition() {
-    const showText = state.cam.zoom > CONFIG.LOD_THRESHOLD;
+    const threshold = state.isMobileDevice ? CONFIG.MOBILE_LOD_THRESHOLD : CONFIG.LOD_THRESHOLD;
+    const showText = state.cam.zoom > threshold;
     
     // If the desired state is different from current state, reset the queue
     if (showText !== state.lodVisible) {
         state.lodVisible = showText;
-        state.lodQueueIndex = 0; // Restart processing from index 0
+        state.lodQueueIndex = 0;
     }
 }
 
@@ -862,6 +869,7 @@ function handleHover(x, y) {
             document.body.style.cursor = 'grab';
             tt.style.display = 'none';
         }
+
     }
     if (id !== -1) { tt.style.left = (x + 20) + 'px'; tt.style.top = (y - 30) + 'px'; }
 }
@@ -915,13 +923,19 @@ function smartBreakText(text) {
 function addToPool(textObj) {
     textObj._poolIndex = state.textPool.length;
     state.textPool.push(textObj);
-    
+
     // Init visibility based on current global LOD state
     textObj.visible = state.lodVisible;
 }
 
 function removeFromPool(textObj) {
     const idx = textObj._poolIndex;
+    if (idx === undefined || idx < 0 || idx >= state.textPool.length) return;
+
+    if (textObj._chunkRef && textObj._chunkRef.textRefs) {
+        textObj._chunkRef.textRefs.delete(textObj);
+    }
+
     // 1. Get the last item in the array
     const lastItem = state.textPool[state.textPool.length - 1];
     
@@ -929,7 +943,9 @@ function removeFromPool(textObj) {
     state.textPool[idx] = lastItem;
     
     // 3. Update the last item's internal index reference
-    lastItem._poolIndex = idx;
+    if (lastItem) {
+        lastItem._poolIndex = idx;
+    }
     
     // 4. Remove the last item (now duplicate)
     state.textPool.pop();
@@ -983,6 +999,13 @@ function renderBlockText(sprite, textData, isPreview = false) {
         textObj.y = sprite.y + (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
         sprite.parent.addChild(textObj);
         sprite.textRef = textObj;
+
+        textObj._isBlockText = true;
+        textObj._chunkRef = sprite.parent;
+        textObj.blockId = sprite.blockId;
+        if (sprite.parent && sprite.parent.textRefs) {
+            sprite.parent.textRefs.add(textObj);
+        }
         
         // --- O(1) ADDITION ---
         addToPool(textObj);
@@ -1967,6 +1990,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }, { passive: false });
 });
 
-window.addEventListener('resize', () => { state.pixi.resize(); centerCamera(); });
+window.addEventListener('resize', () => {
+    state.isMobileDevice = window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
+    state.pixi.resize();
+    centerCamera();
+    state.lodQueueIndex = 0;
+});
 
 init();

@@ -51,9 +51,5 @@
 			"zone_name": "creatorspyramid.com"
 		}
 	],
-	"env": {
-		"production": {
-			"NODE_ENV": "production"
-		}
-	}
+	// Removed "env" block to deploy directly to the main Worker
 }
