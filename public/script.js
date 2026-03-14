@@ -1055,24 +1055,31 @@ function sanitizeBlockColor(color) {
     return '#FF0000';
 }
 
+function getGeneratedPhotoUrl(id, variant = 0) {
+    return `https://picsum.photos/seed/pyramid-${variant}-${id}/96/96`;
+}
+
+function getSvgFallbackImageUrl(id) {
+    const hue = (id * 37) % 360;
+    const label = `SIM-${id}`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="hsl(${hue},85%,55%)"/><stop offset="100%" stop-color="hsl(${(hue + 80) % 360},85%,45%)"/></linearGradient></defs><rect width="96" height="96" fill="url(#g)"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="14" font-family="Arial, sans-serif" font-weight="700">${label}</text></svg>`;
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
 function getBlockPhotoUrl(block) {
     if (!block.sold) return null;
     if (block.data && typeof block.data.image_url === 'string' && block.data.image_url.trim()) {
         return block.data.image_url.trim();
     }
-    return null;
+    return getGeneratedPhotoUrl(block.id, 1);
 }
 
 function hasUserImage(block) {
-    return !!(block && block.sold && block.data && typeof block.data.image_url === 'string' && block.data.image_url.trim());
+    return !!(block && block.sold && getBlockPhotoUrl(block));
 }
 
 function getSimulationImageUrl(id) {
-    const localPool = ['./assets/profiles/1.jpg', './assets/profiles/pyramid-king.jpg'];
-    if (Math.random() < 0.45) {
-        return localPool[id % localPool.length];
-    }
-    return `https://picsum.photos/seed/pyramid-sim-${id}/96/96`;
+    return getGeneratedPhotoUrl(id, 2);
 }
 
 function loadTextureFromUrl(url) {
@@ -1106,10 +1113,30 @@ async function ensureBlockPhotoTexture(block, imageUrl) {
     const requestedUrl = imageUrl;
 
     try {
-        let texture = state.photoTextureCache.get(requestedUrl);
+        const candidateUrls = [
+            requestedUrl,
+            getGeneratedPhotoUrl(block.id, 3),
+            getGeneratedPhotoUrl(block.id, 4),
+            getSvgFallbackImageUrl(block.id)
+        ].filter((url, index, list) => url && list.indexOf(url) === index);
+
+        let texture = null;
+        let lastError = null;
+        for (const url of candidateUrls) {
+            try {
+                texture = state.photoTextureCache.get(url);
+                if (!texture) {
+                    texture = await loadTextureFromUrl(url);
+                    state.photoTextureCache.set(url, texture);
+                }
+                break;
+            } catch (candidateError) {
+                lastError = candidateError;
+            }
+        }
+
         if (!texture) {
-            texture = await loadTextureFromUrl(requestedUrl);
-            state.photoTextureCache.set(requestedUrl, texture);
+            throw lastError || new Error('No photo texture could be loaded');
         }
 
         if (block.photoUrl !== requestedUrl) return;
@@ -1215,7 +1242,7 @@ async function preparePhotoMode(durationMs = 5000) {
     state.photoPrepCountdown = Math.ceil(durationMs / 1000);
     updateViewModeButton();
 
-    // Queue only sold blocks with explicit user image URLs.
+    // Queue all sold blocks; missing image_url values use generated image URLs.
     soldBlocks.forEach((block) => {
         block.photoReady = false;
         enqueuePhotoLoad(block);
