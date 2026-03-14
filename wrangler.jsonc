@@ -37,10 +37,18 @@
 		"CUSTOM_DOMAIN": "https://immortal-pyramid.piyushsayare8.workers.dev"
 	},
 	// 6. SCHEDULED EVENTS (Daily cleanup)
-	"triggers": [
+	"triggers": {
+		"crons": ["0 2 * * *"]
+	},
+	// 7. CUSTOM DOMAIN ROUTES
+	"routes": [
 		{
-			"cron": "0 2 * * *",
-			"name": "cleanup-temp-images"
+			"pattern": "creatorspyramid.com/*",
+			"zone_name": "creatorspyramid.com"
+		},
+		{
+			"pattern": "www.creatorspyramid.com/*",
+			"zone_name": "creatorspyramid.com"
 		}
 	],
 	"env": {

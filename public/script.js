@@ -48,7 +48,10 @@ const state = {
     selectedId: -1,
     touches: [],
     lastTouchDistance: 0,
+    lastTouchTapId: -1,
+    lastTouchTapTime: 0,
     simulating: false,
+    gridPriceMap: {},
 
     // LOD State
     lodVisible: false,
@@ -120,18 +123,51 @@ function loadLocalPurchases() {
 async function loadStaticData() {
     try {
         showLoading('Loading pyramid data...');
-        
+
         const response = await fetch('./slots_data.json');
         if (!response.ok) {
             throw new Error('Failed to load slots data');
         }
-        
+
         const slotsData = await response.json();
+
+        // Optional pricing/payment map keyed by slot id (as string)
+        let gridPriceData = {};
+        try {
+            const gridPriceResponse = await fetch('./grid_price.json');
+            if (gridPriceResponse.ok) {
+                gridPriceData = await gridPriceResponse.json();
+            } else {
+                console.warn('grid_price.json not found; Buy Now links will be unavailable for unmapped slots.');
+            }
+        } catch (gridPriceError) {
+            console.warn('Failed to load grid_price.json:', gridPriceError);
+        }
+
+        state.gridPriceMap = gridPriceData || {};
         hideLoading();
         
         // Process all slots with unique IDs
         for (let slotId = 1; slotId <= CONFIG.TOTAL_BLOCKS; slotId++) {
             const slotData = slotsData[slotId];
+            const gridData = state.gridPriceMap[String(slotId)] || null;
+
+            if (state.blocks[slotId]) {
+                // Keep slot price from slots_data when present, otherwise fallback to grid_price mapping if provided
+                if (slotData && slotData.price !== undefined && slotData.price !== null) {
+                    state.blocks[slotId].price = slotData.price;
+                } else if (gridData && gridData.price !== undefined && gridData.price !== null) {
+                    state.blocks[slotId].price = gridData.price;
+                }
+
+                // Slot-specific payment link now comes only from grid_price.json
+                if (gridData && typeof gridData.payment_link === 'string' && gridData.payment_link.trim()) {
+                    state.blocks[slotId].payment_link = gridData.payment_link.trim();
+                } else {
+                    delete state.blocks[slotId].payment_link;
+                }
+            }
+
             if (slotData && slotData.sold) {
                 updateBlock(slotId, {
                     sold: true,
@@ -144,14 +180,6 @@ async function loadStaticData() {
                     link_description: slotData.link_description || '',
                     youtube_url: slotData.youtube_url || ''
                 });
-            } else if (slotData) {
-                // Update unsold block price and payment link
-                if (state.blocks[slotId]) {
-                    state.blocks[slotId].price = slotData.price || (slotId * 40);
-                    if (slotData.payment_link) {
-                        state.blocks[slotId].payment_link = slotData.payment_link;
-                    }
-                }
             }
         }
         
@@ -479,7 +507,7 @@ function buildPyramid() {
         const yPos = (row - 1) * CONFIG.BLOCK_SIZE;
 
         for (let col = 0; col < row; col++) {
-            let price = blockId * 40;
+            let price = blockId * 20;
             let type = 'std';
             if (blockId >= 4500) type = 'gold';
             else if (row <= 60) type = 'silver';
@@ -637,6 +665,15 @@ function processLODQueue() {
 function setupInput() {
     const dom = document.getElementById('canvas-container');
 
+    const clearTouchHover = () => {
+        const tt = document.getElementById('tooltip');
+        if (state.hoverId !== -1 && state.blocks[state.hoverId]) {
+            state.blocks[state.hoverId].sprite.alpha = 1;
+        }
+        state.hoverId = -1;
+        if (tt) tt.style.display = 'none';
+    };
+
     dom.addEventListener('wheel', (e) => {
         e.preventDefault();
         const mouseX = e.clientX;
@@ -685,16 +722,22 @@ function setupInput() {
         e.preventDefault();
         state.touches = Array.from(e.touches);
         if (state.touches.length === 1) {
+            const t = state.touches[0];
             state.dragging = true;
             state.hasMoved = false;
-            state.dragStart = { x: state.touches[0].clientX, y: state.touches[0].clientY };
-            state.dragOriginalStart = { x: state.touches[0].clientX, y: state.touches[0].clientY };
+            state.dragStart = { x: t.clientX, y: t.clientY };
+            state.dragOriginalStart = { x: t.clientX, y: t.clientY };
             state.vel = { x: 0, y: 0 };
+
+            // Mobile hover-like behavior: show tooltip immediately on touch.
+            handleHover(t.clientX, t.clientY);
         } else if (state.touches.length === 2) {
             state.dragging = false;
+            state.lastTouchTapId = -1;
             const dx = state.touches[0].clientX - state.touches[1].clientX;
             const dy = state.touches[0].clientY - state.touches[1].clientY;
             state.lastTouchDistance = Math.hypot(dx, dy);
+            clearTouchHover();
         }
     }, { passive: false });
 
@@ -705,12 +748,22 @@ function setupInput() {
             const t = state.touches[0];
             const dx = t.clientX - state.dragStart.x;
             const dy = t.clientY - state.dragStart.y;
-            if (Math.hypot(t.clientX - state.dragOriginalStart.x, t.clientY - state.dragOriginalStart.y) > state.clickThreshold) state.hasMoved = true;
-            state.target.x += dx;
-            state.target.y += dy;
+            const movedDistance = Math.hypot(t.clientX - state.dragOriginalStart.x, t.clientY - state.dragOriginalStart.y);
+
+            // Small finger movement behaves like hover tracking.
+            if (movedDistance <= state.clickThreshold * 1.5) {
+                handleHover(t.clientX, t.clientY);
+            } else {
+                state.hasMoved = true;
+                clearTouchHover();
+                state.target.x += dx;
+                state.target.y += dy;
+            }
+
             state.dragStart = { x: t.clientX, y: t.clientY };
             state.vel = { x: dx, y: dy };
         } else if (state.touches.length === 2) {
+            clearTouchHover();
             const p1 = state.touches[0];
             const p2 = state.touches[1];
             const dist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
@@ -733,11 +786,28 @@ function setupInput() {
     dom.addEventListener('touchend', (e) => {
         e.preventDefault();
         if (state.touches.length === 1 && state.dragging && !state.hasMoved) {
-            const t = state.touches[0] || e.changedTouches[0];
-            handleClick(t.clientX, t.clientY);
+            const t = e.changedTouches[0];
+            const tappedId = getBlockId(t.clientX, t.clientY);
+            const now = Date.now();
+
+            // 1st tap => show tooltip, 2nd quick tap on same block => open modal.
+            if (tappedId !== -1 && state.lastTouchTapId === tappedId && (now - state.lastTouchTapTime) < 700) {
+                state.selectedId = tappedId;
+                window.openModal();
+                state.lastTouchTapId = -1;
+                state.lastTouchTapTime = 0;
+            } else {
+                handleHover(t.clientX, t.clientY);
+                state.lastTouchTapId = tappedId;
+                state.lastTouchTapTime = now;
+            }
         }
+
         state.touches = Array.from(e.touches);
-        if (state.touches.length === 0) state.dragging = false;
+        if (state.touches.length === 0) {
+            state.dragging = false;
+            state.lastTouchDistance = 0;
+        }
     }, { passive: false });
 }
 
@@ -799,12 +869,6 @@ function handleHover(x, y) {
 function handleClick(x, y) {
     const id = getBlockId(x, y);
     if (id !== -1) {
-        const b = state.blocks[id];
-        // If block is unsold and has a Razorpay payment link, redirect instead of opening modal
-        if (b && !b.sold && b.payment_link) {
-            window.open(b.payment_link, '_blank');
-            return;
-        }
         state.selectedId = id;
         openModal();
     }
@@ -1134,15 +1198,31 @@ function handleBlockClick(id) {
         state.selectedId = id;
         openModal();
     } else {
-        // If block has a Razorpay payment link, redirect to it
-        if (b.payment_link) {
-            window.open(b.payment_link, '_blank');
-            return;
-        }
         // Show purchase form for empty blocks
         state.selectedId = id;
         openModal();
     }
+};
+
+window.togglePurchaseInfoPanel = () => {
+    const panel = document.getElementById('purchase-info-panel');
+    if (!panel) return;
+    panel.classList.toggle('show');
+};
+
+window.openBuyNowForSelectedBlock = () => {
+    const block = state.blocks[state.selectedId];
+    if (!block) {
+        showError('No block selected.');
+        return;
+    }
+
+    if (!block.payment_link) {
+        showInfo(`Buy link is not added yet for Block #${block.id}. Add it in grid_price.json.`);
+        return;
+    }
+
+    window.open(block.payment_link, '_blank', 'noopener,noreferrer');
 };
 
 window.closeModal = (e) => {
@@ -1366,9 +1446,16 @@ window.openModal = () => {
                     <div class="preview-box" id="block-preview"></div>
                 </div>
             </div>
+            <div class="purchase-info-panel" id="purchase-info-panel">
+                Please after purchase fill the google form so that we can update the information of yours on website.
+            </div>
             <div class="modal-footer">
                 <div style="font-size:1.2rem; font-weight:800; color:var(--gold)">₹${b.price}</div>
-                <button class="confirm-btn" onclick="app.submit()">Claim Block (Local)</button>
+                <div class="purchase-actions">
+                    <button class="btn purchase-info-toggle" type="button" onclick="togglePurchaseInfoPanel()">How to Update Info</button>
+                    <button class="confirm-btn" type="button" onclick="openBuyNowForSelectedBlock()">Buy Now</button>
+                    <button class="btn" type="button" onclick="app.submit()">Claim Block (Local)</button>
+                </div>
             </div>`;
         
         // Reset form state for fresh modal

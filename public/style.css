@@ -958,6 +958,34 @@ background: #212121;
 border-radius: 0 0 16px 16px;
 }
 
+.purchase-actions {
+display: flex;
+gap: 10px;
+align-items: center;
+justify-content: flex-end;
+flex-wrap: wrap;
+}
+
+.purchase-info-toggle {
+border-color: #4a4a4a;
+}
+
+.purchase-info-panel {
+display: none;
+margin: 0 28px 16px;
+padding: 12px 14px;
+border-radius: 8px;
+background: rgba(255, 255, 255, 0.04);
+border: 1px solid #373737;
+color: #d9d9d9;
+font-size: 0.9rem;
+line-height: 1.5;
+}
+
+.purchase-info-panel.show {
+display: block;
+}
+
 .modal-footer button {
 font-family: 'Roboto', 'Arial', system-ui, sans-serif;
 font-weight: 500;
@@ -1598,6 +1626,21 @@ border-color: #F1F1F1;
         min-height: auto;
         max-height: 95vh;
     }
+
+    .purchase-info-panel {
+        margin: 0 20px 14px;
+        font-size: 0.85rem;
+    }
+
+    .purchase-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .purchase-actions .btn,
+    .purchase-actions .confirm-btn {
+        flex: 1 1 160px;
+    }
     
     .modal.premium {
         width: 98%;
@@ -1613,49 +1656,88 @@ border-color: #F1F1F1;
     }
     
     .prof-content {
-        flex-direction: column;
+        display: grid;
+        grid-template-rows: auto minmax(140px, 1fr) minmax(140px, 1fr);
         padding: 0;
         gap: 0;
+        overflow: hidden;
     }
     
     .prof-left-section {
         flex: 0 0 auto;
-        flex-direction: row;
-        justify-content: flex-start;
+        display: grid;
+        grid-template-columns: 62px minmax(0, 1fr);
+        grid-template-rows: auto auto auto;
         align-items: center;
-        gap: 12px;
+        column-gap: 12px;
+        row-gap: 6px;
         border-right: none;
         border-bottom: 1px solid #373737;
-        padding: 12px 16px;
+        padding: 14px 16px;
         overflow: hidden;
         width: 100%;
         box-sizing: border-box;
     }
+
+    .prof-avatar-container {
+        grid-column: 1;
+        grid-row: 1 / 4;
+        align-self: center;
+    }
     
     .prof-avatar {
-        width: 52px;
-        height: 52px;
+        width: 60px;
+        height: 60px;
         flex-shrink: 0;
     }
     
     .prof-name {
-        font-size: 1rem;
+        grid-column: 2;
+        grid-row: 1;
+        font-size: 1.08rem;
         text-align: left;
         margin: 0;
+        line-height: 1.2;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    .prof-link-desc {
+        grid-column: 2;
+        grid-row: 2;
+        margin: 0;
+        text-align: left;
+        font-size: 0.82rem;
     }
     
     .prof-btn-visit {
-        padding: 8px 14px;
-        font-size: 0.8rem;
+        grid-column: 2;
+        grid-row: 3;
+        justify-self: start;
+        width: auto;
+        max-width: 100%;
+        padding: 9px 16px;
+        font-size: 0.9rem;
+        min-height: 40px;
     }
 
     .prof-right-section {
-        flex: 1;
-        min-height: 0;
+        display: contents;
     }
     
-    .prof-right-top, .prof-right-bottom {
-        padding: 10px 14px;
+    .prof-right-top,
+    .prof-right-bottom {
+        min-height: 0;
+        padding: 12px 14px;
+        background: #0F0F0F;
+    }
+
+    .prof-right-top {
+        border-bottom: 1px solid #373737;
+    }
+
+    .prof-right-bottom {
+        border-top: 1px solid #373737;
     }
     
     .prof-message {
@@ -1849,7 +1931,7 @@ border-color: #F1F1F1;
     .modal.premium {
         width: 94%;
         height: auto;
-        max-height: 80vh;
+        max-height: 84vh;
     }
     
     .profile-modal {
@@ -1877,6 +1959,26 @@ border-color: #F1F1F1;
         padding: 10px 12px;
     }
 
+    .prof-left-section {
+        grid-template-columns: 56px minmax(0, 1fr);
+        column-gap: 10px;
+        row-gap: 4px;
+        padding: 12px;
+    }
+
+    .prof-avatar {
+        width: 54px;
+        height: 54px;
+    }
+
+    .prof-name {
+        font-size: 1rem;
+    }
+
+    .prof-link-desc {
+        font-size: 0.78rem;
+    }
+
     .modal {
         width: 94%;
         max-height: 80vh;
@@ -1890,6 +1992,31 @@ border-color: #F1F1F1;
         padding: 20px;
         gap: 18px;
     }
+
+    .modal-footer {
+        padding: 14px 16px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .purchase-info-panel {
+        margin: 0 16px 12px;
+        padding: 10px 12px;
+        font-size: 0.82rem;
+    }
+
+    .purchase-actions {
+        width: 100%;
+        gap: 8px;
+    }
+
+    .purchase-actions .btn,
+    .purchase-actions .confirm-btn {
+        width: 100%;
+        flex: 1 1 auto;
+        padding: 10px 12px;
+    }
     
     .prof-message {
         padding: 12px 14px;
@@ -1898,9 +2025,10 @@ border-color: #F1F1F1;
     }
     
     .prof-btn-visit {
-        padding: 9px 14px;
-        font-size: 0.82rem;
+        padding: 8px 14px;
+        font-size: 0.86rem;
         border-radius: 6px;
+        min-height: 36px;
     }
 }
 
@@ -1973,7 +2101,7 @@ border-color: #F1F1F1;
     .modal,
     .modal.premium {
         width: 95%;
-        max-height: 78vh;
+        max-height: 82vh;
     }
 
     .prof-topbar {
@@ -1993,12 +2121,13 @@ border-color: #F1F1F1;
     }
     
     .prof-avatar {
-        width: 44px;
-        height: 44px;
+        width: 50px;
+        height: 50px;
     }
     
     .prof-name {
-        font-size: 0.9rem;
+        font-size: 0.94rem;
+        line-height: 1.15;
     }
     
     .prof-link-desc {
@@ -2007,7 +2136,8 @@ border-color: #F1F1F1;
     
     .prof-btn-visit {
         padding: 7px 12px;
-        font-size: 0.75rem;
+        font-size: 0.78rem;
+        min-height: 34px;
     }
     
     .prof-btn-visit svg {

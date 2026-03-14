@@ -1,8 +1,9 @@
 {
   "1": {
     "sold": true,
-    "price": 0.1,    "payment_link": "https://rzp.io/rzp/go7iRRHy",    "owner_name": "hii",
-    "owner_text": "is there anything",
+    "price": 0.1,
+    "owner_name": "hii",
+    "owner_text": "You were carried to the golden mountaintop by a river of grace you did not create. Now, melt your own heart and become the river for those still walking through the valley.",
     "owner_color": "#FFD700",
     "owner_text_color": "#000000",
     "message": "my name is piyush and i am here to test the pyramid lorem300 characters message field to see how it looks on the frontend and also to test the responsiveness of the design. this is just a sample message to fill up the space and make sure everything is working fine. lorem100 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one. lorem1000 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one. lorem1000 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one. lorem1000 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one. lorem1000 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one.",
@@ -13,8 +14,7 @@
   },
   "2": {
     "sold": false,
-    "price": 0.2,
-    "payment_link": "https://rzp.io/rzp/y8Ecg5L"
+    "price": 0.2
   },
   "3": {
     "sold": true,
