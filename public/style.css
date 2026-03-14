@@ -65,6 +65,10 @@ body {
     touch-action: none; 
 }
 
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
 #canvas-container { 
     width: 100vw; 
     height: 100vh; 
@@ -1664,81 +1668,188 @@ border-color: #F1F1F1;
 
 /* Mobile Optimizations */
 @media(max-width: 768px) {
-    /* Header adjustments */
-    .header { 
-        top: 10px; 
-        left: 10px; 
-        padding: 12px 16px; 
-        border-radius: 10px; 
-        max-width: calc(100% - 120px);
-    }
-    .header h1 { 
-        font-size: 1.4rem; 
-    }
-    .subtitle { 
-        font-size: 0.6rem; 
-        letter-spacing: 1.5px; 
+    .header {
+        top: 10px;
+        left: 10px;
+        right: auto;
+        width: auto;
+        max-width: calc(62% - 12px);
+        padding: 8px 10px;
+        border-radius: 10px;
     }
 
-    /* Sales counter - move to top right to avoid header overlap */
-    .sales-counter { 
-        top: 10px; 
-        right: 10px; 
-        left: auto; 
-        padding: 8px 12px; 
-        min-width: 100px; 
-        max-width: 140px;
-    }
-    .sales-label { 
-        font-size: 0.55rem; 
-    }
-    .sales-stats { 
-        font-size: 0.85rem; 
+    .header h1 {
+        font-size: clamp(0.9rem, 3.8vw, 1.05rem);
+        line-height: 1.2;
     }
 
-    /* Controls - move below header and sales counter */
-    .controls { 
-        top: 70px; 
-        right: 10px; 
-        gap: 6px; 
-    }
-    .btn { 
-        padding: 6px 12px; 
-        font-size: 0.7rem; 
-        border-radius: 6px; 
-    }
-    .toggle-btn { 
-        padding: 5px 10px; 
-        font-size: 0.65rem; 
-        margin-bottom: 5px; 
+    .subtitle {
+        font-size: 0.48rem;
+        letter-spacing: 0.8px;
+        margin-top: 2px;
     }
 
-    /* Center profile button */
-    .center-controls { 
-        bottom: 70px; 
-    }
-    .profile-btn { 
-        padding: 10px 20px; 
-        font-size: 0.7rem; 
-        border-radius: 35px; 
+    .search-container {
+        top: 62px;
+        left: 10px;
+        right: 10px;
+        transform: none;
+        width: auto;
+        gap: 5px;
     }
 
-    /* Instructions - move up to avoid profile button overlap */
-    .ui-layer > div:last-child { 
-        bottom: 15px; 
-        right: 10px; 
-        font-size: 0.5rem; 
-        padding: 5px 8px; 
-        border-radius: 5px; 
+    .search-input {
+        width: 100%;
+        min-width: 0;
+        padding: 8px 10px;
+        font-size: 0.8rem;
+    }
+
+    .search-input:focus {
+        width: 100%;
+        transform: none;
+    }
+
+    .search-btn {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        flex-shrink: 0;
+        font-size: 0.85rem;
+    }
+
+    .search-results {
+        top: 106px;
+        left: 10px;
+        right: 10px;
+        transform: none;
+        min-width: 0;
+        width: auto;
+        max-width: none;
+        max-height: min(38vh, 260px);
+    }
+
+    .sales-counter {
+        top: 10px;
+        right: 10px;
+        left: auto;
+        max-width: 36%;
+        min-width: 0;
+        width: auto;
+        padding: 7px 8px;
+        border-radius: 8px;
+    }
+
+    .sales-label {
+        font-size: 0.46rem;
+        letter-spacing: 0.7px;
+        margin-bottom: 2px;
+    }
+
+    .sales-stats {
+        font-size: 0.74rem;
+        line-height: 1.1;
+    }
+
+    .controls {
+        top: auto;
+        bottom: 76px;
+        right: 10px;
+        left: auto;
+        align-items: flex-end;
+        gap: 5px;
+    }
+
+    .controls > div {
+        display: flex !important;
+        flex-direction: column;
+        gap: 5px !important;
+        width: auto;
+        margin-bottom: 0 !important;
+    }
+
+    .controls .btn,
+    .controls .toggle-btn {
+        width: auto;
+        min-width: 124px;
+        text-align: center;
+        padding: 6px 10px;
+        font-size: 0.68rem;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .controls .toggle-btn {
+        margin-bottom: 0;
+    }
+
+    .center-controls {
+        bottom: 18px;
+        left: 50%;
+        width: min(56vw, 230px);
+        max-width: 230px;
+    }
+
+    .profile-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 10px 14px;
+        font-size: 0.7rem;
+        border-radius: 999px;
+    }
+
+    .help-btn {
+        left: 10px;
+        bottom: 18px;
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+
+    .modal {
+        width: 92%;
+        max-width: 760px;
+        max-height: 82vh;
+    }
+
+    .modal:not(.premium) {
+        min-height: 0;
+        max-height: 82vh;
+    }
+
+    .modal.premium {
+        width: 92%;
+        height: auto;
+        max-height: 82vh;
+    }
+
+    .help-content {
+        width: calc(100% - 24px);
+        max-width: 420px;
+        padding: 20px;
+    }
+
+    .test-modal-content {
+        width: calc(100% - 20px);
+    }
+
+    .test-modal-body {
+        padding: 18px;
+    }
+
+    .test-form-buttons {
+        flex-direction: column;
     }
 }
 
 /* Mobile Profile Optimizations */
 @media(max-width: 600px) {
     .modal.premium {
-        width: 100%;
-        height: 100vh;
-        max-height: 100vh;
+        width: 94%;
+        height: auto;
+        max-height: 80vh;
     }
     
     .profile-modal {
@@ -1765,6 +1876,20 @@ border-color: #F1F1F1;
     .prof-right-top, .prof-right-bottom {
         padding: 10px 12px;
     }
+
+    .modal {
+        width: 94%;
+        max-height: 80vh;
+    }
+
+    .modal:not(.premium) {
+        max-height: 80vh;
+    }
+
+    .modal-body {
+        padding: 20px;
+        gap: 18px;
+    }
     
     .prof-message {
         padding: 12px 14px;
@@ -1779,8 +1904,78 @@ border-color: #F1F1F1;
     }
 }
 
-/* Small Mobile Profile Optimizations */
 @media(max-width: 480px) {
+    .header {
+        top: 8px;
+        left: 8px;
+        right: auto;
+        max-width: calc(60% - 10px);
+    }
+
+    .subtitle {
+        letter-spacing: 0.7px;
+        font-size: 0.46rem;
+    }
+
+    .search-container {
+        top: 58px;
+        left: 8px;
+        right: 8px;
+    }
+
+    .search-results {
+        top: 100px;
+        left: 8px;
+        right: 8px;
+    }
+
+    .sales-counter {
+        top: 8px;
+        right: 8px;
+        left: auto;
+        max-width: 38%;
+    }
+
+    .controls {
+        top: auto;
+        bottom: 72px;
+        right: 8px;
+    }
+
+    .controls > div {
+        gap: 4px !important;
+    }
+
+    .controls .btn,
+    .controls .toggle-btn {
+        font-size: 0.64rem;
+        padding: 6px 8px;
+        min-width: 112px;
+    }
+
+    .center-controls {
+        bottom: 12px;
+        width: min(58vw, 210px);
+    }
+
+    .help-btn {
+        left: 8px;
+        bottom: 12px;
+        width: 38px;
+        height: 38px;
+    }
+
+    .profile-btn {
+        padding: 9px 12px;
+        font-size: 0.66rem;
+    }
+
+    .modal,
+    .modal.premium {
+        width: 95%;
+        max-height: 78vh;
+    }
+
     .prof-topbar {
         height: 40px;
         padding: 0 10px;
