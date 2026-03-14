@@ -7,7 +7,7 @@
     "owner_color": "#FFD700",
     "owner_text_color": "#000000",
     "message": "my name is piyush and i am here to test the pyramid lorem300 characters message field to see how it looks on the frontend and also to test the responsiveness of the design. this is just a sample message to fill up the space and make sure everything is working fine. lorem100 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one. lorem1000 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one. lorem1000 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one. lorem1000 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one. lorem1000 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one.",
-    "image_url": "./assets/profiles/john-doe.jpg",
+    "image_url": "./assets/profiles/1.jpg",
     "link_url": "https://twitter.com/johndoe",
     "link_description": "Follow me on Twitter",
     "youtube_url": "https://www.youtube.com/watch?v=HZvj8T5_oUE"
@@ -73,7 +73,7 @@
     "owner_text_color": "#000000",
     "owner_text": "hello my name is gold bug an di am yhre to test the pyramid",
     "message": "Gold is real money! 🏆",
-    "image_url": "./assets/profiles/gold-bug.jpg",
+    "image_url": "./assets/profiles/1.jpg",
     "link_url": "https://goldbug.com",
     "link_description": "Learn about real money",
     "price": 10

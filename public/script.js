@@ -54,6 +54,15 @@ const state = {
     simulating: false,
     gridPriceMap: {},
     isMobileDevice: false,
+    viewMode: 'text',
+    photoTextureCache: new Map(),
+    photoPrepInProgress: false,
+    photoPrepTimer: null,
+    photoPrepCountdown: 0,
+    photoLoadQueue: [],
+    photoQueuePumpTimer: null,
+    activePhotoLoads: 0,
+    maxConcurrentPhotoLoads: 8,
 
     // LOD State
     lodVisible: false,
@@ -522,16 +531,30 @@ function buildPyramid() {
             sprite.y = yPos;
             sprite.blockId = blockId;
 
+            const photoSprite = new PIXI.Sprite(PIXI.Texture.WHITE);
+            photoSprite.x = sprite.x;
+            photoSprite.y = sprite.y;
+            photoSprite.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+            photoSprite.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+            photoSprite.visible = false;
+            photoSprite.blockId = blockId;
+
             state.blocks[blockId] = { 
                 id: blockId, 
                 price: price, 
                 tier: type, 
                 sold: false, 
                 sprite: sprite, 
+                photoRef: photoSprite,
+                photoUrl: '',
+                photoReady: false,
+                photoQueued: false,
+                photoLoading: false,
                 data: null, 
                 textRef: null 
             };
             chunk.addChild(sprite);
+            chunk.addChild(photoSprite);
             blockId--;
         }
     }
@@ -635,7 +658,7 @@ function cullWorld() {
 
 function checkLODTransition() {
     const threshold = state.isMobileDevice ? CONFIG.MOBILE_LOD_THRESHOLD : CONFIG.LOD_THRESHOLD;
-    const showText = state.cam.zoom > threshold;
+    const showText = state.viewMode === 'text' && state.cam.zoom > threshold;
     
     // If the desired state is different from current state, reset the queue
     if (showText !== state.lodVisible) {
@@ -654,10 +677,11 @@ function processLODQueue() {
     // Process a chunk of the array
     while (processed < limit && state.lodQueueIndex < state.textPool.length) {
         const text = state.textPool[state.lodQueueIndex];
+        const targetVisible = state.viewMode === 'text' && state.lodVisible;
         
         // Only update if it actually needs changing
-        if (text.visible !== state.lodVisible) {
-            text.visible = state.lodVisible;
+        if (text.visible !== targetVisible) {
+            text.visible = targetVisible;
         }
         
         state.lodQueueIndex++;
@@ -925,7 +949,7 @@ function addToPool(textObj) {
     state.textPool.push(textObj);
 
     // Init visibility based on current global LOD state
-    textObj.visible = state.lodVisible;
+    textObj.visible = state.viewMode === 'text' && state.lodVisible;
 }
 
 function removeFromPool(textObj) {
@@ -1025,6 +1049,262 @@ function renderBlockText(sprite, textData, isPreview = false) {
     }
 }
 
+function sanitizeBlockColor(color) {
+    if (typeof color !== 'string') return '#FF0000';
+    if (/^#[0-9A-Fa-f]{6}$/.test(color)) return color;
+    return '#FF0000';
+}
+
+function getBlockPhotoUrl(block) {
+    if (!block.sold) return null;
+    if (block.data && typeof block.data.image_url === 'string' && block.data.image_url.trim()) {
+        return block.data.image_url.trim();
+    }
+    return null;
+}
+
+function hasUserImage(block) {
+    return !!(block && block.sold && block.data && typeof block.data.image_url === 'string' && block.data.image_url.trim());
+}
+
+function getSimulationImageUrl(id) {
+    const localPool = ['./assets/profiles/1.jpg', './assets/profiles/pyramid-king.jpg'];
+    if (Math.random() < 0.45) {
+        return localPool[id % localPool.length];
+    }
+    return `https://picsum.photos/seed/pyramid-sim-${id}/96/96`;
+}
+
+function loadTextureFromUrl(url) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            try {
+                const texture = PIXI.Texture.from(img);
+                if (!texture || img.naturalWidth === 0 || img.naturalHeight === 0) {
+                    reject(new Error('Invalid image texture'));
+                    return;
+                }
+                resolve(texture);
+            } catch (e) {
+                reject(e);
+            }
+        };
+        img.onerror = () => reject(new Error(`Image failed to load: ${url}`));
+        img.src = url;
+    });
+}
+
+async function ensureBlockPhotoTexture(block, imageUrl) {
+    if (!block.photoRef || !block.sold || !imageUrl) return;
+    if (block.photoLoading) return;
+    if (block.photoReady && block.photoUrl === imageUrl) return;
+
+    block.photoLoading = true;
+    block.photoUrl = imageUrl;
+    const requestedUrl = imageUrl;
+
+    try {
+        let texture = state.photoTextureCache.get(requestedUrl);
+        if (!texture) {
+            texture = await loadTextureFromUrl(requestedUrl);
+            state.photoTextureCache.set(requestedUrl, texture);
+        }
+
+        if (block.photoUrl !== requestedUrl) return;
+
+        block.photoRef.texture = texture;
+        block.photoRef.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+        block.photoRef.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+        block.photoRef.tint = 0xFFFFFF;
+        block.photoReady = true;
+
+        if (state.viewMode === 'photo') {
+            block.sprite.visible = false;
+            block.photoRef.visible = true;
+        }
+    } catch (error) {
+        console.warn(`Failed to load image for block ${block.id}:`, error);
+        // In strict user-photo mode, keep the base tile if user image fails to load.
+        block.photoReady = false;
+        if (state.viewMode === 'photo') {
+            block.photoRef.visible = false;
+            block.sprite.visible = true;
+        }
+    } finally {
+        block.photoLoading = false;
+    }
+}
+
+function getSoldBlocks() {
+    const sold = [];
+    for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
+        const block = state.blocks[i];
+        if (block && block.sold) sold.push(block);
+    }
+    return sold;
+}
+
+function enqueuePhotoLoad(block) {
+    if (!hasUserImage(block) || block.photoQueued || block.photoLoading || block.photoReady) return;
+    block.photoQueued = true;
+    state.photoLoadQueue.push(block);
+}
+
+function prioritizePhotoQueue() {
+    const visible = [];
+    const hidden = [];
+
+    for (const block of state.photoLoadQueue) {
+        const isVisible = !!(block.sprite && block.sprite.parent && block.sprite.parent.visible);
+        if (isVisible) visible.push(block);
+        else hidden.push(block);
+    }
+
+    state.photoLoadQueue = [...visible, ...hidden];
+}
+
+function pumpPhotoQueue() {
+    if (state.activePhotoLoads >= state.maxConcurrentPhotoLoads) return;
+    if (state.photoLoadQueue.length === 0) return;
+
+    while (state.activePhotoLoads < state.maxConcurrentPhotoLoads && state.photoLoadQueue.length > 0) {
+        const block = state.photoLoadQueue.shift();
+        if (!block) continue;
+
+        block.photoQueued = false;
+
+        if (block.photoLoading || block.photoReady) {
+            continue;
+        }
+
+        state.activePhotoLoads++;
+        ensureBlockPhotoTexture(block, getBlockPhotoUrl(block))
+            .finally(() => {
+                state.activePhotoLoads = Math.max(0, state.activePhotoLoads - 1);
+            });
+    }
+}
+
+function startPhotoQueuePump() {
+    if (state.photoQueuePumpTimer) return;
+    state.photoQueuePumpTimer = setInterval(() => {
+        prioritizePhotoQueue();
+        pumpPhotoQueue();
+
+        if (!state.photoPrepInProgress && state.photoLoadQueue.length === 0 && state.activePhotoLoads === 0) {
+            clearInterval(state.photoQueuePumpTimer);
+            state.photoQueuePumpTimer = null;
+        }
+    }, 60);
+}
+
+async function preparePhotoMode(durationMs = 5000) {
+    if (state.photoPrepInProgress) return;
+
+    const soldBlocks = getSoldBlocks();
+    if (soldBlocks.length === 0) {
+        state.viewMode = 'photo';
+        applyVisualModeToAllBlocks();
+        updateViewModeButton();
+        return;
+    }
+
+    state.photoPrepInProgress = true;
+    state.photoPrepCountdown = Math.ceil(durationMs / 1000);
+    updateViewModeButton();
+
+    // Queue only sold blocks with explicit user image URLs.
+    soldBlocks.forEach((block) => {
+        block.photoReady = false;
+        enqueuePhotoLoad(block);
+    });
+
+    startPhotoQueuePump();
+
+    state.photoPrepTimer = setInterval(() => {
+        state.photoPrepCountdown = Math.max(0, state.photoPrepCountdown - 1);
+        updateViewModeButton();
+    }, 1000);
+
+    setTimeout(() => {
+        if (state.photoPrepTimer) {
+            clearInterval(state.photoPrepTimer);
+            state.photoPrepTimer = null;
+        }
+
+        state.photoPrepInProgress = false;
+        state.photoPrepCountdown = 0;
+        state.viewMode = 'photo';
+        state.lodQueueIndex = 0;
+        checkLODTransition();
+        applyVisualModeToAllBlocks();
+        updateViewModeButton();
+    }, durationMs);
+}
+
+function applyBlockVisualMode(block) {
+    if (!block) return;
+
+    const shouldShowPhoto = state.viewMode === 'photo';
+
+    if (!block.sold) {
+        if (block.photoRef) {
+            block.photoRef.visible = false;
+        }
+        if (block.sprite) {
+            block.sprite.visible = true;
+        }
+        if (block.textRef) {
+            block.textRef.visible = false;
+        }
+        return;
+    }
+
+    if (block.photoRef) {
+        block.photoRef.visible = shouldShowPhoto && hasUserImage(block) && block.photoReady;
+        if (shouldShowPhoto) {
+            enqueuePhotoLoad(block);
+            startPhotoQueuePump();
+        }
+    }
+
+    if (block.sprite) {
+        block.sprite.visible = !(shouldShowPhoto && hasUserImage(block) && block.photoReady);
+    }
+
+    if (block.textRef) {
+        block.textRef.visible = state.viewMode === 'text' && state.lodVisible;
+    }
+}
+
+function applyVisualModeToAllBlocks() {
+    for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
+        const block = state.blocks[i];
+        if (block) {
+            applyBlockVisualMode(block);
+        }
+    }
+}
+
+function updateViewModeButton() {
+    const viewModeBtn = document.getElementById('view-mode-btn');
+    if (!viewModeBtn) return;
+
+    if (state.photoPrepInProgress) {
+        viewModeBtn.textContent = `⏳ Preparing Photo ${state.photoPrepCountdown}s`;
+        viewModeBtn.disabled = true;
+        viewModeBtn.classList.add('active');
+        return;
+    }
+
+    const isTextMode = state.viewMode === 'text';
+    viewModeBtn.textContent = isTextMode ? '🖼️ Click for Photo' : '📝 Click for Text';
+    viewModeBtn.disabled = false;
+    viewModeBtn.classList.toggle('active', !isTextMode);
+}
+
 function updateBlock(id, data) {
     const b = state.blocks[id];
     if(!b) return;
@@ -1037,11 +1317,14 @@ function updateBlock(id, data) {
     }
     
     b.data = data;
+    b.photoReady = false;
+    b.photoQueued = false;
     
     // Only apply sold styling if the block is actually sold
     if (b.sold) {
         b.sprite.texture = state.baseTextures.sold;
-        b.sprite.tint = data.owner_color.replace('#', '0x');
+        const safeColor = sanitizeBlockColor(data.owner_color);
+        b.sprite.tint = parseInt(safeColor.slice(1), 16);
     }
 
     // This function now internally handles O(1) pool updates
@@ -1050,6 +1333,14 @@ function updateBlock(id, data) {
     } else {
         renderBlockText(b.sprite, null);
     }
+
+    applyBlockVisualMode(b);
+
+    if (state.viewMode === 'photo' && b.sold) {
+        enqueuePhotoLoad(b);
+        startPhotoQueuePump();
+    }
+
     updateSalesCounter();
 }
 
@@ -1061,6 +1352,20 @@ let formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: ''
 
 window.app = {
     resetCamera: () => centerCamera(),
+    toggleViewMode: () => {
+        if (state.photoPrepInProgress) return;
+
+        if (state.viewMode === 'text') {
+            preparePhotoMode(5000);
+            return;
+        }
+
+        state.viewMode = 'text';
+        state.lodQueueIndex = 0;
+        checkLODTransition();
+        applyVisualModeToAllBlocks();
+        updateViewModeButton();
+    },
     toggleExplore: () => {
         const centerControls = document.querySelector('.center-controls');
         centerControls.classList.toggle('hidden');
@@ -1192,6 +1497,7 @@ window.app = {
                         "there is singnificant chance of the success comapre to the other low effort low esteem works"
                     ][Math.floor(Math.random()*4)],
                     message: "This block is part of the simulation.",
+                    image_url: getSimulationImageUrl(id),
                     link_url: "https://example.com/sim" + id,
                     link_description: "Visit Profile"
                 });
@@ -1206,6 +1512,7 @@ window.app = {
         state.selectedId = sold[Math.floor(Math.random() * sold.length)];
         
         // Ensure explore button stays visible when viewing profiles
+        const centerControls = document.querySelector('.center-controls');
         centerControls.classList.remove('hidden');
         
         openModal();
@@ -1995,6 +2302,10 @@ window.addEventListener('resize', () => {
     state.pixi.resize();
     centerCamera();
     state.lodQueueIndex = 0;
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateViewModeButton();
 });
 
 init();
