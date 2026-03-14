@@ -7,7 +7,7 @@ const CONFIG = {
     GAP: 2,
     TOTAL_BLOCKS: 5050,
     LOD_THRESHOLD: 0.35,
-    MOBILE_LOD_THRESHOLD: 1.35,
+    MOBILE_LOD_THRESHOLD: 1.001,
     LOD_BATCH_SIZE: 250,
     CHUNK_SIZE: 25,
     MAX_ZOOM: 50.0,
@@ -512,7 +512,7 @@ function buildPyramid() {
         const yPos = (row - 1) * CONFIG.BLOCK_SIZE;
 
         for (let col = 0; col < row; col++) {
-            let price = blockId * 20;
+            let price = blockId * 40;
             let type = 'std';
             if (blockId >= 4500) type = 'gold';
             else if (row <= 60) type = 'silver';
