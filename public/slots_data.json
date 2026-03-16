@@ -10,7 +10,7 @@
     "image_url": "./assets/profiles/1.jpg",
     "link_url": "https://twitter.com/johndoe",
     "link_description": "Follow me on Twitter",
-    "youtube_url": "https://www.youtube.com/watch?v=HZvj8T5_oUE"
+    "youtube_url": "https://www.youtube.com/watch?v=hvKaPTmQBA8&list=RDGMEM916WJxafRUGgOvd6dVJkeQ&index=2"
   },
   "2": {
     "sold": false,
@@ -26,7 +26,7 @@
     "image_url": "./assets/profiles/alice-smith.png",
     "link_url": "https://github.com/alicesmith",
     "link_description": "Check out my GitHub",
-    "youtube_url": "https://www.youtube.com/watch?v=HZvj8T5_oUE",
+    "youtube_url": "https://www.youtube.com/watch?v=J2VwOsMJxiE",
     "price": 0.3
   },
   "10": {
@@ -63,7 +63,7 @@
     "image_url": "./assets/profiles/moon-shooter.jpg",
     "link_url": "https://moonshooter.xyz",
     "link_description": "Moon mission starts here",
-    "youtube_url": "https://www.youtube.com/watch?v=vJEbP2Vdq2U&t=166s",
+    "youtube_url": "https://www.youtube.com/watch?v=oafxkMv4xnc&list=RDGMEM916WJxafRUGgOvd6dVJkeQ&start_radio=1&rv=J2VwOsMJxiE",
     "price": 5
   },
   "100": {
@@ -87,7 +87,7 @@
     "owner_text_color": "#ffffff",
     "message": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     "link_description": "t",
-    "youtube_url": "https://www.youtube.com/watch?v=HZvj8T5_oUE"
+    "youtube_url": "https://www.youtube.com/watch?v=Yid2gBkuK-4&list=RDGMEM916WJxafRUGgOvd6dVJkeQ&index=4"
   },
   "200": {
     "sold": true,
@@ -171,6 +171,7 @@
     "image_url": "./assets/profiles/pyramid-king.jpg",
     "link_url": "https://pyramidking.com",
     "link_description": "The king's domain",
-    "price": 1001.1
+    "price": 1001.1,
+      "youtube_url": "https://www.youtube.com/watch?v=x5fYTPvrz4g&list=RDGMEM916WJxafRUGgOvd6dVJkeQ&index=6"
   }
 }

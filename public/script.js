@@ -56,13 +56,21 @@ const state = {
     isMobileDevice: false,
     viewMode: 'text',
     photoTextureCache: new Map(),
+    videoTextureCache: new Map(),
     photoPrepInProgress: false,
     photoPrepTimer: null,
     photoPrepCountdown: 0,
     photoLoadQueue: [],
+    videoLoadQueue: [],
     photoQueuePumpTimer: null,
+    videoQueuePumpTimer: null,
     activePhotoLoads: 0,
+    activeVideoLoads: 0,
     maxConcurrentPhotoLoads: 15,
+    maxConcurrentVideoLoads: 12,
+    activeGridVideo: null,
+    lastVideoCamSnapshot: null,
+    activeVideoMarker: null,
 
     // LOD State
     lodVisible: false,
@@ -410,6 +418,7 @@ async function init() {
         updateStarfield();
         cullWorld();
         processLODQueue(); // Replaces the old updateLOD loop
+        updateGridVideoOverlayPosition();
     });
 
     setTimeout(() => document.getElementById('loader').style.opacity = '0', 500);
@@ -539,6 +548,14 @@ function buildPyramid() {
             photoSprite.visible = false;
             photoSprite.blockId = blockId;
 
+            const videoSprite = new PIXI.Sprite(PIXI.Texture.WHITE);
+            videoSprite.x = sprite.x;
+            videoSprite.y = sprite.y;
+            videoSprite.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+            videoSprite.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+            videoSprite.visible = false;
+            videoSprite.blockId = blockId;
+
             state.blocks[blockId] = { 
                 id: blockId, 
                 price: price, 
@@ -546,15 +563,21 @@ function buildPyramid() {
                 sold: false, 
                 sprite: sprite, 
                 photoRef: photoSprite,
+                videoRef: videoSprite,
                 photoUrl: '',
                 photoReady: false,
                 photoQueued: false,
                 photoLoading: false,
+                videoUrl: '',
+                videoReady: false,
+                videoQueued: false,
+                videoLoading: false,
                 data: null, 
                 textRef: null 
             };
             chunk.addChild(sprite);
             chunk.addChild(photoSprite);
+            chunk.addChild(videoSprite);
             blockId--;
         }
     }
@@ -824,7 +847,13 @@ function setupInput() {
             // 1st tap => show tooltip, 2nd quick tap on same block => open modal.
             if (tappedId !== -1 && state.lastTouchTapId === tappedId && (now - state.lastTouchTapTime) < 700) {
                 state.selectedId = tappedId;
-                window.openModal();
+                const tappedBlock = state.blocks[tappedId];
+                if (state.viewMode === 'video' && tappedBlock && tappedBlock.sold && hasYouTubeVideo(tappedBlock)) {
+                    openGridVideoPlayer(tappedId);
+                } else {
+                    window.closeGridVideoPlayer();
+                    window.openModal();
+                }
                 state.lastTouchTapId = -1;
                 state.lastTouchTapTime = 0;
             } else {
@@ -901,6 +930,14 @@ function handleHover(x, y) {
 function handleClick(x, y) {
     const id = getBlockId(x, y);
     if (id !== -1) {
+        const block = state.blocks[id];
+        if (state.viewMode === 'video' && block && block.sold && hasYouTubeVideo(block)) {
+            state.selectedId = id;
+            openGridVideoPlayer(id);
+            return;
+        }
+
+        window.closeGridVideoPlayer();
         state.selectedId = id;
         openModal();
     }
@@ -1096,6 +1133,68 @@ function loadTextureFromUrl(url) {
     });
 }
 
+function loadImageFromUrl(url) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error(`Image failed to load: ${url}`));
+        img.src = url;
+    });
+}
+
+async function createYouTubeTileTexture(videoId) {
+    const thumbCandidates = [
+        `https://i.ytimg.com/vi_webp/${videoId}/maxresdefault.webp`,
+        `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+        `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+    ];
+
+    let img = null;
+    for (const candidate of thumbCandidates) {
+        try {
+            img = await loadImageFromUrl(candidate);
+            break;
+        } catch (e) {
+            // Try next candidate.
+        }
+    }
+
+    if (!img) {
+        throw new Error(`No thumbnail available for video ${videoId}`);
+    }
+
+    // Higher internal resolution keeps thumbnails crisp even when zoomed.
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+        throw new Error('Canvas context unavailable');
+    }
+
+    // Full thumbnail visible: use contain fit inside the square tile (no cropping).
+    const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight);
+    const drawW = Math.max(1, Math.round(img.naturalWidth * scale));
+    const drawH = Math.max(1, Math.round(img.naturalHeight * scale));
+    const dx = Math.floor((size - drawW) / 2);
+    const dy = Math.floor((size - drawH) / 2);
+
+    // Clean padded background for the unused area around contained image.
+    ctx.fillStyle = '#0f0f0f';
+    ctx.fillRect(0, 0, size, size);
+
+    // Subtle glow panel to avoid harsh bars while keeping full image intact.
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.fillRect(dx, dy, drawW, drawH);
+    ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, drawW, drawH);
+
+    const texture = PIXI.Texture.from(canvas);
+    return texture;
+}
+
 async function ensureBlockPhotoTexture(block, imageUrl) {
     if (!block.photoRef || !block.sold || !imageUrl) return;
     if (block.photoLoading) return;
@@ -1200,58 +1299,385 @@ function startPhotoQueuePump() {
     }, 60);
 }
 
-async function preparePhotoMode(durationMs = 5000) {
-    if (state.photoPrepInProgress) return;
+function getBlockYouTubeId(block) {
+    if (!block || !block.sold || !block.data || !block.data.youtube_url) return null;
+    return getYouTubeVideoId(block.data.youtube_url);
+}
 
-    const soldBlocks = getSoldBlocks();
-    if (soldBlocks.length === 0) {
-        state.viewMode = 'photo';
-        applyVisualModeToAllBlocks();
-        updateViewModeButton();
+function hasYouTubeVideo(block) {
+    return !!getBlockYouTubeId(block);
+}
+
+function getYouTubeThumbnailUrl(videoId) {
+    return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+}
+
+async function ensureBlockVideoTexture(block, videoId) {
+    if (!block.videoRef || !block.sold || !videoId) return;
+    if (block.videoLoading) return;
+
+    const requestedUrl = `yt:${videoId}`;
+    if (block.videoReady && block.videoUrl === requestedUrl) return;
+
+    block.videoLoading = true;
+    block.videoUrl = requestedUrl;
+
+    try {
+        let texture = state.videoTextureCache.get(requestedUrl);
+        if (!texture) {
+            texture = await createYouTubeTileTexture(videoId);
+            state.videoTextureCache.set(requestedUrl, texture);
+        }
+
+        if (block.videoUrl !== requestedUrl) return;
+
+        block.videoRef.texture = texture;
+        block.videoRef.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+        block.videoRef.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+        block.videoRef.tint = 0xFFFFFF;
+        block.videoReady = true;
+
+        if (state.viewMode === 'video') {
+            block.sprite.visible = false;
+            block.videoRef.visible = true;
+        }
+    } catch (error) {
+        console.warn(`Failed to load YouTube thumbnail for block ${block.id}:`, error);
+        block.videoReady = false;
+        if (state.viewMode === 'video') {
+            block.videoRef.visible = false;
+            block.sprite.visible = true;
+        }
+    } finally {
+        block.videoLoading = false;
+    }
+}
+
+function enqueueVideoLoad(block) {
+    if (!hasYouTubeVideo(block) || block.videoQueued || block.videoLoading || block.videoReady) return;
+    block.videoQueued = true;
+    state.videoLoadQueue.push(block);
+}
+
+function prioritizeVideoQueue() {
+    const visible = [];
+    const hidden = [];
+
+    for (const block of state.videoLoadQueue) {
+        const isVisible = !!(block.sprite && block.sprite.parent && block.sprite.parent.visible);
+        if (isVisible) visible.push(block);
+        else hidden.push(block);
+    }
+
+    state.videoLoadQueue = [...visible, ...hidden];
+}
+
+function pumpVideoQueue() {
+    if (state.activeVideoLoads >= state.maxConcurrentVideoLoads) return;
+    if (state.videoLoadQueue.length === 0) return;
+
+    while (state.activeVideoLoads < state.maxConcurrentVideoLoads && state.videoLoadQueue.length > 0) {
+        const block = state.videoLoadQueue.shift();
+        if (!block) continue;
+
+        block.videoQueued = false;
+
+        if (block.videoLoading || block.videoReady) {
+            continue;
+        }
+
+        state.activeVideoLoads++;
+        ensureBlockVideoTexture(block, getBlockYouTubeId(block))
+            .finally(() => {
+                state.activeVideoLoads = Math.max(0, state.activeVideoLoads - 1);
+            });
+    }
+}
+
+function startVideoQueuePump() {
+    if (state.videoQueuePumpTimer) return;
+    state.videoQueuePumpTimer = setInterval(() => {
+        prioritizeVideoQueue();
+        pumpVideoQueue();
+
+        if (state.videoLoadQueue.length === 0 && state.activeVideoLoads === 0) {
+            clearInterval(state.videoQueuePumpTimer);
+            state.videoQueuePumpTimer = null;
+        }
+    }, 60);
+}
+
+function getGridVideoOverlayElement() {
+    let el = document.getElementById('grid-video-overlay');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'grid-video-overlay';
+        document.body.appendChild(el);
+    }
+    return el;
+}
+
+function ensureActiveVideoMarker() {
+    if (state.activeVideoMarker && state.activeVideoMarker.graphics) {
+        return state.activeVideoMarker;
+    }
+
+    const marker = new PIXI.Graphics();
+    marker.visible = false;
+    marker.eventMode = 'none';
+    marker.alpha = 1;
+
+    state.activeVideoMarker = {
+        graphics: marker,
+        blockId: null,
+        parentChunk: null
+    };
+
+    return state.activeVideoMarker;
+}
+
+function clearActiveVideoMarker() {
+    if (!state.activeVideoMarker || !state.activeVideoMarker.graphics) return;
+
+    const marker = state.activeVideoMarker.graphics;
+    marker.visible = false;
+    marker.clear();
+
+    state.activeVideoMarker.blockId = null;
+    state.activeVideoMarker.parentChunk = null;
+}
+
+function updateActiveVideoMarker() {
+    if (!state.activeGridVideo) {
+        clearActiveVideoMarker();
         return;
     }
 
-    state.photoPrepInProgress = true;
-    state.photoPrepCountdown = Math.ceil(durationMs / 1000);
-    updateViewModeButton();
+    const block = state.blocks[state.activeGridVideo.blockId];
+    if (!block || !block.sprite || !block.sprite.parent) {
+        clearActiveVideoMarker();
+        return;
+    }
 
-    // Queue only sold blocks with explicit user image URLs.
+    const markerState = ensureActiveVideoMarker();
+    const marker = markerState.graphics;
+    const chunk = block.sprite.parent;
+
+    if (marker.parent !== chunk) {
+        if (marker.parent) {
+            marker.parent.removeChild(marker);
+        }
+        chunk.addChild(marker);
+    }
+
+    const margin = 2;
+    const x = block.sprite.x - margin;
+    const y = block.sprite.y - margin;
+    const size = (CONFIG.BLOCK_SIZE - CONFIG.GAP) + (margin * 2);
+
+    marker.clear();
+    marker.rect(x, y, size, size).stroke({ width: 2, color: 0xff2a2a, alpha: 0.95 });
+    marker.rect(x + 1, y + 1, size - 2, size - 2).stroke({ width: 1, color: 0xffffff, alpha: 0.35 });
+    marker.visible = true;
+
+    markerState.blockId = block.id;
+    markerState.parentChunk = chunk;
+}
+
+function openGridVideoPlayer(blockId) {
+    const block = state.blocks[blockId];
+    const videoId = getBlockYouTubeId(block);
+    if (!block || !videoId) return;
+
+    const overlay = getGridVideoOverlayElement();
+    overlay.innerHTML = `
+        <button class="grid-video-close" onclick="closeGridVideoPlayer()" aria-label="Close video">✕</button>
+        <iframe
+            src="https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1"
+            frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen
+        ></iframe>
+    `;
+
+    overlay.classList.add('show');
+    state.activeGridVideo = { blockId, mode: null, floating: false, left: 0, top: 0, width: 0, height: 0 };
+    state.lastVideoCamSnapshot = { x: state.cam.x, y: state.cam.y, zoom: state.cam.zoom };
+    updateActiveVideoMarker();
+    updateGridVideoOverlayPosition();
+}
+
+window.closeGridVideoPlayer = function() {
+    const overlay = document.getElementById('grid-video-overlay');
+    if (overlay) {
+        overlay.classList.remove('show');
+        overlay.innerHTML = '';
+    }
+    state.activeGridVideo = null;
+    state.lastVideoCamSnapshot = null;
+    clearActiveVideoMarker();
+};
+
+function pinGridVideoAsFloatingPlayer() {
+    if (!state.activeGridVideo) return;
+
+    const overlay = document.getElementById('grid-video-overlay');
+    if (!overlay) return;
+
+    const floatingWidth = window.innerWidth <= 700 ? 340 : 520;
+    const floatingHeight = Math.round(floatingWidth * 0.5625);
+    const left = Math.max(8, window.innerWidth - floatingWidth - 18);
+    const top = Math.max(8, window.innerHeight - floatingHeight - 18);
+
+    state.activeGridVideo.floating = true;
+    state.activeGridVideo.mode = 'floating';
+    state.activeGridVideo.width = floatingWidth;
+    state.activeGridVideo.height = floatingHeight;
+    state.activeGridVideo.left = left;
+    state.activeGridVideo.top = top;
+
+    overlay.classList.remove('grid-track');
+    overlay.classList.add('floating');
+    overlay.style.left = `${left}px`;
+    overlay.style.top = `${top}px`;
+    overlay.style.width = `${floatingWidth}px`;
+    overlay.style.height = `${floatingHeight}px`;
+}
+
+function placeGridVideoOnTile(block) {
+    if (!state.activeGridVideo || !block || !block.sprite) return;
+
+    const overlay = document.getElementById('grid-video-overlay');
+    if (!overlay) return;
+
+    const blockSizePx = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * state.cam.zoom;
+    const screenX = state.cam.x + (block.sprite.x * state.cam.zoom);
+    const screenY = state.cam.y + (block.sprite.y * state.cam.zoom);
+
+    const width = Math.max(1, blockSizePx);
+    const height = Math.max(1, blockSizePx);
+
+    const maxLeft = window.innerWidth - width;
+    const maxTop = window.innerHeight - height;
+    const clampedLeft = Math.min(Math.max(0, screenX), Math.max(0, maxLeft));
+    const clampedTop = Math.min(Math.max(0, screenY), Math.max(0, maxTop));
+
+    state.activeGridVideo.floating = false;
+    state.activeGridVideo.mode = 'grid';
+    state.activeGridVideo.left = clampedLeft;
+    state.activeGridVideo.top = clampedTop;
+    state.activeGridVideo.width = width;
+    state.activeGridVideo.height = height;
+
+    overlay.classList.add('grid-track');
+    overlay.classList.remove('floating');
+    overlay.style.left = `${clampedLeft}px`;
+    overlay.style.top = `${clampedTop}px`;
+    overlay.style.width = `${width}px`;
+    overlay.style.height = `${height}px`;
+}
+
+function updateGridVideoOverlayPosition() {
+    updateActiveVideoMarker();
+    if (!state.activeGridVideo) return;
+
+    const overlay = document.getElementById('grid-video-overlay');
+    if (!overlay) return;
+
+    const block = state.blocks[state.activeGridVideo.blockId];
+    if (!block || !block.sprite) {
+        window.closeGridVideoPlayer();
+        return;
+    }
+
+    const blockSizePx = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * state.cam.zoom;
+    const screenX = state.cam.x + (block.sprite.x * state.cam.zoom);
+    const screenY = state.cam.y + (block.sprite.y * state.cam.zoom);
+    const parentVisible = !!(block.sprite.parent && block.sprite.parent.visible);
+    const blockInViewport =
+        parentVisible &&
+        (screenX + blockSizePx) > 0 &&
+        screenX < window.innerWidth &&
+        (screenY + blockSizePx) > 0 &&
+        screenY < window.innerHeight;
+
+    // Super-low floating trigger: switch to side player only after heavy zoom-out.
+    // Target is roughly when ~20 grid rows are visible on screen.
+    const targetVisibleRows = state.isMobileDevice ? 16 : 20;
+    const baseZoomForRows = state.pixi.screen.height / (CONFIG.BLOCK_SIZE * targetVisibleRows);
+    const enterFloatingThreshold = baseZoomForRows * 0.9;
+    const exitFloatingThreshold = baseZoomForRows * 1.05;
+    const shouldFloatByLod = state.activeGridVideo.floating
+        ? state.cam.zoom < exitFloatingThreshold
+        : state.cam.zoom < enterFloatingThreshold;
+
+    // Combined rule:
+    // - Grid mode only when zoom is in AND user is actually viewing that grid tile.
+    // - Otherwise keep medium side player.
+    const shouldFloat = shouldFloatByLod || !blockInViewport;
+
+    // Reposition only when mode changes. Keep fixed within a mode.
+    if (state.activeGridVideo.mode === null) {
+        if (shouldFloat) {
+            pinGridVideoAsFloatingPlayer();
+        } else {
+            placeGridVideoOnTile(block);
+        }
+        state.lastVideoCamSnapshot = { x: state.cam.x, y: state.cam.y, zoom: state.cam.zoom };
+        return;
+    }
+
+    if (shouldFloat && state.activeGridVideo.mode !== 'floating') {
+        pinGridVideoAsFloatingPlayer();
+        state.lastVideoCamSnapshot = { x: state.cam.x, y: state.cam.y, zoom: state.cam.zoom };
+        return;
+    }
+
+    if (!shouldFloat && state.activeGridVideo.mode !== 'grid') {
+        placeGridVideoOnTile(block);
+        state.lastVideoCamSnapshot = { x: state.cam.x, y: state.cam.y, zoom: state.cam.zoom };
+        return;
+    }
+
+    // In grid mode, continuously track the tile exactly like thumbnail placement.
+    if (state.activeGridVideo.mode === 'grid') {
+        placeGridVideoOnTile(block);
+        state.lastVideoCamSnapshot = { x: state.cam.x, y: state.cam.y, zoom: state.cam.zoom };
+        return;
+    }
+
+    // Same mode: keep fixed, no movement while dragging/panning/zooming.
+    state.lastVideoCamSnapshot = { x: state.cam.x, y: state.cam.y, zoom: state.cam.zoom };
+}
+
+function preparePhotoMode() {
+    const soldBlocks = getSoldBlocks();
     soldBlocks.forEach((block) => {
-        block.photoReady = false;
         enqueuePhotoLoad(block);
     });
-
     startPhotoQueuePump();
+}
 
-    state.photoPrepTimer = setInterval(() => {
-        state.photoPrepCountdown = Math.max(0, state.photoPrepCountdown - 1);
-        updateViewModeButton();
-    }, 1000);
-
-    setTimeout(() => {
-        if (state.photoPrepTimer) {
-            clearInterval(state.photoPrepTimer);
-            state.photoPrepTimer = null;
-        }
-
-        state.photoPrepInProgress = false;
-        state.photoPrepCountdown = 0;
-        state.viewMode = 'photo';
-        state.lodQueueIndex = 0;
-        checkLODTransition();
-        applyVisualModeToAllBlocks();
-        updateViewModeButton();
-    }, durationMs);
+function prepareVideoMode() {
+    const soldBlocks = getSoldBlocks();
+    soldBlocks.forEach((block) => {
+        enqueueVideoLoad(block);
+    });
+    startVideoQueuePump();
 }
 
 function applyBlockVisualMode(block) {
     if (!block) return;
 
     const shouldShowPhoto = state.viewMode === 'photo';
+    const shouldShowVideo = state.viewMode === 'video';
 
     if (!block.sold) {
         if (block.photoRef) {
             block.photoRef.visible = false;
+        }
+        if (block.videoRef) {
+            block.videoRef.visible = false;
         }
         if (block.sprite) {
             block.sprite.visible = true;
@@ -1270,8 +1696,18 @@ function applyBlockVisualMode(block) {
         }
     }
 
+    if (block.videoRef) {
+        block.videoRef.visible = shouldShowVideo && hasYouTubeVideo(block) && block.videoReady;
+        if (shouldShowVideo) {
+            enqueueVideoLoad(block);
+            startVideoQueuePump();
+        }
+    }
+
     if (block.sprite) {
-        block.sprite.visible = !(shouldShowPhoto && hasUserImage(block) && block.photoReady);
+        const usePhotoTexture = shouldShowPhoto && hasUserImage(block) && block.photoReady;
+        const useVideoTexture = shouldShowVideo && hasYouTubeVideo(block) && block.videoReady;
+        block.sprite.visible = !(usePhotoTexture || useVideoTexture);
     }
 
     if (block.textRef) {
@@ -1288,21 +1724,23 @@ function applyVisualModeToAllBlocks() {
     }
 }
 
-function updateViewModeButton() {
-    const viewModeBtn = document.getElementById('view-mode-btn');
-    if (!viewModeBtn) return;
+function updateModeButtons() {
+    const textBtn = document.getElementById('mode-text-btn');
+    const photoBtn = document.getElementById('mode-photo-btn');
+    const videoBtn = document.getElementById('mode-video-btn');
+    if (!textBtn || !photoBtn || !videoBtn) return;
 
-    if (state.photoPrepInProgress) {
-        viewModeBtn.textContent = `⏳ Preparing Photo ${state.photoPrepCountdown}s`;
-        viewModeBtn.disabled = true;
-        viewModeBtn.classList.add('active');
-        return;
-    }
+    const isText = state.viewMode === 'text';
+    const isPhoto = state.viewMode === 'photo';
+    const isVideo = state.viewMode === 'video';
 
-    const isTextMode = state.viewMode === 'text';
-    viewModeBtn.textContent = isTextMode ? '🖼️ Click for Photo' : '📝 Click for Text';
-    viewModeBtn.disabled = false;
-    viewModeBtn.classList.toggle('active', !isTextMode);
+    textBtn.classList.toggle('active', isText);
+    photoBtn.classList.toggle('active', isPhoto);
+    videoBtn.classList.toggle('active', isVideo);
+
+    textBtn.disabled = false;
+    photoBtn.disabled = false;
+    videoBtn.disabled = false;
 }
 
 function updateBlock(id, data) {
@@ -1319,6 +1757,8 @@ function updateBlock(id, data) {
     b.data = data;
     b.photoReady = false;
     b.photoQueued = false;
+    b.videoReady = false;
+    b.videoQueued = false;
     
     // Only apply sold styling if the block is actually sold
     if (b.sold) {
@@ -1339,6 +1779,9 @@ function updateBlock(id, data) {
     if (state.viewMode === 'photo' && b.sold) {
         enqueuePhotoLoad(b);
         startPhotoQueuePump();
+    } else if (state.viewMode === 'video' && b.sold) {
+        enqueueVideoLoad(b);
+        startVideoQueuePump();
     }
 
     updateSalesCounter();
@@ -1352,19 +1795,37 @@ let formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: ''
 
 window.app = {
     resetCamera: () => centerCamera(),
-    toggleViewMode: () => {
-        if (state.photoPrepInProgress) return;
+    setViewMode: (mode) => {
+        const normalized = mode === 'photo' || mode === 'video' ? mode : 'text';
+        state.viewMode = normalized;
+        state.lodQueueIndex = 0;
 
+        if (normalized !== 'video') {
+            window.closeGridVideoPlayer();
+        }
+
+        if (normalized === 'photo') {
+            preparePhotoMode();
+        } else if (normalized === 'video') {
+            prepareVideoMode();
+        }
+
+        checkLODTransition();
+        applyVisualModeToAllBlocks();
+        updateModeButtons();
+    },
+    toggleViewMode: () => {
         if (state.viewMode === 'text') {
-            preparePhotoMode(5000);
+            window.app.setViewMode('photo');
             return;
         }
 
-        state.viewMode = 'text';
-        state.lodQueueIndex = 0;
-        checkLODTransition();
-        applyVisualModeToAllBlocks();
-        updateViewModeButton();
+        if (state.viewMode === 'photo') {
+            window.app.setViewMode('video');
+            return;
+        }
+
+        window.app.setViewMode('text');
     },
     toggleExplore: () => {
         const centerControls = document.querySelector('.center-controls');
@@ -1640,6 +2101,7 @@ function getUserStats(ownerName) {
 }
 
 window.openModal = () => {
+    window.closeGridVideoPlayer();
     const id = state.selectedId;
     const b = state.blocks[id];
     const backdrop = document.getElementById('modal-backdrop');
@@ -2305,7 +2767,7 @@ window.addEventListener('resize', () => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-    updateViewModeButton();
+    updateModeButtons();
 });
 
 init();

@@ -69,7 +69,11 @@
         </div>
         
         <div class="controls interactive">
-            <button class="toggle-btn" id="view-mode-btn" onclick="app.toggleViewMode()">📝 View by Text</button>
+            <div class="mode-buttons" role="group" aria-label="Pyramid view mode">
+                <button class="toggle-btn mode-btn active" id="mode-text-btn" onclick="app.setViewMode('text')">📝 Text Mode</button>
+                <button class="toggle-btn mode-btn" id="mode-photo-btn" onclick="app.setViewMode('photo')">🖼️ Photo Mode</button>
+                <button class="toggle-btn mode-btn" id="mode-video-btn" onclick="app.setViewMode('video')">▶ YouTube Mode</button>
+            </div>
             <div style="display: flex; gap: 12px; margin-bottom: 8px;">
                 <button class="btn" onclick="app.resetCamera()">⟲ Reset View</button>
                 <button class="btn btn-accent" onclick="app.simulate()">🚀 Simulate</button>
