@@ -73,7 +73,7 @@
     "owner_text_color": "#000000",
     "owner_text": "hello my name is gold bug an di am yhre to test the pyramid",
     "message": "Gold is real money! 🏆",
-    "image_url": "./assets/profiles/1.jpg",
+    "image_url": "./assets/profiles/100.jpg",
     "link_url": "https://goldbug.com",
     "link_description": "Learn about real money",
     "price": 10
@@ -96,7 +96,7 @@
     "owner_text_color": "#ffffff",
     "owner_text": "there is the sun and there is the moon , which is best ",
     "message": "Silver is the people's money! 🦊",
-    "image_url": "./assets/profiles/silver-fox.jpg",
+    "image_url": "./assets/profiles/200.jpg",
     "link_url": "https://silverfox.io",
     "link_description": "Silver investment tips",
     "price": 20
@@ -108,7 +108,7 @@
     "owner_text_color": "#ffffff",
     "owner_text": "PLAT",
     "message": "Platinum is the future! 💎",
-    "image_url": "./assets/profiles/platinum-trader.jpg",
+    "image_url": "./assets/profiles/500.jpg",
     "link_url": "https://platinumtrader.com",
     "link_description": "Platinum trading strategies",
     "price": 50
@@ -120,7 +120,7 @@
     "owner_text_color": "#ffffff",
     "owner_text": "ELITE",
     "message": "Elite trading for elite people! 👑",
-    "image_url": "./assets/profiles/elite-trader.jpg",
+    "image_url": "./assets/profiles/1000.jpg",
     "link_url": "https://elitetrader.pro",
     "link_description": "Elite trading signals",
     "price": 100
@@ -132,7 +132,7 @@
     "owner_text_color": "#000000",
     "owner_text": "WHALE",
     "message": "Whale moves markets! 🐋",
-    "image_url": "./assets/profiles/crypto-whale.jpg",
+    "image_url": "./assets/profiles/5000.jpg",
     "link_url": "https://cryptowale.io",
     "link_description": "Follow the whale",
     "price": 500

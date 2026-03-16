@@ -62,7 +62,7 @@ const state = {
     photoLoadQueue: [],
     photoQueuePumpTimer: null,
     activePhotoLoads: 0,
-    maxConcurrentPhotoLoads: 8,
+    maxConcurrentPhotoLoads: 15,
 
     // LOD State
     lodVisible: false,
@@ -875,7 +875,7 @@ function handleHover(x, y) {
   <img class="tt-yt-avatar" src="${_src}" onerror="this.onerror=null;this.src='${_fallback}'" style="border-color:${_color}" alt="${_name}">
   <div class="tt-yt-info">
     <div class="tt-yt-name">${_name}</div>
-    <div class="tt-yt-sub">Block #${b.id}</div>
+    <div class="tt-yt-sub">Canvas #${b.id}</div>
     <div class="tt-yt-price" style="color:${_color}">₹${b.price}</div>
   </div>
 </div>`;
@@ -883,7 +883,7 @@ function handleHover(x, y) {
                 tt.innerHTML = `<div class="tt-yt-card">
   <div class="tt-yt-avatar-icon">🔓</div>
   <div class="tt-yt-info">
-    <div class="tt-yt-name">Block #${b.id}</div>
+    <div class="tt-yt-name">Canvas #${b.id}</div>
     <div class="tt-yt-sub">Available</div>
     <div class="tt-yt-price" style="color:#FFD700">₹${b.price}</div>
   </div>
@@ -1055,31 +1055,24 @@ function sanitizeBlockColor(color) {
     return '#FF0000';
 }
 
-function getGeneratedPhotoUrl(id, variant = 0) {
-    return `https://picsum.photos/seed/pyramid-${variant}-${id}/96/96`;
-}
-
-function getSvgFallbackImageUrl(id) {
-    const hue = (id * 37) % 360;
-    const label = `SIM-${id}`;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="hsl(${hue},85%,55%)"/><stop offset="100%" stop-color="hsl(${(hue + 80) % 360},85%,45%)"/></linearGradient></defs><rect width="96" height="96" fill="url(#g)"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="14" font-family="Arial, sans-serif" font-weight="700">${label}</text></svg>`;
-    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-}
-
 function getBlockPhotoUrl(block) {
     if (!block.sold) return null;
     if (block.data && typeof block.data.image_url === 'string' && block.data.image_url.trim()) {
         return block.data.image_url.trim();
     }
-    return getGeneratedPhotoUrl(block.id, 1);
+    return null;
 }
 
 function hasUserImage(block) {
-    return !!(block && block.sold && getBlockPhotoUrl(block));
+    return !!(block && block.sold && block.data && typeof block.data.image_url === 'string' && block.data.image_url.trim());
 }
 
 function getSimulationImageUrl(id) {
-    return getGeneratedPhotoUrl(id, 2);
+    const localPool = ['./assets/profiles/1.jpg', './assets/profiles/pyramid-king.jpg'];
+    if (Math.random() < 0.45) {
+        return localPool[id % localPool.length];
+    }
+    return `https://picsum.photos/seed/pyramid-sim-${id}/96/96`;
 }
 
 function loadTextureFromUrl(url) {
@@ -1113,30 +1106,10 @@ async function ensureBlockPhotoTexture(block, imageUrl) {
     const requestedUrl = imageUrl;
 
     try {
-        const candidateUrls = [
-            requestedUrl,
-            getGeneratedPhotoUrl(block.id, 3),
-            getGeneratedPhotoUrl(block.id, 4),
-            getSvgFallbackImageUrl(block.id)
-        ].filter((url, index, list) => url && list.indexOf(url) === index);
-
-        let texture = null;
-        let lastError = null;
-        for (const url of candidateUrls) {
-            try {
-                texture = state.photoTextureCache.get(url);
-                if (!texture) {
-                    texture = await loadTextureFromUrl(url);
-                    state.photoTextureCache.set(url, texture);
-                }
-                break;
-            } catch (candidateError) {
-                lastError = candidateError;
-            }
-        }
-
+        let texture = state.photoTextureCache.get(requestedUrl);
         if (!texture) {
-            throw lastError || new Error('No photo texture could be loaded');
+            texture = await loadTextureFromUrl(requestedUrl);
+            state.photoTextureCache.set(requestedUrl, texture);
         }
 
         if (block.photoUrl !== requestedUrl) return;
@@ -1242,7 +1215,7 @@ async function preparePhotoMode(durationMs = 5000) {
     state.photoPrepCountdown = Math.ceil(durationMs / 1000);
     updateViewModeButton();
 
-    // Queue all sold blocks; missing image_url values use generated image URLs.
+    // Queue only sold blocks with explicit user image URLs.
     soldBlocks.forEach((block) => {
         block.photoReady = false;
         enqueuePhotoLoad(block);
@@ -1452,12 +1425,12 @@ window.app = {
         try {
             const block = state.blocks[state.selectedId];
             if (!block) {
-                showError('Invalid block selected');
+                showError('Invalid canvas selected');
                 return;
             }
             
             if (block.sold) {
-                showError('This block is already claimed');
+                showError('This canvas is already claimed');
                 return;
             }
             
@@ -1483,7 +1456,7 @@ window.app = {
             localPurchases.push(purchaseData);
             localStorage.setItem('pyramidPurchases', JSON.stringify(localPurchases));
             
-            showSuccess(`Block #${state.selectedId} claimed successfully! This is a local preview - email us at thegoodguy08@gmail.com to make it permanent.`);
+            showSuccess(`Canvas #${state.selectedId} claimed successfully! This is a local preview - email us at thegoodguy08@gmail.com to make it permanent.`);
             
             // Close modal and show the profile
             setTimeout(() => {
@@ -1494,7 +1467,7 @@ window.app = {
             
         } catch (error) {
             console.error('Purchase error:', error);
-            showError('Failed to claim block. Please try again.');
+            showError('Failed to claim canvas. Please try again.');
         }
     },
     simulate: () => {
@@ -1523,7 +1496,7 @@ window.app = {
                         "the gif i sth emost used entertainment in the world ",
                         "there is singnificant chance of the success comapre to the other low effort low esteem works"
                     ][Math.floor(Math.random()*4)],
-                    message: "This block is part of the simulation.",
+                    message: "This canvas is part of the simulation.",
                     image_url: getSimulationImageUrl(id),
                     link_url: "https://example.com/sim" + id,
                     link_description: "Visit Profile"
@@ -1570,12 +1543,12 @@ window.togglePurchaseInfoPanel = () => {
 window.openBuyNowForSelectedBlock = () => {
     const block = state.blocks[state.selectedId];
     if (!block) {
-        showError('No block selected.');
+        showError('No canvas selected.');
         return;
     }
 
     if (!block.payment_link) {
-        showInfo(`Buy link is not added yet for Block #${block.id}. Add it in grid_price.json.`);
+        showInfo(`Buy link is not added yet for Canvas #${block.id}. Add it in grid_price.json.`);
         return;
     }
 
@@ -1607,7 +1580,7 @@ function handleTestFormSubmit(event) {
     event.preventDefault();
     
     if (!testModeBlockId) {
-        showError('No block selected for testing');
+        showError('No canvas selected for testing');
         return;
     }
     
@@ -1640,9 +1613,9 @@ function handleTestFormSubmit(event) {
         state.selectedId = testModeBlockId;
         openModal();
         
-        showSuccess('Test block created! This will disappear when you refresh the page.');
+        showSuccess('Test canvas created! This will disappear when you refresh the page.');
     } else {
-        showError('This block is not available for testing');
+        showError('This canvas is not available for testing');
     }
 }
 
@@ -1759,7 +1732,7 @@ window.openModal = () => {
         
         content.innerHTML = `
             <div class="modal-header">
-                <h2>Profile for Block #${b.id}</h2>
+                <h2>Profile for Canvas #${b.id}</h2>
                 <button class="close-icon" onclick="closeModal()">✕</button>
             </div>
             <div class="modal-body">
@@ -1811,7 +1784,7 @@ window.openModal = () => {
                 <div class="purchase-actions">
                     <button class="btn purchase-info-toggle" type="button" onclick="togglePurchaseInfoPanel()">How to Update Info</button>
                     <button class="confirm-btn" type="button" onclick="openBuyNowForSelectedBlock()">Buy Now</button>
-                    <button class="btn" type="button" onclick="app.submit()">Claim Block (Local)</button>
+                    <button class="btn" type="button" onclick="app.submit()">Claim Canvas (Local)</button>
                 </div>
             </div>`;
         
@@ -2008,7 +1981,7 @@ function displaySearchResults() {
     if (searchResults.length === 0) {
         resultsContainer.innerHTML = `
             <div class="search-no-results">
-                No blocks found containing "${escapeHtml(currentSearchTerm)}"
+                No canvases found containing "${escapeHtml(currentSearchTerm)}"
             </div>
         `;
     } else {
