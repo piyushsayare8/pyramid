@@ -496,6 +496,8 @@ body {
 }
 
 #grid-video-overlay {
+    --player-accent: #ff0000;
+    --player-accent-rgb: 255, 0, 0;
     position: fixed;
     z-index: 55;
     display: none;
@@ -512,18 +514,39 @@ body {
 }
 
 #grid-video-overlay.floating {
-    border-radius: 12px;
-    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.58), 0 0 0 2px rgba(255, 0, 0, 0.55), 0 0 26px rgba(255, 0, 0, 0.28);
-    border: 2px solid rgba(255, 0, 0, 0.72);
+    border-radius: 14px;
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.58), 0 0 0 2px rgba(var(--player-accent-rgb), 0.55), 0 0 26px rgba(var(--player-accent-rgb), 0.32);
+    border: 2px solid rgba(var(--player-accent-rgb), 0.78);
 }
 
 #grid-video-overlay.show {
     display: block;
 }
 
+.grid-video-shell {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+}
+
+.grid-video-frame-wrap {
+    position: relative;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+}
+
+#grid-video-overlay.floating .grid-video-frame-wrap {
+    flex: 0 0 auto;
+    aspect-ratio: 16 / 9;
+}
+
 #grid-video-overlay.show:not(.floating) {
-    border: 2px solid rgba(255, 0, 0, 0.78);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.14), 0 0 18px rgba(255, 0, 0, 0.42);
+    border: 2px solid rgba(var(--player-accent-rgb), 0.82);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.14), 0 0 18px rgba(var(--player-accent-rgb), 0.48);
 }
 
 #grid-video-overlay iframe {
@@ -540,6 +563,52 @@ body {
     top: 0;
     height: 100%;
     transform: none;
+}
+
+.grid-video-actions {
+    display: flex;
+    gap: 8px;
+    padding: 8px 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(12, 12, 12, 0.92);
+}
+
+.grid-video-action-btn {
+    flex: 1;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    color: #f1f1f1;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.grid-video-action-btn:hover:not(:disabled) {
+    background: rgba(255, 0, 0, 0.18);
+    border-color: rgba(255, 0, 0, 0.6);
+}
+
+.grid-video-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.grid-video-owner {
+    padding: 0 10px 8px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(12, 12, 12, 0.92);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#grid-video-overlay.grid-track .grid-video-actions,
+#grid-video-overlay.grid-track .grid-video-owner {
+    display: none;
 }
 
 .grid-video-close {

@@ -1173,7 +1173,11 @@ function loadImageFromUrl(url) {
 async function createYouTubeTileTexture(videoId) {
     const thumbCandidates = [
         `https://i.ytimg.com/vi_webp/${videoId}/maxresdefault.webp`,
+        `https://i.ytimg.com/vi_webp/${videoId}/hq720.webp`,
+        `https://i.ytimg.com/vi_webp/${videoId}/sddefault.webp`,
         `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+        `https://img.youtube.com/vi/${videoId}/hq720.jpg`,
+        `https://img.youtube.com/vi/${videoId}/sddefault.jpg`,
         `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
     ];
 
@@ -1191,8 +1195,8 @@ async function createYouTubeTileTexture(videoId) {
         throw new Error(`No thumbnail available for video ${videoId}`);
     }
 
-    // Higher internal resolution keeps thumbnails crisp even when zoomed.
-    const size = 256;
+    // Large texture keeps thumbnails sharper when users zoom deeply into the grid.
+    const size = state.isMobileDevice ? 512 : 1024;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -1201,6 +1205,9 @@ async function createYouTubeTileTexture(videoId) {
     if (!ctx) {
         throw new Error('Canvas context unavailable');
     }
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
     // Full thumbnail visible: use contain fit inside the square tile (no cropping).
     const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight);
@@ -1219,6 +1226,7 @@ async function createYouTubeTileTexture(videoId) {
     ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, drawW, drawH);
 
     const texture = PIXI.Texture.from(canvas);
+    texture.source.scaleMode = 'linear';
     return texture;
 }
 
@@ -1498,10 +1506,15 @@ function updateActiveVideoMarker() {
     const size = (CONFIG.BLOCK_SIZE - CONFIG.GAP) + (margin * 2);
     const safeColor = sanitizeBlockColor(block?.data?.owner_color);
     const markerColor = parseInt(safeColor.slice(1), 16);
+    const pulse = (Math.sin(performance.now() * 0.01) + 1) * 0.5;
+    const glowOuterAlpha = 0.22 + (pulse * 0.38);
+    const glowMidAlpha = 0.3 + (pulse * 0.32);
 
     marker.clear();
-    marker.rect(x, y, size, size).stroke({ width: 2, color: markerColor, alpha: 0.95 });
-    marker.rect(x + 1, y + 1, size - 2, size - 2).stroke({ width: 1, color: 0xffffff, alpha: 0.35 });
+    marker.rect(x - 2, y - 2, size + 4, size + 4).stroke({ width: 1, color: markerColor, alpha: glowOuterAlpha });
+    marker.rect(x - 1, y - 1, size + 2, size + 2).stroke({ width: 1, color: markerColor, alpha: glowMidAlpha });
+    marker.rect(x, y, size, size).stroke({ width: 1, color: markerColor, alpha: 0.95 });
+    marker.rect(x + 1, y + 1, size - 2, size - 2).stroke({ width: 0.5, color: 0xffffff, alpha: 0.3 });
     marker.visible = true;
 
     markerState.blockId = block.id;
@@ -1513,15 +1526,35 @@ function openGridVideoPlayer(blockId) {
     const videoId = getBlockYouTubeId(block);
     if (!block || !videoId) return;
 
+    const creatorName = block?.data?.owner_name || 'Anonymous';
+    const safeCreatorName = escapeHtml(creatorName);
+    const hasCreatorLink = !!(block?.data?.link_url && String(block.data.link_url).trim());
+    const safeColor = sanitizeBlockColor(block?.data?.owner_color);
+    const colorInt = parseInt(safeColor.slice(1), 16);
+    const r = (colorInt >> 16) & 255;
+    const g = (colorInt >> 8) & 255;
+    const b = colorInt & 255;
+
     const overlay = getGridVideoOverlayElement();
+    overlay.style.setProperty('--player-accent', safeColor);
+    overlay.style.setProperty('--player-accent-rgb', `${r}, ${g}, ${b}`);
     overlay.innerHTML = `
-        <button class="grid-video-close" onclick="closeGridVideoPlayer()" aria-label="Close video">✕</button>
-        <iframe
-            src="https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1"
-            frameborder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowfullscreen
-        ></iframe>
+        <div class="grid-video-shell">
+            <button class="grid-video-close" onclick="closeGridVideoPlayer()" aria-label="Close video">✕</button>
+            <div class="grid-video-frame-wrap">
+                <iframe
+                    src="https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1"
+                    frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen
+                ></iframe>
+            </div>
+            <div class="grid-video-actions" aria-label="Creator actions">
+                <button type="button" class="grid-video-action-btn" onclick="openGridVideoCreatorProfile(${blockId})">View Profile</button>
+                <button type="button" class="grid-video-action-btn" onclick="openGridVideoCreatorLink(${blockId})" ${hasCreatorLink ? '' : 'disabled'}>Open Creator Link</button>
+            </div>
+            <div class="grid-video-owner">Now playing: #${blockId} | ${safeCreatorName}</div>
+        </div>
     `;
 
     overlay.classList.add('show');
@@ -1530,6 +1563,20 @@ function openGridVideoPlayer(blockId) {
     updateActiveVideoMarker();
     updateGridVideoOverlayPosition();
 }
+
+window.openGridVideoCreatorProfile = function(blockId) {
+    const block = state.blocks[blockId];
+    if (!block) return;
+    state.selectedId = blockId;
+    openModal();
+};
+
+window.openGridVideoCreatorLink = function(blockId) {
+    const block = state.blocks[blockId];
+    const url = block?.data?.link_url;
+    if (!url || !String(url).trim()) return;
+    window.open(String(url).trim(), '_blank', 'noopener,noreferrer');
+};
 
 window.closeGridVideoPlayer = function() {
     const overlay = document.getElementById('grid-video-overlay');
@@ -1548,8 +1595,13 @@ function pinGridVideoAsFloatingPlayer() {
     const overlay = document.getElementById('grid-video-overlay');
     if (!overlay) return;
 
-    const floatingWidth = window.innerWidth <= 700 ? 340 : 520;
-    const floatingHeight = Math.round(floatingWidth * 0.5625);
+    const maxByViewport = Math.floor(window.innerWidth * 0.4);
+    const floatingWidth = window.innerWidth <= 700
+        ? Math.min(Math.max(320, Math.floor(window.innerWidth * 0.84)), 400)
+        : Math.min(Math.max(500, maxByViewport), 620);
+    const videoHeight = Math.round(floatingWidth * 0.5625);
+    const controlsHeight = 84;
+    const floatingHeight = videoHeight + controlsHeight;
     const left = Math.max(8, window.innerWidth - floatingWidth - 18);
     const top = Math.max(8, window.innerHeight - floatingHeight - 18);
 
