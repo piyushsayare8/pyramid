@@ -35,7 +35,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
    ======================================== */
 
 :root { 
-<<<<<<< Updated upstream
     --bg-dark: #0F0F0F;
     --yt-red: #FF0000;
     --yt-red-dark: #CC0000;
@@ -52,61 +51,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
     --gold-dim: rgba(255, 0, 0, 0.15);
     --panel-bg: rgba(33, 33, 33, 0.9);
     --border: rgba(255, 255, 255, 0.08);
-=======
-    /* ── Deep Space Aurora Palette ── */
-    --bg-void:     #060614;
-    --bg-surface:  #08081A;
-    --bg-panel:    #0C0B1E;
-    --bg-elevated: #100F26;
-    --bg-dark:     #060614;
-
-    /* ── Gold Accent (unchanged) ── */
-    --gold:        #FFD700; 
-    --gold-grad:   linear-gradient(135deg, #FFD700, #FDB931);
-    --gold-dim:    rgba(255, 215, 0, 0.15);
-
-    /* ── Violet / Aurora Accents ── */
-    --violet:         #8B5CF6;
-    --violet-dim:     rgba(139, 92, 246, 0.18);
-    --violet-glow:    rgba(139, 92, 246, 0.28);
-    --teal:           #4ECDC4;
-    --teal-glow:      rgba(78, 205, 196, 0.22);
-    --pink:           #F472B6;
-    --pink-glow:      rgba(244, 114, 182, 0.18);
-
-    /* ── Border System ── */
-    --border:         rgba(139, 92, 246, 0.18);
-    --border-hover:   rgba(139, 92, 246, 0.38);
-    --border-bright:  rgba(139, 92, 246, 0.60);
-
-    /* ── Text ── */
-    --txt-primary:    #EBE9FF;
-    --txt-secondary:  #9E9CC2;
-    --txt-muted:      #706EA0;
-    --txt-ghost:      #524F70;
-
-    --panel-bg: rgba(12, 11, 30, 0.92);
->>>>>>> Stashed changes
     --glass: blur(20px) saturate(180%);
 }
 
 body { 
     margin: 0; 
     overflow: hidden; 
-<<<<<<< Updated upstream
     background-color: #0F0F0F; 
     font-family: 'Roboto', 'Arial', system-ui, sans-serif; 
     color: white; 
-=======
-    background-color: #060614;
-    background:
-        radial-gradient(ellipse 85% 65% at 8% 25%,  rgba(120, 60, 210, 0.09) 0%, transparent 60%),
-        radial-gradient(ellipse 65% 55% at 92% 68%,  rgba(20, 140, 215, 0.06) 0%, transparent 55%),
-        radial-gradient(ellipse 55% 50% at 50% 110%, rgba(244, 114, 182, 0.05) 0%, transparent 50%),
-        #060614;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif; 
-    color: #EBE9FF; 
->>>>>>> Stashed changes
     user-select: none; 
     -webkit-font-smoothing: antialiased; 
     touch-action: none; 
@@ -1376,21 +1329,12 @@ border-color: #F1F1F1;
 
 /* Main Profile Modal Container */
 .profile-modal { 
-<<<<<<< Updated upstream
     max-width: 100%; 
     width: 100%;
     height: 100%;
     max-height: 100%;
     background: #0F0F0F;
     border: 1px solid #373737;
-=======
-    max-width: 1100px; 
-    width: 90%;
-    height: 630px;
-    max-height: 90vh;
-    background: #0D1117;
-    border: 1px solid #30363D;
->>>>>>> Stashed changes
     border-radius: 16px;
     box-shadow: 
         0 20px 60px rgba(0,0,0,0.4),
@@ -1543,63 +1487,18 @@ border-color: #F1F1F1;
 /* RIGHT SIDE: exact 50/50 grid */
 .prof-right-section {
     flex: 1; 
-<<<<<<< Updated upstream
     display: grid;
     grid-template-rows: 1fr 1fr;
     min-width: 0;
     background: #0F0F0F;
-=======
-    padding: 18px 26px; 
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    max-width: 100%;
-    background: #0D1117;
->>>>>>> Stashed changes
     box-sizing: border-box;
     overflow: hidden;
 }
 
-<<<<<<< Updated upstream
 .prof-right-top {
     min-height: 0;
     border-bottom: 1px solid #373737;
     padding: 14px 20px;
-=======
-.prof-section-title {
-    font-family: 'Inter', -apple-system, system-ui, sans-serif;
-    font-size: 0.75rem;
-    color: #7D8590;
-    text-transform: uppercase;
-    letter-spacing: 1.2px;
-    font-weight: 600;
-    margin-bottom: 5px;
-    margin-top: 6px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
-}
-
-.prof-section-title::before {
-    content: '';
-    width: 4px;
-    height: 14px;
-    background: linear-gradient(135deg, #FFD700, #FFA500);
-    border-radius: 2px;
-    box-shadow: 0 0 8px rgba(255,215,0,0.3);
-}
-
-.prof-message-container { 
-    width: 100%; 
-    position: relative;
-    margin-bottom: 8px;
-    /* flex-grow so it takes remaining space; flex-shrink so YouTube can share */
-    flex: 1 1 0;
-    min-height: 0;
-    overflow: hidden;
->>>>>>> Stashed changes
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -1621,7 +1520,6 @@ border-color: #F1F1F1;
     border: 1px solid transparent;
     background-clip: padding-box;
     position: relative;
-<<<<<<< Updated upstream
     border-radius: 10px; 
     padding: 16px 20px; 
     font-family: 'Roboto', 'Arial', sans-serif; 
@@ -1629,16 +1527,6 @@ border-color: #F1F1F1;
     line-height: 1.7;
     color: #F1F1F1;
     flex: 1;
-=======
-    border-radius: 12px; 
-    padding: 28px 32px; 
-    font-family: 'Georgia', serif; 
-    font-size: 1.05rem;
-    line-height: 1.8;
-    color: #E6EDF3;
-    flex: 1 1 0;
-    min-height: 0;
->>>>>>> Stashed changes
     overflow-y: auto;
     overflow-x: hidden;
     box-shadow: 
@@ -1722,7 +1610,6 @@ border-color: #F1F1F1;
     margin-bottom: 0;
 }
 
-<<<<<<< Updated upstream
 .prof-no-video {
     display: flex;
     align-items: center;
@@ -1737,19 +1624,6 @@ border-color: #F1F1F1;
     font-size: 0.8rem; 
     color: #AAAAAA; 
     margin-bottom: 10px; 
-=======
-.prof-action-area { 
-    width: 100%; 
-    margin-top: 0;
-    flex-shrink: 0;
-    padding-bottom: 2px;
-}
-
-.prof-link-desc { 
-    font-size: 0.875rem; 
-    color: #7D8590; 
-    margin-bottom: 8px; 
->>>>>>> Stashed changes
     text-align: center;
     font-weight: 400;
     letter-spacing: -0.01em;
@@ -1763,13 +1637,8 @@ border-color: #F1F1F1;
     justify-content: center;
     gap: 8px;
     width: 100%;
-<<<<<<< Updated upstream
     padding: 12px 24px;
     background: var(--block-color, #CC0000);
-=======
-    padding: 10px 24px;
-    background: #238636;
->>>>>>> Stashed changes
     color: #FFFFFF; 
     border: 1px solid rgb(var(--block-color-rgb, 255 0 0) / 0.4); 
     border-radius: 6px;
@@ -2012,7 +1881,6 @@ border-color: #F1F1F1;
    ======================================== */
 
 @media(max-width: 1024px) {
-<<<<<<< Updated upstream
     .modal.premium {
         width: 96%;
     }
@@ -2024,21 +1892,6 @@ border-color: #F1F1F1;
     
     .prof-right-top, .prof-right-bottom {
         padding: 12px 16px;
-=======
-    .profile-modal {
-        width: 95%;
-        height: 590px;
-        max-height: 90vh;
-    }
-    
-    .prof-left-section {
-        flex: 0 0 300px;
-        padding: 24px 20px;
-    }
-    
-    .prof-right-section {
-        padding: 16px 20px;
->>>>>>> Stashed changes
     }
     
     .prof-avatar {
@@ -2047,11 +1900,7 @@ border-color: #F1F1F1;
     }
     
     .prof-name {
-<<<<<<< Updated upstream
         font-size: 1.15rem;
-=======
-        font-size: 1.4rem;
->>>>>>> Stashed changes
     }
     
     .prof-message {
@@ -2108,55 +1957,6 @@ border-color: #F1F1F1;
     }
     
     .profile-modal {
-<<<<<<< Updated upstream
-=======
-        height: auto;
-        min-height: 540px;
-        max-height: 92vh;
-        width: 96%;
-        border-radius: 12px;
-    }
-    
-    .prof-header {
-        height: 64px;
-        padding: 0 20px;
-    }
-    
-    .prof-content {
-        flex-direction: column;
-        padding: 0;
-        gap: 0;
-    }
-    
-    .prof-left-section {
-        position: relative;
-        height: auto;
-        width: 100%;
-        flex: none;
-        border-right: none;
-        border-bottom: 1px solid #30363D;
-        padding: 28px 20px;
-        overflow: visible;
-    }
-    
-    .prof-right-section {
-        margin-left: 0;
-        height: auto;
-        padding: 28px 20px;
-    }
-    
-    .prof-message-container {
-        /* let it flex-grow; remove hard height */
-        flex: 1 1 0;
-        min-height: 80px;
-        margin-bottom: 12px;
-    }
-    
-    .prof-message {
-        padding: 22px 24px;
-        font-size: 1rem;
-        line-height: 1.7;
->>>>>>> Stashed changes
         border-radius: 10px;
     }
     
@@ -2461,123 +2261,6 @@ border-color: #F1F1F1;
         flex-direction: column;
     }
     
-<<<<<<< Updated upstream
-=======
-    .prof-block-info {
-        padding: 6px 14px;
-        border-radius: 6px;
-    }
-    
-    .prof-block-id {
-        font-size: 0.65rem;
-        margin-bottom: 2px;
-    }
-    
-    .prof-block-value {
-        font-size: 1rem;
-    }
-    
-    .prof-close-btn {
-        width: 32px;
-        height: 32px;
-        font-size: 1rem;
-    }
-    
-    .prof-left-section {
-        padding: 24px 16px;
-        max-height: none;
-        overflow: visible;
-    }
-    
-    .prof-right-section {
-        padding: 24px 16px;
-        min-height: 0;
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-    }
-    
-    .prof-message-container {
-        flex: 1 1 0;
-        min-height: 100px;
-        margin-bottom: 12px;
-    }
-    
-    .prof-avatar {
-        width: 90px;
-        height: 90px;
-        border-width: 2px;
-    }
-    
-    .prof-name {
-        font-size: 1.25rem;
-        margin-bottom: 8px;
-    }
-    
-    .prof-title {
-        font-size: 0.85rem;
-        margin-bottom: 20px;
-    }
-    
-    .prof-message {
-        padding: 18px 16px;
-        font-size: 0.95rem;
-        line-height: 1.65;
-        border-radius: 8px;
-        height: 100%;
-    }
-    
-    .prof-message::after {
-        font-size: 2.25rem;
-        top: 10px;
-        left: 10px;
-    }
-    
-    .prof-message::-webkit-scrollbar {
-        width: 6px;
-    }
-    
-    .prof-btn-visit {
-        padding: 12px 20px;
-        font-size: 0.9rem;
-        border-radius: 6px;
-    }
-    
-    .stat-card {
-        padding: 10px 12px;
-        border-radius: 6px;
-    }
-    
-    .stat-val {
-        font-size: 1.3rem;
-    }
-    
-    .stat-label {
-        font-size: 0.65rem;
-    }
-}
-
-/* Small Mobile Profile Optimizations */
-@media(max-width: 480px) {
-    .prof-header {
-        height: 56px;
-        padding: 0 12px;
-    }
-    
-    .prof-block-info {
-        padding: 6px 12px;
-        border-radius: 6px;
-    }
-    
-    .prof-block-value {
-        font-size: 0.95rem;
-    }
-    
-    .prof-block-id {
-        font-size: 0.65rem;
-    }
-    
->>>>>>> Stashed changes
     .prof-close-btn {
         width: 30px;
         height: 30px;
