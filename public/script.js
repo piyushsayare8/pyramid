@@ -54,7 +54,7 @@ const state = {
     simulating: false,
     gridPriceMap: {},
     isMobileDevice: false,
-    viewMode: 'text',
+    viewMode: 'video',
     photoTextureCache: new Map(),
     videoTextureCache: new Map(),
     photoPrepInProgress: false,
@@ -556,6 +556,11 @@ function buildPyramid() {
             videoSprite.visible = false;
             videoSprite.blockId = blockId;
 
+            const borderGraphics = new PIXI.Graphics();
+            borderGraphics.visible = false;
+            borderGraphics.eventMode = 'none';
+            borderGraphics.blockId = blockId;
+
             state.blocks[blockId] = { 
                 id: blockId, 
                 price: price, 
@@ -564,6 +569,7 @@ function buildPyramid() {
                 sprite: sprite, 
                 photoRef: photoSprite,
                 videoRef: videoSprite,
+                borderRef: borderGraphics,
                 photoUrl: '',
                 photoReady: false,
                 photoQueued: false,
@@ -578,6 +584,7 @@ function buildPyramid() {
             chunk.addChild(sprite);
             chunk.addChild(photoSprite);
             chunk.addChild(videoSprite);
+            chunk.addChild(borderGraphics);
             blockId--;
         }
     }
@@ -1092,6 +1099,26 @@ function sanitizeBlockColor(color) {
     return '#FF0000';
 }
 
+function refreshBlockBorder(block) {
+    if (!block || !block.borderRef || !block.sprite) return;
+
+    const border = block.borderRef;
+    border.clear();
+
+    if (!block.sold || !block.data) {
+        border.visible = false;
+        return;
+    }
+
+    const safeColor = sanitizeBlockColor(block.data.owner_color);
+    const strokeColor = parseInt(safeColor.slice(1), 16);
+    const size = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+
+    border.rect(block.sprite.x, block.sprite.y, size, size).stroke({ width: 1, color: strokeColor, alpha: 0.95 });
+    border.rect(block.sprite.x + 1, block.sprite.y + 1, size - 2, size - 2).stroke({ width: 0.5, color: 0x000000, alpha: 0.25 });
+    border.visible = state.viewMode === 'video';
+}
+
 function getBlockPhotoUrl(block) {
     if (!block.sold) return null;
     if (block.data && typeof block.data.image_url === 'string' && block.data.image_url.trim()) {
@@ -1219,18 +1246,13 @@ async function ensureBlockPhotoTexture(block, imageUrl) {
         block.photoRef.tint = 0xFFFFFF;
         block.photoReady = true;
 
-        if (state.viewMode === 'photo') {
-            block.sprite.visible = false;
-            block.photoRef.visible = true;
-        }
+        block.photoRef.visible = false;
     } catch (error) {
         console.warn(`Failed to load image for block ${block.id}:`, error);
-        // In strict user-photo mode, keep the base tile if user image fails to load.
+        // Keep base tile visible if image fails to load.
         block.photoReady = false;
-        if (state.viewMode === 'photo') {
-            block.photoRef.visible = false;
-            block.sprite.visible = true;
-        }
+        block.photoRef.visible = false;
+        block.sprite.visible = true;
     } finally {
         block.photoLoading = false;
     }
@@ -1474,9 +1496,11 @@ function updateActiveVideoMarker() {
     const x = block.sprite.x - margin;
     const y = block.sprite.y - margin;
     const size = (CONFIG.BLOCK_SIZE - CONFIG.GAP) + (margin * 2);
+    const safeColor = sanitizeBlockColor(block?.data?.owner_color);
+    const markerColor = parseInt(safeColor.slice(1), 16);
 
     marker.clear();
-    marker.rect(x, y, size, size).stroke({ width: 2, color: 0xff2a2a, alpha: 0.95 });
+    marker.rect(x, y, size, size).stroke({ width: 2, color: markerColor, alpha: 0.95 });
     marker.rect(x + 1, y + 1, size - 2, size - 2).stroke({ width: 1, color: 0xffffff, alpha: 0.35 });
     marker.visible = true;
 
@@ -1669,7 +1693,6 @@ function prepareVideoMode() {
 function applyBlockVisualMode(block) {
     if (!block) return;
 
-    const shouldShowPhoto = state.viewMode === 'photo';
     const shouldShowVideo = state.viewMode === 'video';
 
     if (!block.sold) {
@@ -1678,6 +1701,9 @@ function applyBlockVisualMode(block) {
         }
         if (block.videoRef) {
             block.videoRef.visible = false;
+        }
+        if (block.borderRef) {
+            block.borderRef.visible = false;
         }
         if (block.sprite) {
             block.sprite.visible = true;
@@ -1689,11 +1715,7 @@ function applyBlockVisualMode(block) {
     }
 
     if (block.photoRef) {
-        block.photoRef.visible = shouldShowPhoto && hasUserImage(block) && block.photoReady;
-        if (shouldShowPhoto) {
-            enqueuePhotoLoad(block);
-            startPhotoQueuePump();
-        }
+        block.photoRef.visible = false;
     }
 
     if (block.videoRef) {
@@ -1704,10 +1726,11 @@ function applyBlockVisualMode(block) {
         }
     }
 
+    refreshBlockBorder(block);
+
     if (block.sprite) {
-        const usePhotoTexture = shouldShowPhoto && hasUserImage(block) && block.photoReady;
         const useVideoTexture = shouldShowVideo && hasYouTubeVideo(block) && block.videoReady;
-        block.sprite.visible = !(usePhotoTexture || useVideoTexture);
+        block.sprite.visible = !useVideoTexture;
     }
 
     if (block.textRef) {
@@ -1726,20 +1749,18 @@ function applyVisualModeToAllBlocks() {
 
 function updateModeButtons() {
     const textBtn = document.getElementById('mode-text-btn');
-    const photoBtn = document.getElementById('mode-photo-btn');
     const videoBtn = document.getElementById('mode-video-btn');
-    if (!textBtn || !photoBtn || !videoBtn) return;
+    if (!textBtn || !videoBtn) return;
 
     const isText = state.viewMode === 'text';
-    const isPhoto = state.viewMode === 'photo';
     const isVideo = state.viewMode === 'video';
 
     textBtn.classList.toggle('active', isText);
-    photoBtn.classList.toggle('active', isPhoto);
     videoBtn.classList.toggle('active', isVideo);
 
+    document.body.classList.toggle('is-video-mode', isVideo);
+
     textBtn.disabled = false;
-    photoBtn.disabled = false;
     videoBtn.disabled = false;
 }
 
@@ -1775,11 +1796,9 @@ function updateBlock(id, data) {
     }
 
     applyBlockVisualMode(b);
+    refreshBlockBorder(b);
 
-    if (state.viewMode === 'photo' && b.sold) {
-        enqueuePhotoLoad(b);
-        startPhotoQueuePump();
-    } else if (state.viewMode === 'video' && b.sold) {
+    if (state.viewMode === 'video' && b.sold) {
         enqueueVideoLoad(b);
         startVideoQueuePump();
     }
@@ -1796,7 +1815,7 @@ let formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: ''
 window.app = {
     resetCamera: () => centerCamera(),
     setViewMode: (mode) => {
-        const normalized = mode === 'photo' || mode === 'video' ? mode : 'text';
+        const normalized = mode === 'video' ? 'video' : 'text';
         state.viewMode = normalized;
         state.lodQueueIndex = 0;
 
@@ -1804,9 +1823,7 @@ window.app = {
             window.closeGridVideoPlayer();
         }
 
-        if (normalized === 'photo') {
-            preparePhotoMode();
-        } else if (normalized === 'video') {
+        if (normalized === 'video') {
             prepareVideoMode();
         }
 
@@ -1816,11 +1833,6 @@ window.app = {
     },
     toggleViewMode: () => {
         if (state.viewMode === 'text') {
-            window.app.setViewMode('photo');
-            return;
-        }
-
-        if (state.viewMode === 'photo') {
             window.app.setViewMode('video');
             return;
         }
