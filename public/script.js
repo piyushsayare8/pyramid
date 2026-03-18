@@ -2,10 +2,10 @@
 // 1. ENGINE CONFIGURATION & IMMORTAL CONSTANTS
 // =========================================================================
 const CONFIG = {
-    ROWS: 100,
+    ROWS: 150,
     BLOCK_SIZE: 40,
     GAP: 2,
-    TOTAL_BLOCKS: 5050,
+    TOTAL_BLOCKS: 11325,
     LOD_THRESHOLD: 0.35,
     MOBILE_LOD_THRESHOLD: 1.001,
     LOD_BATCH_SIZE: 250,
@@ -530,7 +530,7 @@ function buildPyramid() {
         const yPos = (row - 1) * CONFIG.BLOCK_SIZE;
 
         for (let col = 0; col < row; col++) {
-            let price = blockId * 40;
+            let price = blockId * 10;
             let type = 'std';
             if (blockId >= 4500) type = 'gold';
             else if (row <= 60) type = 'silver';
@@ -1781,6 +1781,12 @@ function applyBlockVisualMode(block) {
     refreshBlockBorder(block);
 
     if (block.sprite) {
+        const safeColor = sanitizeBlockColor(block?.data?.owner_color);
+        const ownerTint = parseInt(safeColor.slice(1), 16);
+        // In YouTube mode, force a dark tile with neutral tint so only the border carries color.
+        // In Text mode, keep the sold texture + owner color fill behavior.
+        block.sprite.texture = shouldShowVideo ? state.baseTextures.std : state.baseTextures.sold;
+        block.sprite.tint = shouldShowVideo ? 0xFFFFFF : ownerTint;
         const useVideoTexture = shouldShowVideo && hasYouTubeVideo(block) && block.videoReady;
         block.sprite.visible = !useVideoTexture;
     }
@@ -2130,6 +2136,9 @@ function handleTestFormSubmit(event) {
         if (formData.owner_text) {
             renderBlockText(block.sprite, formData.owner_text);
         }
+
+        applyBlockVisualMode(block);
+        refreshBlockBorder(block);
         
         updateSalesCounter();
         closeTestModal();
