@@ -432,6 +432,10 @@ body {
     box-shadow: 0 10px 24px rgba(62, 166, 255, 0.45), inset 0 1px 0 rgba(255,255,255,0.22);
 }
 
+body.is-video-mode #simulate-btn {
+    display: none;
+}
+
 .controls { 
     position: absolute; 
     top: 30px; 

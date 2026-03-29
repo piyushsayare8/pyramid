@@ -30,7 +30,11 @@ const CONFIG = {
     RETRY_ATTEMPTS: 3,
     RETRY_DELAY: 1000,
     MEDIA_QUEUE_UPDATE_MS: 400,
-    MAX_VISIBLE_MEDIA_PRELOAD: 220
+    MAX_VISIBLE_MEDIA_PRELOAD: 220,
+    PHOTO_CACHE_LIMIT_DESKTOP: 600,
+    PHOTO_CACHE_LIMIT_MOBILE: 180,
+    VIDEO_CACHE_LIMIT_DESKTOP: 320,
+    VIDEO_CACHE_LIMIT_MOBILE: 96
 };
 
 const PYRAMID_WIDTH = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
@@ -60,20 +64,32 @@ const state = {
     hasMoved: false,
     clickThreshold: 5,
     hoverId: -1,
+    hoverRafId: 0,
+    pendingHoverPos: null,
     selectedId: -1,
     touches: [],
     lastTouchDistance: 0,
     lastTouchTapId: -1,
     lastTouchTapTime: 0,
+    soldCount: 0,
     simulating: false,
     gridPriceMap: {},
+    slotRenderSignature: new Map(),
+    ui: {
+        salesCountEl: null,
+        salesProgressEl: null,
+        tooltipEl: null
+    },
     isMobileDevice: false,
-    viewMode: 'video',
+    viewMode: 'text',
     photoTextureCache: new Map(),
     videoTextureCache: new Map(),
+    photoCacheOrder: [],
+    videoCacheOrder: [],
     photoPrepInProgress: false,
     photoPrepTimer: null,
     photoPrepCountdown: 0,
+    maxVisibleMediaPreload: CONFIG.MAX_VISIBLE_MEDIA_PRELOAD,
     photoLoadQueue: [],
     videoLoadQueue: [],
     photoQueuePumpTimer: null,
@@ -82,20 +98,24 @@ const state = {
     activeVideoLoads: 0,
     maxConcurrentPhotoLoads: 15,
     maxConcurrentVideoLoads: 12,
+    photoTextureCacheLimit: CONFIG.PHOTO_CACHE_LIMIT_DESKTOP,
+    videoTextureCacheLimit: CONFIG.VIDEO_CACHE_LIMIT_DESKTOP,
     dataRefreshTimer: null,
     dataRefreshInFlight: false,
     activeGridVideo: null,
     lastVideoCamSnapshot: null,
     activeVideoMarker: null,
     lastMediaQueueTick: 0,
+    simulatedSlots: new Map(),
 
     // LOD State
     lodVisible: false,
-    lodQueueIndex: 0
+    lodQueueIndex: 0,
+    lodBatchSize: CONFIG.LOD_BATCH_SIZE
 };
 
 function setInitialViewModeRandomly() {
-    state.viewMode = Math.random() < 0.5 ? 'text' : 'video';
+    state.viewMode = 'text';
 }
 
 // Form data removed - no purchase modal needed
@@ -160,6 +180,28 @@ function loadLocalPurchases() {
 }
 
 // Static data loader - replaces API calls
+function getSlotRenderSignature(data) {
+    if (!data || !data.sold) return '0';
+
+    const imageUrl = typeof data.image_url === 'string' ? data.image_url.trim() : '';
+    const youtubeUrl = typeof data.youtube_url === 'string' ? data.youtube_url.trim() : '';
+    const linkUrl = typeof data.link_url === 'string' ? data.link_url.trim() : '';
+    const textColor = '#FFFFFF';
+
+    return [
+        '1',
+        data.owner_name || 'Anonymous',
+        sanitizeBlockColor(data.owner_color || '#FFD700'),
+        data.owner_text || '',
+        textColor,
+        data.message || '',
+        imageUrl,
+        youtubeUrl,
+        linkUrl,
+        data.link_description || ''
+    ].join('|');
+}
+
 async function loadStaticData(options = {}) {
     const silent = !!options.silent;
     if (state.dataRefreshInFlight) return;
@@ -195,11 +237,14 @@ async function loadStaticData(options = {}) {
         if (!silent) {
             hideLoading();
         }
+
+        let hasBlockChanges = false;
         
         // Process all slots with unique IDs
         for (let slotId = 1; slotId <= CONFIG.TOTAL_BLOCKS; slotId++) {
             const slotData = slotsData[String(slotId)] || slotsData[slotId];
             const gridData = state.gridPriceMap[String(slotId)] || null;
+            const simulatedSlotData = state.simulatedSlots.get(slotId);
 
             if (state.blocks[slotId]) {
                 // Always keep deterministic pricing: slot id * Rs10.
@@ -214,25 +259,40 @@ async function loadStaticData(options = {}) {
                 }
             }
 
+            let nextData = null;
             if (slotData && slotData.sold) {
-                updateBlock(slotId, {
+                nextData = {
                     sold: true,
                     owner_name: slotData.owner_name || 'Anonymous',
                     owner_color: slotData.owner_color || '#FFD700',
                     owner_text: slotData.owner_text || '',
+                    owner_text_color: '#FFFFFF',
                     message: slotData.message || '',
                     image_url: slotData.image_url || '',
                     link_url: slotData.link_url || '',
                     link_description: slotData.link_description || '',
                     youtube_url: slotData.youtube_url || ''
-                });
-            } else if (state.blocks[slotId] && state.blocks[slotId].sold) {
-                // Reconcile sold->unsold transitions from live sheet updates.
-                updateBlock(slotId, { sold: false });
+                };
+                if (simulatedSlotData) {
+                    state.simulatedSlots.delete(slotId);
+                }
+            } else if (simulatedSlotData) {
+                // Keep local simulation tiles stable during live refresh cycles.
+                nextData = { ...simulatedSlotData };
+            } else {
+                nextData = { sold: false };
+            }
+
+            const nextSignature = getSlotRenderSignature(nextData);
+            if (state.slotRenderSignature.get(slotId) !== nextSignature) {
+                updateBlock(slotId, nextData, { skipSalesCounter: true });
+                hasBlockChanges = true;
             }
         }
         
-        updateSalesCounter();
+        if (hasBlockChanges) {
+            updateSalesCounter();
+        }
         if (!silent) {
             console.log('Static data loaded successfully');
         }
@@ -253,6 +313,7 @@ async function loadStaticData(options = {}) {
 function startAutoDataRefresh() {
     if (state.dataRefreshTimer) return;
     state.dataRefreshTimer = setInterval(() => {
+        if (document.hidden) return;
         loadStaticData({ silent: true });
     }, CONFIG.DATA_REFRESH_MS);
 }
@@ -300,12 +361,14 @@ async function loadGridData() {
                         image_url: slot.image_url || '',
                         link_url: slot.link_url || '',
                         link_description: slot.link_description || ''
-                    });
+                    }, { skipSalesCounter: true });
                 } catch (blockError) {
                     console.warn(`Failed to load block ${slot.slot_number}:`, blockError);
                     // Continue processing other blocks
                 }
             });
+
+            updateSalesCounter();
             
             // Small delay to allow UI to breathe
             if (i + BATCH_SIZE < soldSlots.length) {
@@ -419,6 +482,15 @@ function showSuccess(message) {
 // =========================================================================
 async function init() {
     state.isMobileDevice = window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
+    state.maxConcurrentPhotoLoads = state.isMobileDevice ? 4 : 10;
+    state.maxConcurrentVideoLoads = state.isMobileDevice ? 2 : 6;
+    state.maxVisibleMediaPreload = state.isMobileDevice ? 90 : CONFIG.MAX_VISIBLE_MEDIA_PRELOAD;
+    state.lodBatchSize = state.isMobileDevice ? 120 : CONFIG.LOD_BATCH_SIZE;
+    state.photoTextureCacheLimit = state.isMobileDevice ? CONFIG.PHOTO_CACHE_LIMIT_MOBILE : CONFIG.PHOTO_CACHE_LIMIT_DESKTOP;
+    state.videoTextureCacheLimit = state.isMobileDevice ? CONFIG.VIDEO_CACHE_LIMIT_MOBILE : CONFIG.VIDEO_CACHE_LIMIT_DESKTOP;
+    state.ui.salesCountEl = document.getElementById('sales-count');
+    state.ui.salesProgressEl = document.getElementById('sales-progress-bar');
+    state.ui.tooltipEl = document.getElementById('tooltip');
 
     // Keep GPU memory stable on mobile to avoid WebGL context loss (white screen).
     const pixelRatio = state.isMobileDevice
@@ -456,6 +528,7 @@ async function init() {
 
     createStarfield();
     state.world = new PIXI.Container();
+    state.pixi.ticker.maxFPS = state.isMobileDevice ? 45 : 60;
     
     // --- IMMORTAL UPGRADE: Render Group for Pixi v8 ---
     state.world.isRenderGroup = true;
@@ -470,6 +543,7 @@ async function init() {
     await initPreviewApp();
 
     state.pixi.ticker.add((ticker) => {
+        if (document.hidden) return;
         updatePhysics(ticker.deltaTime);
         updateStarfield();
         cullWorld();
@@ -573,6 +647,8 @@ function updateStarfield() {
 }
 
 function buildPyramid() {
+    state.soldCount = 0;
+    state.slotRenderSignature.clear();
     let blockId = CONFIG.TOTAL_BLOCKS;
     for (let row = 1; row <= CONFIG.ROWS; row++) {
         if ((row - 1) % CONFIG.CHUNK_SIZE === 0) {
@@ -645,6 +721,7 @@ function buildPyramid() {
             chunk.addChild(photoSprite);
             chunk.addChild(videoSprite);
             chunk.addChild(borderGraphics);
+            state.slotRenderSignature.set(blockId, '0');
             blockId--;
         }
     }
@@ -652,15 +729,17 @@ function buildPyramid() {
 }
 
 function updateSalesCounter() {
-    let soldCount = 0;
-    for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
-        if (state.blocks[i] && state.blocks[i].sold) {
-            soldCount++;
-        }
-    }
+    const soldCount = Math.max(0, Math.min(CONFIG.TOTAL_BLOCKS, state.soldCount));
     const percentage = (soldCount / CONFIG.TOTAL_BLOCKS) * 100;
-    const countElement = document.getElementById('sales-count');
-    const progressBar = document.getElementById('sales-progress-bar');
+    const countElement = state.ui.salesCountEl || document.getElementById('sales-count');
+    const progressBar = state.ui.salesProgressEl || document.getElementById('sales-progress-bar');
+
+    if (!state.ui.salesCountEl && countElement) {
+        state.ui.salesCountEl = countElement;
+    }
+    if (!state.ui.salesProgressEl && progressBar) {
+        state.ui.salesProgressEl = progressBar;
+    }
     
     if (countElement) countElement.textContent = `${soldCount.toLocaleString()} / ${CONFIG.TOTAL_BLOCKS.toLocaleString()}`;
     if (progressBar) progressBar.style.width = `${percentage}%`;
@@ -762,7 +841,7 @@ function processLODQueue() {
     if (state.lodQueueIndex >= state.textPool.length) return;
 
     let processed = 0;
-    const limit = CONFIG.LOD_BATCH_SIZE;
+    const limit = state.lodBatchSize || CONFIG.LOD_BATCH_SIZE;
 
     // Process a chunk of the array
     while (processed < limit && state.lodQueueIndex < state.textPool.length) {
@@ -827,7 +906,16 @@ function setupInput() {
             state.dragStart = { x: e.clientX, y: e.clientY };
             state.vel = { x: dx, y: dy };
         } else {
-            handleHover(e.clientX, e.clientY);
+            state.pendingHoverPos = { x: e.clientX, y: e.clientY };
+            if (!state.hoverRafId) {
+                state.hoverRafId = requestAnimationFrame(() => {
+                    state.hoverRafId = 0;
+                    if (state.dragging || !state.pendingHoverPos) return;
+                    const pos = state.pendingHoverPos;
+                    state.pendingHoverPos = null;
+                    handleHover(pos.x, pos.y);
+                });
+            }
         }
     });
 
@@ -952,7 +1040,12 @@ function getBlockId(screenX, screenY) {
 
 function handleHover(x, y) {
     const id = getBlockId(x, y);
-    const tt = document.getElementById('tooltip');
+    const tt = state.ui.tooltipEl || document.getElementById('tooltip');
+    if (!state.ui.tooltipEl && tt) {
+        state.ui.tooltipEl = tt;
+    }
+    if (!tt) return;
+
     if (id !== state.hoverId) {
         if (state.hoverId !== -1 && state.blocks[state.hoverId]) state.blocks[state.hoverId].sprite.alpha = 1;
         state.hoverId = id;
@@ -1186,11 +1279,7 @@ function sanitizeBlockColor(color) {
 }
 
 function sanitizeTextColor(color) {
-    const normalized = sanitizeBlockColor(color);
-    if (normalized === '#FF0000' && String(color || '').trim().toLowerCase() !== 'red' && String(color || '').trim() !== '#FF0000') {
-        return '#FFFFFF';
-    }
-    return normalized;
+    return '#FFFFFF';
 }
 
 function refreshBlockBorder(block) {
@@ -1223,14 +1312,6 @@ function getBlockPhotoUrl(block) {
 
 function hasUserImage(block) {
     return !!(block && block.sold && block.data && typeof block.data.image_url === 'string' && block.data.image_url.trim());
-}
-
-function getSimulationImageUrl(id) {
-    const localPool = ['./assets/profiles/1.jpg', './assets/profiles/pyramid-king.jpg'];
-    if (Math.random() < 0.45) {
-        return localPool[id % localPool.length];
-    }
-    return `https://picsum.photos/seed/pyramid-sim-${id}/96/96`;
 }
 
 function loadTextureFromUrl(url) {
@@ -1324,6 +1405,45 @@ async function createYouTubeTileTexture(videoId) {
     return texture;
 }
 
+function touchCacheOrder(order, key) {
+    const existingIndex = order.indexOf(key);
+    if (existingIndex !== -1) {
+        order.splice(existingIndex, 1);
+    }
+    order.push(key);
+}
+
+function isTextureInUse(texture) {
+    if (!texture) return false;
+
+    for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
+        const block = state.blocks[i];
+        if (!block) continue;
+
+        if (block.photoRef && block.photoRef.texture === texture) return true;
+        if (block.videoRef && block.videoRef.texture === texture) return true;
+    }
+
+    return false;
+}
+
+function cacheTextureWithLimit(cache, order, key, texture, limit) {
+    cache.set(key, texture);
+    touchCacheOrder(order, key);
+
+    while (order.length > limit) {
+        const oldestKey = order.shift();
+        if (!oldestKey) break;
+
+        const oldTexture = cache.get(oldestKey);
+        cache.delete(oldestKey);
+
+        if (oldTexture && !isTextureInUse(oldTexture)) {
+            oldTexture.destroy(true);
+        }
+    }
+}
+
 async function ensureBlockPhotoTexture(block, imageUrl) {
     if (!block.photoRef || !block.sold || !imageUrl) return;
     if (block.photoLoading) return;
@@ -1335,9 +1455,18 @@ async function ensureBlockPhotoTexture(block, imageUrl) {
 
     try {
         let texture = state.photoTextureCache.get(requestedUrl);
+        if (texture) {
+            touchCacheOrder(state.photoCacheOrder, requestedUrl);
+        }
         if (!texture) {
             texture = await loadTextureFromUrl(requestedUrl);
-            state.photoTextureCache.set(requestedUrl, texture);
+            cacheTextureWithLimit(
+                state.photoTextureCache,
+                state.photoCacheOrder,
+                requestedUrl,
+                texture,
+                state.photoTextureCacheLimit
+            );
         }
 
         if (block.photoUrl !== requestedUrl) return;
@@ -1369,7 +1498,8 @@ function getSoldBlocks() {
     return sold;
 }
 
-function getVisibleSoldBlocks(limit = CONFIG.MAX_VISIBLE_MEDIA_PRELOAD) {
+function getVisibleSoldBlocks(limit) {
+    const effectiveLimit = typeof limit === 'number' ? limit : state.maxVisibleMediaPreload;
     const visibleBlocks = [];
     const hiddenBlocks = [];
 
@@ -1385,7 +1515,7 @@ function getVisibleSoldBlocks(limit = CONFIG.MAX_VISIBLE_MEDIA_PRELOAD) {
     }
 
     const ordered = visibleBlocks.concat(hiddenBlocks);
-    return ordered.slice(0, Math.max(1, limit));
+    return ordered.slice(0, Math.max(1, effectiveLimit));
 }
 
 function enqueuePhotoLoad(block) {
@@ -1467,9 +1597,18 @@ async function ensureBlockVideoTexture(block, videoId) {
 
     try {
         let texture = state.videoTextureCache.get(requestedUrl);
+        if (texture) {
+            touchCacheOrder(state.videoCacheOrder, requestedUrl);
+        }
         if (!texture) {
             texture = await createYouTubeTileTexture(videoId);
-            state.videoTextureCache.set(requestedUrl, texture);
+            cacheTextureWithLimit(
+                state.videoTextureCache,
+                state.videoCacheOrder,
+                requestedUrl,
+                texture,
+                state.videoTextureCacheLimit
+            );
         }
 
         if (block.videoUrl !== requestedUrl) return;
@@ -1767,8 +1906,14 @@ function placeGridVideoOnTile(block) {
 }
 
 function updateGridVideoOverlayPosition() {
+    if (!state.activeGridVideo) {
+        if (state.activeVideoMarker && state.activeVideoMarker.blockId !== null) {
+            clearActiveVideoMarker();
+        }
+        return;
+    }
+
     updateActiveVideoMarker();
-    if (!state.activeGridVideo) return;
 
     const overlay = document.getElementById('grid-video-overlay');
     if (!overlay) return;
@@ -1950,7 +2095,7 @@ function updateModeButtons() {
     videoBtn.disabled = false;
 }
 
-function updateBlock(id, data) {
+function updateBlock(id, data, options = {}) {
     const b = state.blocks[id];
     if(!b) return;
     const previousSold = b.sold;
@@ -1962,6 +2107,12 @@ function updateBlock(id, data) {
         b.sold = data.sold;
     } else {
         b.sold = true; // Default behavior for explicit updates
+    }
+
+    if (!previousSold && b.sold) {
+        state.soldCount = Math.min(CONFIG.TOTAL_BLOCKS, state.soldCount + 1);
+    } else if (previousSold && !b.sold) {
+        state.soldCount = Math.max(0, state.soldCount - 1);
     }
     
     b.data = data;
@@ -1975,10 +2126,16 @@ function updateBlock(id, data) {
         b.photoQueued = false;
         b.photoLoading = false;
         b.photoUrl = '';
+        if (b.photoRef) {
+            b.photoRef.texture = PIXI.Texture.WHITE;
+        }
         b.videoReady = false;
         b.videoQueued = false;
         b.videoLoading = false;
         b.videoUrl = '';
+        if (b.videoRef) {
+            b.videoRef.texture = PIXI.Texture.WHITE;
+        }
     } else {
         if (nextPhotoUrl !== previousPhotoUrl || !previousSold) {
             b.photoReady = false;
@@ -2022,7 +2179,11 @@ function updateBlock(id, data) {
         startVideoQueuePump();
     }
 
-    updateSalesCounter();
+    state.slotRenderSignature.set(id, getSlotRenderSignature(b.sold ? { ...data, sold: true } : { sold: false }));
+
+    if (!options.skipSalesCounter) {
+        updateSalesCounter();
+    }
 }
 
 // =========================================================================
@@ -2131,6 +2292,7 @@ window.app = {
                 owner_name: formData.name,
                 owner_color: formData.color,
                 owner_text: formData.text.substring(0, 150),
+                owner_text_color: '#FFFFFF',
                 message: formData.message || "Claimed locally in the pyramid!",
                 image_url: formData.imageUrl || '',
                 link_url: formData.linkUrl || '',
@@ -2163,14 +2325,32 @@ window.app = {
         }
     },
     simulate: () => {
+        if (state.viewMode !== 'text') {
+            showInfo('Simulate is available in Text Mode only.');
+            return;
+        }
+
         if(state.simulating) return;
         state.simulating = true;
         const unsold = [];
         for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) if(!state.blocks[i].sold) unsold.push(i);
         if(unsold.length === 0) { alert("Grid Full!"); state.simulating = false; return; }
+        const simulationTexts = [
+            "Be yourself; everyone else is already taken.",
+            "The greatest glory in living lies not in never falling, but in rising every time we fall.",
+            "Two things are infinite: the universe and human stupidity; and I'm not sure about the universe.",
+            "I've learned that people will forget what you said, people will forget what you did, but people will never forget how you made them feel.",
+            "Be the change that you wish to see in the world."
+        ];
         let count = 0;
         const interval = setInterval(() => {
-            if (count >= unsold.length || unsold.length === 0) { clearInterval(interval); state.simulating = false; return; }
+            if (count >= unsold.length || unsold.length === 0) {
+                clearInterval(interval);
+                state.simulating = false;
+                updateSalesCounter();
+                return;
+            }
+
             for(let k=0; k<50; k++) {
                 if(unsold.length === 0) break;
                 const randIdx = Math.floor(Math.random() * unsold.length);
@@ -2178,23 +2358,27 @@ window.app = {
                 // "Swap and Pop" logic for the simulation array (simulation only runs once, so simple splice is okay here, but let's be consistent)
                 unsold[randIdx] = unsold[unsold.length - 1];
                 unsold.pop();
-                
-                updateBlock(id, {
+
+                const simulatedText = simulationTexts[Math.floor(Math.random() * simulationTexts.length)];
+                const simulatedData = {
+                    sold: true,
                     owner_name: "Sim " + id,
                     owner_color: CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)],
-                    owner_text: [
-                        "hii my name is daredevil",
-                        "there is the sun and there is the moon , which is best ",
-                        "the gif i sth emost used entertainment in the world ",
-                        "there is singnificant chance of the success comapre to the other low effort low esteem works"
-                    ][Math.floor(Math.random()*4)],
+                    owner_text: simulatedText,
+                    owner_text_color: '#FFFFFF',
                     message: "This canvas is part of the simulation.",
-                    image_url: getSimulationImageUrl(id),
+                    image_url: '',
                     link_url: "https://example.com/sim" + id,
-                    link_description: "Visit Profile"
-                });
+                    link_description: "Visit Profile",
+                    youtube_url: ''
+                };
+
+                state.simulatedSlots.set(id, simulatedData);
+                updateBlock(id, simulatedData, { skipSalesCounter: true });
                 count++;
             }
+
+            updateSalesCounter();
         }, 16); 
     },
     viewRandom: () => {
@@ -2280,6 +2464,7 @@ function handleTestFormSubmit(event) {
         owner_name: document.getElementById('test-name').value,
         message: document.getElementById('test-message').value,
         owner_text: document.getElementById('test-engraved').value || 'TEST',
+        owner_text_color: '#FFFFFF',
         link_url: document.getElementById('test-link').value,
         link_description: document.getElementById('test-link-desc').value,
         image_url: document.getElementById('test-image').value,
@@ -2993,11 +3178,26 @@ document.addEventListener('DOMContentLoaded', function() {
     }, { passive: false });
 });
 
+let resizeDebounceTimer = null;
 window.addEventListener('resize', () => {
-    state.isMobileDevice = window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
-    state.pixi.resize();
-    centerCamera();
-    state.lodQueueIndex = 0;
+    if (resizeDebounceTimer) {
+        clearTimeout(resizeDebounceTimer);
+    }
+
+    resizeDebounceTimer = setTimeout(() => {
+        state.isMobileDevice = window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
+        if (!state.pixi) return;
+        state.pixi.resize();
+        centerCamera();
+        state.lodQueueIndex = 0;
+    }, 120);
+});
+
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        loadStaticData({ silent: true });
+        state.lodQueueIndex = 0;
+    }
 });
 
 document.addEventListener('DOMContentLoaded', () => {
