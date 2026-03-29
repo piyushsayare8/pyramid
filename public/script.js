@@ -2,10 +2,10 @@
 // 1. ENGINE CONFIGURATION & IMMORTAL CONSTANTS
 // =========================================================================
 const CONFIG = {
-    ROWS: 150,
+    ROWS: 100,
     BLOCK_SIZE: 40,
     GAP: 2,
-    TOTAL_BLOCKS: 11325,
+    TOTAL_BLOCKS: 5050,
     LOD_THRESHOLD: 0.35,
     MOBILE_LOD_THRESHOLD: 1.001,
     LOD_BATCH_SIZE: 250,
@@ -13,10 +13,24 @@ const CONFIG = {
     MAX_ZOOM: 50.0,
     MIN_ZOOM: 0.005,
     FRICTION: 0.92, // Increased for smoother glide
+    COLOR_CHOICES: [
+        { name: 'Yellow', value: '#FFD700' },
+        { name: 'Red', value: '#FF6B6B' },
+        { name: 'Turquoise', value: '#4ECDC4' },
+        { name: 'Blue', value: '#45B7D1' },
+        { name: 'Green', value: '#96CEB4' },
+        { name: 'Amber', value: '#FECA57' },
+        { name: 'Purple', value: '#B983FF' },
+        { name: 'Pink', value: '#FD79A8' }
+    ],
     COLORS: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8'],
     API_BASE: '', // Empty for same-origin requests (frontend + API on same worker)
+    SLOTS_DATA_URL: 'https://pub-962497bf5b824ce986c4e28eb92fd400.r2.dev/data.json',
+    DATA_REFRESH_MS: 15000,
     RETRY_ATTEMPTS: 3,
-    RETRY_DELAY: 1000
+    RETRY_DELAY: 1000,
+    MEDIA_QUEUE_UPDATE_MS: 400,
+    MAX_VISIBLE_MEDIA_PRELOAD: 220
 };
 
 const PYRAMID_WIDTH = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
@@ -68,14 +82,21 @@ const state = {
     activeVideoLoads: 0,
     maxConcurrentPhotoLoads: 15,
     maxConcurrentVideoLoads: 12,
+    dataRefreshTimer: null,
+    dataRefreshInFlight: false,
     activeGridVideo: null,
     lastVideoCamSnapshot: null,
     activeVideoMarker: null,
+    lastMediaQueueTick: 0,
 
     // LOD State
     lodVisible: false,
     lodQueueIndex: 0
 };
+
+function setInitialViewModeRandomly() {
+    state.viewMode = Math.random() < 0.5 ? 'text' : 'video';
+}
 
 // Form data removed - no purchase modal needed
 
@@ -121,7 +142,7 @@ async function apiCall(endpoint, options = {}) {
 // Load local purchases from localStorage (disabled - using only JSON data)
 function loadLocalPurchases() {
     // Disabled - keeping only JSON data
-    console.log('Local purchases loading disabled - using only slots_data.json');
+    console.log('Local purchases loading disabled - using R2 slot data source');
     return;
     
     // Original code preserved for reference:
@@ -139,11 +160,18 @@ function loadLocalPurchases() {
 }
 
 // Static data loader - replaces API calls
-async function loadStaticData() {
-    try {
-        showLoading('Loading pyramid data...');
+async function loadStaticData(options = {}) {
+    const silent = !!options.silent;
+    if (state.dataRefreshInFlight) return;
 
-        const response = await fetch('./slots_data.json');
+    state.dataRefreshInFlight = true;
+    try {
+        if (!silent) {
+            showLoading('Loading pyramid data...');
+        }
+
+        const cacheBustUrl = `${CONFIG.SLOTS_DATA_URL}${CONFIG.SLOTS_DATA_URL.includes('?') ? '&' : '?'}_ts=${Date.now()}`;
+        const response = await fetch(cacheBustUrl, { cache: 'no-store' });
         if (!response.ok) {
             throw new Error('Failed to load slots data');
         }
@@ -164,20 +192,19 @@ async function loadStaticData() {
         }
 
         state.gridPriceMap = gridPriceData || {};
-        hideLoading();
+        if (!silent) {
+            hideLoading();
+        }
         
         // Process all slots with unique IDs
         for (let slotId = 1; slotId <= CONFIG.TOTAL_BLOCKS; slotId++) {
-            const slotData = slotsData[slotId];
+            const slotData = slotsData[String(slotId)] || slotsData[slotId];
             const gridData = state.gridPriceMap[String(slotId)] || null;
 
             if (state.blocks[slotId]) {
-                // Keep slot price from slots_data when present, otherwise fallback to grid_price mapping if provided
-                if (slotData && slotData.price !== undefined && slotData.price !== null) {
-                    state.blocks[slotId].price = slotData.price;
-                } else if (gridData && gridData.price !== undefined && gridData.price !== null) {
-                    state.blocks[slotId].price = gridData.price;
-                }
+                // Always keep deterministic pricing: slot id * Rs10.
+                // External JSON price fields are ignored to prevent accidental Rs20 increments.
+                state.blocks[slotId].price = slotId * 10;
 
                 // Slot-specific payment link now comes only from grid_price.json
                 if (gridData && typeof gridData.payment_link === 'string' && gridData.payment_link.trim()) {
@@ -199,17 +226,35 @@ async function loadStaticData() {
                     link_description: slotData.link_description || '',
                     youtube_url: slotData.youtube_url || ''
                 });
+            } else if (state.blocks[slotId] && state.blocks[slotId].sold) {
+                // Reconcile sold->unsold transitions from live sheet updates.
+                updateBlock(slotId, { sold: false });
             }
         }
         
         updateSalesCounter();
-        console.log('Static data loaded successfully');
+        if (!silent) {
+            console.log('Static data loaded successfully');
+        }
         
     } catch (error) {
-        hideLoading();
+        if (!silent) {
+            hideLoading();
+        }
         console.error('Failed to load static data:', error);
-        showError('Failed to load pyramid data. Please refresh.');
+        if (!silent) {
+            showError('Failed to load pyramid data. Please refresh.');
+        }
+    } finally {
+        state.dataRefreshInFlight = false;
     }
+}
+
+function startAutoDataRefresh() {
+    if (state.dataRefreshTimer) return;
+    state.dataRefreshTimer = setInterval(() => {
+        loadStaticData({ silent: true });
+    }, CONFIG.DATA_REFRESH_MS);
 }
 
 async function loadGridData() {
@@ -375,10 +420,10 @@ function showSuccess(message) {
 async function init() {
     state.isMobileDevice = window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
 
-    // --- IMMORTAL UPGRADE: UNLOCKED RESOLUTION ---
-    // We use window.devicePixelRatio directly but cap at 3 to save battery on 4K mobiles
-    // while still looking extremely sharp.
-    const pixelRatio = Math.min(window.devicePixelRatio, 3);
+    // Keep GPU memory stable on mobile to avoid WebGL context loss (white screen).
+    const pixelRatio = state.isMobileDevice
+        ? Math.min(window.devicePixelRatio || 1, 1.5)
+        : Math.min(window.devicePixelRatio || 1, 2);
 
     state.pixi = new PIXI.Application();
     await state.pixi.init({
@@ -390,6 +435,17 @@ async function init() {
         powerPreference: 'high-performance'
     });
     document.getElementById('canvas-container').appendChild(state.pixi.canvas);
+
+    // Recover gracefully if GPU context is lost on low-memory mobile devices.
+    state.pixi.canvas.addEventListener('webglcontextlost', (event) => {
+        event.preventDefault();
+        showLoading('Graphics memory is being recovered...');
+    }, false);
+
+    state.pixi.canvas.addEventListener('webglcontextrestored', () => {
+        showInfo('Graphics recovered. Rebuilding scene...');
+        location.reload();
+    }, false);
 
     PIXI.BitmapFont.install({
         name: 'ImmortalFont',
@@ -419,6 +475,7 @@ async function init() {
         cullWorld();
         processLODQueue(); // Replaces the old updateLOD loop
         updateGridVideoOverlayPosition();
+        updateDynamicMediaQueues();
     });
 
     setTimeout(() => document.getElementById('loader').style.opacity = '0', 500);
@@ -429,6 +486,9 @@ async function init() {
     
     // Load local purchases
     loadLocalPurchases();
+
+    // Keep frontend synced with live R2 updates from Sheets.
+    startAutoDataRefresh();
 }
 
 async function initPreviewApp() {
@@ -904,7 +964,7 @@ function handleHover(x, y) {
             tt.style.borderColor = '';
             if (b.sold) {
                 const _name = b.data.owner_name || 'Owner';
-                const _color = b.data.owner_color || '#FF0000';
+                const _color = sanitizeBlockColor(b.data.owner_color || '#FF0000');
                 const _fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(_name)}&background=${_color.replace('#','')}&color=fff&size=80&bold=true&rounded=true`;
                 const _src = b.data.image_url ? b.data.image_url : _fallback;
                 tt.innerHTML = `<div class="tt-yt-card">
@@ -1094,9 +1154,43 @@ function renderBlockText(sprite, textData, isPreview = false) {
 }
 
 function sanitizeBlockColor(color) {
-    if (typeof color !== 'string') return '#FF0000';
-    if (/^#[0-9A-Fa-f]{6}$/.test(color)) return color;
-    return '#FF0000';
+    const namedColors = {
+        yellow: '#FFD700',
+        red: '#FF6B6B',
+        turquoise: '#4ECDC4',
+        blue: '#45B7D1',
+        green: '#96CEB4',
+        amber: '#FECA57',
+        purple: '#B983FF',
+        pink: '#FD79A8'
+    };
+
+    if (typeof color !== 'string') return '#FFD700';
+
+    const raw = color.trim();
+    if (!raw) return '#FFD700';
+
+    if (/^#[0-9A-Fa-f]{6}$/.test(raw)) {
+        return raw.toUpperCase();
+    }
+
+    if (/^#[0-9A-Fa-f]{3}$/.test(raw)) {
+        const r = raw[1];
+        const g = raw[2];
+        const b = raw[3];
+        return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+    }
+
+    const mapped = namedColors[raw.toLowerCase()];
+    return mapped || '#FFD700';
+}
+
+function sanitizeTextColor(color) {
+    const normalized = sanitizeBlockColor(color);
+    if (normalized === '#FF0000' && String(color || '').trim().toLowerCase() !== 'red' && String(color || '').trim() !== '#FF0000') {
+        return '#FFFFFF';
+    }
+    return normalized;
 }
 
 function refreshBlockBorder(block) {
@@ -1195,8 +1289,8 @@ async function createYouTubeTileTexture(videoId) {
         throw new Error(`No thumbnail available for video ${videoId}`);
     }
 
-    // Large texture keeps thumbnails sharper when users zoom deeply into the grid.
-    const size = state.isMobileDevice ? 512 : 1024;
+    // Mobile uses smaller texture tiles to avoid exhausting GPU memory.
+    const size = state.isMobileDevice ? 192 : 512;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -1273,6 +1367,25 @@ function getSoldBlocks() {
         if (block && block.sold) sold.push(block);
     }
     return sold;
+}
+
+function getVisibleSoldBlocks(limit = CONFIG.MAX_VISIBLE_MEDIA_PRELOAD) {
+    const visibleBlocks = [];
+    const hiddenBlocks = [];
+
+    for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
+        const block = state.blocks[i];
+        if (!block || !block.sold || !block.sprite || !block.sprite.parent) continue;
+
+        if (block.sprite.parent.visible) {
+            visibleBlocks.push(block);
+        } else {
+            hiddenBlocks.push(block);
+        }
+    }
+
+    const ordered = visibleBlocks.concat(hiddenBlocks);
+    return ordered.slice(0, Math.max(1, limit));
 }
 
 function enqueuePhotoLoad(block) {
@@ -1727,7 +1840,7 @@ function updateGridVideoOverlayPosition() {
 }
 
 function preparePhotoMode() {
-    const soldBlocks = getSoldBlocks();
+    const soldBlocks = getVisibleSoldBlocks();
     soldBlocks.forEach((block) => {
         enqueuePhotoLoad(block);
     });
@@ -1735,11 +1848,26 @@ function preparePhotoMode() {
 }
 
 function prepareVideoMode() {
-    const soldBlocks = getSoldBlocks();
+    const soldBlocks = getVisibleSoldBlocks();
     soldBlocks.forEach((block) => {
         enqueueVideoLoad(block);
     });
     startVideoQueuePump();
+}
+
+function updateDynamicMediaQueues() {
+    const now = performance.now();
+    if ((now - state.lastMediaQueueTick) < CONFIG.MEDIA_QUEUE_UPDATE_MS) return;
+    state.lastMediaQueueTick = now;
+
+    if (state.viewMode === 'video') {
+        prepareVideoMode();
+        return;
+    }
+
+    if (state.viewMode === 'text') {
+        preparePhotoMode();
+    }
 }
 
 function applyBlockVisualMode(block) {
@@ -1825,6 +1953,9 @@ function updateModeButtons() {
 function updateBlock(id, data) {
     const b = state.blocks[id];
     if(!b) return;
+    const previousSold = b.sold;
+    const previousPhotoUrl = b.photoUrl || '';
+    const previousVideoUrl = b.videoUrl || '';
     
     // Only set sold to true if data indicates it's sold, otherwise keep current state
     if (data.sold !== undefined) {
@@ -1834,10 +1965,35 @@ function updateBlock(id, data) {
     }
     
     b.data = data;
-    b.photoReady = false;
-    b.photoQueued = false;
-    b.videoReady = false;
-    b.videoQueued = false;
+
+    const nextPhotoUrl = (data && typeof data.image_url === 'string') ? data.image_url.trim() : '';
+    const nextVideoId = (data && typeof data.youtube_url === 'string') ? getYouTubeVideoId(data.youtube_url) : null;
+    const nextVideoUrl = nextVideoId ? `yt:${nextVideoId}` : '';
+
+    if (!b.sold) {
+        b.photoReady = false;
+        b.photoQueued = false;
+        b.photoLoading = false;
+        b.photoUrl = '';
+        b.videoReady = false;
+        b.videoQueued = false;
+        b.videoLoading = false;
+        b.videoUrl = '';
+    } else {
+        if (nextPhotoUrl !== previousPhotoUrl || !previousSold) {
+            b.photoReady = false;
+            b.photoQueued = false;
+            b.photoLoading = false;
+        }
+        b.photoUrl = nextPhotoUrl;
+
+        if (nextVideoUrl !== previousVideoUrl || !previousSold) {
+            b.videoReady = false;
+            b.videoQueued = false;
+            b.videoLoading = false;
+        }
+        b.videoUrl = nextVideoUrl;
+    }
     
     // Only apply sold styling if the block is actually sold
     if (b.sold) {
@@ -1851,6 +2007,11 @@ function updateBlock(id, data) {
         renderBlockText(b.sprite, data.owner_text);
     } else {
         renderBlockText(b.sprite, null);
+    }
+
+    if (b.sold && b.sprite.textRef) {
+        const safeTextColor = sanitizeTextColor(data.owner_text_color || '#FFFFFF');
+        b.sprite.textRef.tint = parseInt(safeTextColor.slice(1), 16);
     }
 
     applyBlockVisualMode(b);
@@ -2300,7 +2461,7 @@ window.openModal = () => {
                     </div>
                     <div class="input-group">
                         <label>Grid Color</label>
-                        <div class="color-selector">${CONFIG.COLORS.map(c => `<div class="color-btn" style="background:${c}" onclick="app.setColor('${c}', this)"></div>`).join('')}</div>
+                        <div class="color-selector">${CONFIG.COLOR_CHOICES.map(choice => `<button type="button" class="color-btn" onclick="app.setColor('${choice.value}', this)" title="${choice.name}" aria-label="${choice.name}" data-color-name="${choice.name}"><span class="color-dot" style="background:${choice.value}"></span><span class="color-name">${choice.name}</span></button>`).join('')}</div>
                     </div>
                 </div>
                 <div class="col-right">
@@ -2733,6 +2894,7 @@ function escapeHtml(text) {
 // Add keyboard support for search
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('search-input');
+    const resultsContainer = document.getElementById('search-results');
     
     // Real-time search as user types
     searchInput.addEventListener('input', function(e) {
@@ -2763,7 +2925,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Hide results when clicking outside
     document.addEventListener('click', function(e) {
         const searchContainer = document.querySelector('.search-container');
-        const resultsContainer = document.getElementById('search-results');
         
         // Check if click is on a search result item
         if (e.target.closest('.search-result-item')) {
@@ -2842,5 +3003,7 @@ window.addEventListener('resize', () => {
 document.addEventListener('DOMContentLoaded', () => {
     updateModeButtons();
 });
+
+setInitialViewModeRandomly();
 
 init();

@@ -1,20 +1,21 @@
 {
   "1": {
     "sold": true,
-    "price": 0.1,
-    "owner_name": "hii",
-    "owner_text": "You were carried to the golden mountaintop by a river of grace you did not create. Now, melt your own heart and become the river for those still walking through the valley.",
+    "price": 30,
+    "owner_name": "piyush",
+    "owner_text": "hii my name is piyush",
     "owner_color": "#FFD700",
     "owner_text_color": "#000000",
-    "message": "my name is piyush and i am here to test the pyramid lorem300 characters message field to see how it looks on the frontend and also to test the responsiveness of the design. this is just a sample message to fill up the space and make sure everything is working fine. lorem100 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one. lorem1000 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one. lorem1000 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one. lorem1000 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one. lorem1000 characters more to go to reach the limit of 300 characters for the message field in the pyramid slot. this should be enough to test the layout and design of the message section in the pyramid slot. let's see how it looks on the frontend and if there are any issues with the design or layout when we have a long message like this one.",
+    "message": "hii there have fun",
     "image_url": "./assets/profiles/1.jpg",
-    "link_url": "https://twitter.com/johndoe",
-    "link_description": "Follow me on Twitter",
-    "youtube_url": "https://www.youtube.com/watch?v=hvKaPTmQBA8&list=RDGMEM916WJxafRUGgOvd6dVJkeQ&index=2"
+    "link_url": "https://creatorspyramid.com/",
+    "link_description": "visit my site",
+    "youtube_url": "https://www.youtube.com/watch?v=vA86QFrXoho&list=RDoafxkMv4xnc&index=3"
   },
   "2": {
     "sold": false,
-    "price": 0.2
+    "owner_name": "aryan",
+    "price": 40
   },
   "3": {
     "sold": true,
@@ -27,7 +28,7 @@
     "link_url": "https://github.com/alicesmith",
     "link_description": "Check out my GitHub",
     "youtube_url": "https://www.youtube.com/watch?v=J2VwOsMJxiE",
-    "price": 0.3
+    "price": 60
   },
   "10": {
     "sold": true,
@@ -39,7 +40,7 @@
     "image_url": "./assets/profiles/crypto-king.jpg",
     "link_url": "https://cryptoking.com",
     "link_description": "Visit my crypto blog",
-    "price": 1
+    "price": 200
   },
   "25": {
     "sold": true,
@@ -51,7 +52,7 @@
     "image_url": "./assets/profiles/diamond-hands.jpg",
     "link_url": "https://diamondhands.io",
     "link_description": "Join the diamond hands community",
-    "price": 2.5
+    "price": 300
   },
   "50": {
     "sold": true,
@@ -64,7 +65,7 @@
     "link_url": "https://moonshooter.xyz",
     "link_description": "Moon mission starts here",
     "youtube_url": "https://www.youtube.com/watch?v=oafxkMv4xnc&list=RDGMEM916WJxafRUGgOvd6dVJkeQ&start_radio=1&rv=J2VwOsMJxiE",
-    "price": 5
+    "price": 1000
   },
   "100": {
     "sold": true,
@@ -76,11 +77,11 @@
     "image_url": "./assets/profiles/100.jpg",
     "link_url": "https://goldbug.com",
     "link_description": "Learn about real money",
-    "price": 10
+    "price": 2000
   },
   "122": {
     "sold": true,
-    "price": 12.2,
+    "price": 2440,
     "owner_name": "piyush",
     "owner_text": "piyush",
     "owner_color": "#96CEB4",
@@ -99,7 +100,7 @@
     "image_url": "./assets/profiles/200.jpg",
     "link_url": "https://silverfox.io",
     "link_description": "Silver investment tips",
-    "price": 20
+    "price": 4000
   },
   "500": {
     "sold": true,
@@ -111,7 +112,7 @@
     "image_url": "./assets/profiles/500.jpg",
     "link_url": "https://platinumtrader.com",
     "link_description": "Platinum trading strategies",
-    "price": 50
+    "price": 10000
   },
   "1000": {
     "sold": true,
@@ -123,44 +124,50 @@
     "image_url": "./assets/profiles/1000.jpg",
     "link_url": "https://elitetrader.pro",
     "link_description": "Elite trading signals",
-    "price": 100
+    "price": 20000
   },
   "5000": {
     "sold": true,
     "owner_name": "Crypto Whale",
     "owner_color": "#FFD700",
     "owner_text_color": "#000000",
-    "owner_text": "WHALE",
+    "owner_text": "WAMMU WAMMU",
     "message": "Whale moves markets! 🐋",
     "image_url": "./assets/profiles/5000.jpg",
     "link_url": "https://cryptowale.io",
     "link_description": "Follow the whale",
-    "price": 500
+      "youtube_url": "https://www.youtube.com/watch?v=2TdTBRyTChM",
+    "price": 100000
   },
-  "9000": {
+  
+  "5030": {
     "sold": true,
-    "owner_name": "Legend Trader",
+    "owner_name": "Techno Gamerz",
     "owner_color": "#FFD700",
     "owner_text_color": "#000000",
-    "owner_text": "LEGEND",
-    "message": "Legendary trader in the pyramid! 🏆",
-    "image_url": "./assets/profiles/legend-trader.jpg",
-    "link_url": "https://legendtrader.com",
-    "link_description": "Learn from legends",
-    "price": 900
+    "owner_text": "Techno Gamerz",
+    "message": "Whale moves markets! 🐋",
+    "image_url": "./assets/profiles/5000.jpg",
+    "link_url": "https://cryptowale.io",
+    "link_description": "Follow the whale",
+      "youtube_url": "https://www.youtube.com/watch?v=ZynWzVZQxB0&pp=ygUNdGVjaG5vIGdhbWVyeg%3D%3D",
+    "price": 100600
   },
-  "10000": {
+
+  "5035": {
     "sold": true,
-    "owner_name": "Pyramid King",
+    "owner_name": "Veritassium",
     "owner_color": "#FFD700",
     "owner_text_color": "#000000",
-    "owner_text": "hii i am here",
-    "message": "King of the Pyramid! 👑",
-    "image_url": "./assets/profiles/pyramid-king.jpg",
-    "link_url": "https://pyramidking.com",
-    "link_description": "The king's domain",
-    "price": 10000
+    "owner_text": "Veritassium",
+    "message": "Whale moves markets! 🐋",
+    "image_url": "./assets/profiles/5000.jpg",
+    "link_url": "https://cryptowale.io",
+    "link_description": "Follow the whale",
+      "youtube_url": "https://www.youtube.com/watch?v=3LopI4YeC4I&pp=ygUKdmVyaXRhc2l1bQ%3D%3D",
+    "price": 100700
   },
+
   "5050": {
     "sold": true,
     "owner_name": "Pyramid King",
@@ -171,7 +178,7 @@
     "image_url": "./assets/profiles/pyramid-king.jpg",
     "link_url": "https://pyramidking.com",
     "link_description": "The king's domain",
-    "price": 1001.1,
-      "youtube_url": "https://www.youtube.com/watch?v=x5fYTPvrz4g&list=RDGMEM916WJxafRUGgOvd6dVJkeQ&index=6"
+    "price": 101000,
+      "youtube_url": "https://www.youtube.com/watch?v=ayiNtyc8ImA"
   }
 }
