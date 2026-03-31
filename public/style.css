@@ -1200,6 +1200,57 @@ line-height: 1.5;
 display: block;
 }
 
+.buy-instruction-panel {
+display: none;
+position: fixed;
+inset: 0;
+padding: 20px;
+background: rgba(0, 0, 0, 0.72);
+backdrop-filter: blur(4px);
+z-index: 1200;
+align-items: center;
+justify-content: center;
+}
+
+.buy-instruction-panel.show {
+display: flex;
+}
+
+.buy-instruction-card {
+width: min(520px, 94vw);
+background: #1b1b1b;
+border: 1px solid #3f3f3f;
+border-radius: 12px;
+padding: 18px 18px 16px;
+box-shadow: 0 18px 48px rgba(0, 0, 0, 0.58);
+color: #f1f1f1;
+}
+
+.buy-instruction-card h3 {
+margin: 0 0 10px;
+font-size: 1.05rem;
+font-weight: 700;
+}
+
+.buy-instruction-list {
+margin: 0;
+padding-left: 20px;
+color: #dedede;
+line-height: 1.5;
+font-size: 0.9rem;
+}
+
+.buy-instruction-list li + li {
+margin-top: 8px;
+}
+
+.buy-instruction-actions {
+margin-top: 14px;
+display: flex;
+justify-content: flex-end;
+gap: 10px;
+}
+
 .modal-footer button {
 font-family: 'Roboto', 'Arial', system-ui, sans-serif;
 font-weight: 500;

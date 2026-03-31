@@ -451,7 +451,7 @@
         <!-- Slot ID -->
         <div class="form-group">
           <label>Slot ID *</label>
-          <input type="number" id="f-id" min="1" max="5050" placeholder="e.g. 42" />
+          <input type="number" id="f-id" min="1" max="5151" placeholder="e.g. 42" />
           <span class="field-error" id="err-id"></span>
         </div>
 
@@ -969,8 +969,8 @@ function saveSlot() {
   const priceVal = document.getElementById('f-price').value.trim();
   const sold     = document.getElementById('f-sold').checked;
 
-  if (!idVal || isNaN(idVal) || Number(idVal) < 1 || Number(idVal) > 5050) {
-    document.getElementById('err-id').textContent = 'Slot ID must be 1–5050';
+  if (!idVal || isNaN(idVal) || Number(idVal) < 1 || Number(idVal) > 5151) {
+    document.getElementById('err-id').textContent = 'Slot ID must be 1–5151';
     document.getElementById('f-id').classList.add('error');
     valid = false;
   }

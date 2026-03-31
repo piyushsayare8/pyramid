@@ -2,10 +2,10 @@
 // 1. ENGINE CONFIGURATION & IMMORTAL CONSTANTS
 // =========================================================================
 const CONFIG = {
-    ROWS: 100,
+    ROWS: 101,
     BLOCK_SIZE: 40,
     GAP: 2,
-    TOTAL_BLOCKS: 5050,
+    TOTAL_BLOCKS: 5151,
     LOD_THRESHOLD: 0.35,
     MOBILE_LOD_THRESHOLD: 1.001,
     LOD_BATCH_SIZE: 250,
@@ -30,11 +30,15 @@ const CONFIG = {
     RETRY_ATTEMPTS: 3,
     RETRY_DELAY: 1000,
     MEDIA_QUEUE_UPDATE_MS: 400,
-    MAX_VISIBLE_MEDIA_PRELOAD: 220,
-    PHOTO_CACHE_LIMIT_DESKTOP: 600,
-    PHOTO_CACHE_LIMIT_MOBILE: 180,
-    VIDEO_CACHE_LIMIT_DESKTOP: 320,
-    VIDEO_CACHE_LIMIT_MOBILE: 96
+    MAX_VISIBLE_MEDIA_PRELOAD: 96,
+    PHOTO_CACHE_LIMIT_DESKTOP: 96,
+    PHOTO_CACHE_LIMIT_MOBILE: 24,
+    VIDEO_CACHE_LIMIT_DESKTOP: 72,
+    VIDEO_CACHE_LIMIT_MOBILE: 18,
+    PHOTO_TEXTURE_SIZE_DESKTOP: 256,
+    PHOTO_TEXTURE_SIZE_MOBILE: 128,
+    VIDEO_TEXTURE_SIZE_DESKTOP: 384,
+    VIDEO_TEXTURE_SIZE_MOBILE: 160
 };
 
 const PYRAMID_WIDTH = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
@@ -72,6 +76,7 @@ const state = {
     lastTouchTapId: -1,
     lastTouchTapTime: 0,
     soldCount: 0,
+    soldBlockIds: new Set(),
     simulating: false,
     gridPriceMap: {},
     slotRenderSignature: new Map(),
@@ -84,6 +89,8 @@ const state = {
     viewMode: 'text',
     photoTextureCache: new Map(),
     videoTextureCache: new Map(),
+    photoTextureRefCounts: new Map(),
+    videoTextureRefCounts: new Map(),
     photoCacheOrder: [],
     videoCacheOrder: [],
     photoPrepInProgress: false,
@@ -96,8 +103,8 @@ const state = {
     videoQueuePumpTimer: null,
     activePhotoLoads: 0,
     activeVideoLoads: 0,
-    maxConcurrentPhotoLoads: 15,
-    maxConcurrentVideoLoads: 12,
+    maxConcurrentPhotoLoads: 3,
+    maxConcurrentVideoLoads: 2,
     photoTextureCacheLimit: CONFIG.PHOTO_CACHE_LIMIT_DESKTOP,
     videoTextureCacheLimit: CONFIG.VIDEO_CACHE_LIMIT_DESKTOP,
     dataRefreshTimer: null,
@@ -248,7 +255,7 @@ async function loadStaticData(options = {}) {
 
             if (state.blocks[slotId]) {
                 // Always keep deterministic pricing: slot id * Rs10.
-                // External JSON price fields are ignored to prevent accidental Rs20 increments.
+                // External JSON price fields are ignored to prevent accidental increment drift.
                 state.blocks[slotId].price = slotId * 10;
 
                 // Slot-specific payment link now comes only from grid_price.json
@@ -482,9 +489,9 @@ function showSuccess(message) {
 // =========================================================================
 async function init() {
     state.isMobileDevice = window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
-    state.maxConcurrentPhotoLoads = state.isMobileDevice ? 4 : 10;
-    state.maxConcurrentVideoLoads = state.isMobileDevice ? 2 : 6;
-    state.maxVisibleMediaPreload = state.isMobileDevice ? 90 : CONFIG.MAX_VISIBLE_MEDIA_PRELOAD;
+    state.maxConcurrentPhotoLoads = state.isMobileDevice ? 1 : 3;
+    state.maxConcurrentVideoLoads = state.isMobileDevice ? 1 : 2;
+    state.maxVisibleMediaPreload = state.isMobileDevice ? 32 : CONFIG.MAX_VISIBLE_MEDIA_PRELOAD;
     state.lodBatchSize = state.isMobileDevice ? 120 : CONFIG.LOD_BATCH_SIZE;
     state.photoTextureCacheLimit = state.isMobileDevice ? CONFIG.PHOTO_CACHE_LIMIT_MOBILE : CONFIG.PHOTO_CACHE_LIMIT_DESKTOP;
     state.videoTextureCacheLimit = state.isMobileDevice ? CONFIG.VIDEO_CACHE_LIMIT_MOBILE : CONFIG.VIDEO_CACHE_LIMIT_DESKTOP;
@@ -528,7 +535,7 @@ async function init() {
 
     createStarfield();
     state.world = new PIXI.Container();
-    state.pixi.ticker.maxFPS = state.isMobileDevice ? 45 : 60;
+    state.pixi.ticker.maxFPS = state.isMobileDevice ? 30 : 50;
     
     // --- IMMORTAL UPGRADE: Render Group for Pixi v8 ---
     state.world.isRenderGroup = true;
@@ -648,6 +655,7 @@ function updateStarfield() {
 
 function buildPyramid() {
     state.soldCount = 0;
+    state.soldBlockIds.clear();
     state.slotRenderSignature.clear();
     let blockId = CONFIG.TOTAL_BLOCKS;
     for (let row = 1; row <= CONFIG.ROWS; row++) {
@@ -657,6 +665,7 @@ function buildPyramid() {
             chunk.yEnd = chunk.yStart + (CONFIG.CHUNK_SIZE * CONFIG.BLOCK_SIZE);
             chunk.visible = false;
             chunk.textRefs = new Set();
+            chunk.blockIds = [];
             state.chunks.push(chunk);
             state.world.addChild(chunk);
         }
@@ -676,41 +685,22 @@ function buildPyramid() {
             sprite.y = yPos;
             sprite.blockId = blockId;
 
-            const photoSprite = new PIXI.Sprite(PIXI.Texture.WHITE);
-            photoSprite.x = sprite.x;
-            photoSprite.y = sprite.y;
-            photoSprite.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-            photoSprite.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-            photoSprite.visible = false;
-            photoSprite.blockId = blockId;
-
-            const videoSprite = new PIXI.Sprite(PIXI.Texture.WHITE);
-            videoSprite.x = sprite.x;
-            videoSprite.y = sprite.y;
-            videoSprite.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-            videoSprite.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-            videoSprite.visible = false;
-            videoSprite.blockId = blockId;
-
-            const borderGraphics = new PIXI.Graphics();
-            borderGraphics.visible = false;
-            borderGraphics.eventMode = 'none';
-            borderGraphics.blockId = blockId;
-
             state.blocks[blockId] = { 
                 id: blockId, 
                 price: price, 
                 tier: type, 
                 sold: false, 
                 sprite: sprite, 
-                photoRef: photoSprite,
-                videoRef: videoSprite,
-                borderRef: borderGraphics,
+                photoRef: null,
+                videoRef: null,
+                borderRef: null,
                 photoUrl: '',
+                photoTextureKey: '',
                 photoReady: false,
                 photoQueued: false,
                 photoLoading: false,
                 videoUrl: '',
+                videoTextureKey: '',
                 videoReady: false,
                 videoQueued: false,
                 videoLoading: false,
@@ -718,9 +708,7 @@ function buildPyramid() {
                 textRef: null 
             };
             chunk.addChild(sprite);
-            chunk.addChild(photoSprite);
-            chunk.addChild(videoSprite);
-            chunk.addChild(borderGraphics);
+            chunk.blockIds.push(blockId);
             state.slotRenderSignature.set(blockId, '0');
             blockId--;
         }
@@ -1282,16 +1270,153 @@ function sanitizeTextColor(color) {
     return '#FFFFFF';
 }
 
+function ensureBlockPhotoSprite(block) {
+    if (!block || !block.sprite || !block.sprite.parent) return null;
+    if (block.photoRef) return block.photoRef;
+
+    const photoSprite = new PIXI.Sprite(PIXI.Texture.WHITE);
+    photoSprite.x = block.sprite.x;
+    photoSprite.y = block.sprite.y;
+    photoSprite.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+    photoSprite.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+    photoSprite.visible = false;
+    photoSprite.blockId = block.id;
+
+    block.photoRef = photoSprite;
+    block.sprite.parent.addChild(photoSprite);
+    return photoSprite;
+}
+
+function ensureBlockVideoSprite(block) {
+    if (!block || !block.sprite || !block.sprite.parent) return null;
+    if (block.videoRef) return block.videoRef;
+
+    const videoSprite = new PIXI.Sprite(PIXI.Texture.WHITE);
+    videoSprite.x = block.sprite.x;
+    videoSprite.y = block.sprite.y;
+    videoSprite.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+    videoSprite.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+    videoSprite.visible = false;
+    videoSprite.blockId = block.id;
+
+    block.videoRef = videoSprite;
+    block.sprite.parent.addChild(videoSprite);
+    return videoSprite;
+}
+
+function ensureBlockBorderGraphic(block) {
+    if (!block || !block.sprite || !block.sprite.parent) return null;
+    if (block.borderRef) return block.borderRef;
+
+    const borderGraphics = new PIXI.Graphics();
+    borderGraphics.visible = false;
+    borderGraphics.eventMode = 'none';
+    borderGraphics.blockId = block.id;
+
+    block.borderRef = borderGraphics;
+    block.sprite.parent.addChild(borderGraphics);
+    return borderGraphics;
+}
+
+function destroyDisplayObject(ref) {
+    if (!ref) return;
+    if (ref.parent) {
+        ref.parent.removeChild(ref);
+    }
+    ref.destroy();
+}
+
+function adjustTextureRefCount(refCounts, key, delta) {
+    if (!key) return;
+    const next = (refCounts.get(key) || 0) + delta;
+    if (next <= 0) {
+        refCounts.delete(key);
+    } else {
+        refCounts.set(key, next);
+    }
+}
+
+function releaseBlockPhotoTexture(block) {
+    if (!block) return;
+
+    if (block.photoTextureKey) {
+        adjustTextureRefCount(state.photoTextureRefCounts, block.photoTextureKey, -1);
+    }
+
+    block.photoTextureKey = '';
+    block.photoReady = false;
+    if (block.photoRef) {
+        block.photoRef.texture = PIXI.Texture.WHITE;
+        block.photoRef.visible = false;
+    }
+
+    trimTextureCacheToLimit(
+        state.photoTextureCache,
+        state.photoCacheOrder,
+        state.photoTextureRefCounts,
+        state.photoTextureCacheLimit
+    );
+}
+
+function releaseBlockVideoTexture(block) {
+    if (!block) return;
+
+    if (block.videoTextureKey) {
+        adjustTextureRefCount(state.videoTextureRefCounts, block.videoTextureKey, -1);
+    }
+
+    block.videoTextureKey = '';
+    block.videoReady = false;
+    if (block.videoRef) {
+        block.videoRef.texture = PIXI.Texture.WHITE;
+        block.videoRef.visible = false;
+    }
+
+    trimTextureCacheToLimit(
+        state.videoTextureCache,
+        state.videoCacheOrder,
+        state.videoTextureRefCounts,
+        state.videoTextureCacheLimit
+    );
+}
+
+function releaseBlockOverlays(block) {
+    if (!block) return;
+
+    releaseBlockPhotoTexture(block);
+    releaseBlockVideoTexture(block);
+
+    if (block.photoRef) {
+        destroyDisplayObject(block.photoRef);
+        block.photoRef = null;
+    }
+
+    if (block.videoRef) {
+        destroyDisplayObject(block.videoRef);
+        block.videoRef = null;
+    }
+
+    if (block.borderRef) {
+        destroyDisplayObject(block.borderRef);
+        block.borderRef = null;
+    }
+}
+
 function refreshBlockBorder(block) {
-    if (!block || !block.borderRef || !block.sprite) return;
+    if (!block || !block.sprite) return;
 
-    const border = block.borderRef;
-    border.clear();
-
-    if (!block.sold || !block.data) {
-        border.visible = false;
+    if (!block.sold || !block.data || state.viewMode !== 'video') {
+        if (block.borderRef) {
+            block.borderRef.clear();
+            block.borderRef.visible = false;
+        }
         return;
     }
+
+    const border = ensureBlockBorderGraphic(block);
+    if (!border) return;
+
+    border.clear();
 
     const safeColor = sanitizeBlockColor(block.data.owner_color);
     const strokeColor = parseInt(safeColor.slice(1), 16);
@@ -1314,25 +1439,40 @@ function hasUserImage(block) {
     return !!(block && block.sold && block.data && typeof block.data.image_url === 'string' && block.data.image_url.trim());
 }
 
-function loadTextureFromUrl(url) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-            try {
-                const texture = PIXI.Texture.from(img);
-                if (!texture || img.naturalWidth === 0 || img.naturalHeight === 0) {
-                    reject(new Error('Invalid image texture'));
-                    return;
-                }
-                resolve(texture);
-            } catch (e) {
-                reject(e);
-            }
-        };
-        img.onerror = () => reject(new Error(`Image failed to load: ${url}`));
-        img.src = url;
-    });
+async function loadTextureFromUrl(url) {
+    const img = await loadImageFromUrl(url);
+    if (!img || img.naturalWidth === 0 || img.naturalHeight === 0) {
+        throw new Error(`Invalid image texture: ${url}`);
+    }
+
+    // Clamp user image textures to a fixed tile size to keep GPU memory bounded.
+    const size = state.isMobileDevice ? CONFIG.PHOTO_TEXTURE_SIZE_MOBILE : CONFIG.PHOTO_TEXTURE_SIZE_DESKTOP;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        throw new Error('Canvas context unavailable');
+    }
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Cover-fit keeps tiles visually dense while still capping texture size.
+    const scale = Math.max(size / img.naturalWidth, size / img.naturalHeight);
+    const drawW = Math.max(1, Math.round(img.naturalWidth * scale));
+    const drawH = Math.max(1, Math.round(img.naturalHeight * scale));
+    const dx = Math.floor((size - drawW) / 2);
+    const dy = Math.floor((size - drawH) / 2);
+
+    ctx.fillStyle = '#111111';
+    ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(img, dx, dy, drawW, drawH);
+
+    const texture = PIXI.Texture.from(canvas);
+    texture.source.scaleMode = 'linear';
+    return texture;
 }
 
 function loadImageFromUrl(url) {
@@ -1370,8 +1510,8 @@ async function createYouTubeTileTexture(videoId) {
         throw new Error(`No thumbnail available for video ${videoId}`);
     }
 
-    // Mobile uses smaller texture tiles to avoid exhausting GPU memory.
-    const size = state.isMobileDevice ? 192 : 512;
+    // Keep video thumbs bounded to avoid large GPU spikes.
+    const size = state.isMobileDevice ? CONFIG.VIDEO_TEXTURE_SIZE_MOBILE : CONFIG.VIDEO_TEXTURE_SIZE_DESKTOP;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -1413,39 +1553,42 @@ function touchCacheOrder(order, key) {
     order.push(key);
 }
 
-function isTextureInUse(texture) {
-    if (!texture) return false;
+function trimTextureCacheToLimit(cache, order, refCounts, limit) {
+    if (order.length <= limit) return;
 
-    for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
-        const block = state.blocks[i];
-        if (!block) continue;
-
-        if (block.photoRef && block.photoRef.texture === texture) return true;
-        if (block.videoRef && block.videoRef.texture === texture) return true;
-    }
-
-    return false;
-}
-
-function cacheTextureWithLimit(cache, order, key, texture, limit) {
-    cache.set(key, texture);
-    touchCacheOrder(order, key);
-
-    while (order.length > limit) {
-        const oldestKey = order.shift();
+    // Guard prevents infinite loops when all entries are currently in use.
+    let guard = order.length;
+    while (order.length > limit && guard > 0) {
+        const oldestKey = order[0];
         if (!oldestKey) break;
 
+        const refCount = refCounts.get(oldestKey) || 0;
+        if (refCount > 0) {
+            order.push(order.shift());
+            guard--;
+            continue;
+        }
+
+        order.shift();
         const oldTexture = cache.get(oldestKey);
         cache.delete(oldestKey);
 
-        if (oldTexture && !isTextureInUse(oldTexture)) {
+        if (oldTexture) {
             oldTexture.destroy(true);
         }
+
+        guard = order.length;
     }
 }
 
+function cacheTextureWithLimit(cache, order, refCounts, key, texture, limit) {
+    cache.set(key, texture);
+    touchCacheOrder(order, key);
+    trimTextureCacheToLimit(cache, order, refCounts, limit);
+}
+
 async function ensureBlockPhotoTexture(block, imageUrl) {
-    if (!block.photoRef || !block.sold || !imageUrl) return;
+    if (!block || !block.sold || !imageUrl) return;
     if (block.photoLoading) return;
     if (block.photoReady && block.photoUrl === imageUrl) return;
 
@@ -1463,6 +1606,7 @@ async function ensureBlockPhotoTexture(block, imageUrl) {
             cacheTextureWithLimit(
                 state.photoTextureCache,
                 state.photoCacheOrder,
+                state.photoTextureRefCounts,
                 requestedUrl,
                 texture,
                 state.photoTextureCacheLimit
@@ -1471,18 +1615,31 @@ async function ensureBlockPhotoTexture(block, imageUrl) {
 
         if (block.photoUrl !== requestedUrl) return;
 
-        block.photoRef.texture = texture;
-        block.photoRef.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-        block.photoRef.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-        block.photoRef.tint = 0xFFFFFF;
+        const photoRef = ensureBlockPhotoSprite(block);
+        if (!photoRef) return;
+
+        if (block.photoTextureKey !== requestedUrl) {
+            if (block.photoTextureKey) {
+                adjustTextureRefCount(state.photoTextureRefCounts, block.photoTextureKey, -1);
+            }
+            adjustTextureRefCount(state.photoTextureRefCounts, requestedUrl, 1);
+            block.photoTextureKey = requestedUrl;
+        }
+
+        photoRef.texture = texture;
+        photoRef.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+        photoRef.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+        photoRef.tint = 0xFFFFFF;
         block.photoReady = true;
 
-        block.photoRef.visible = false;
+        photoRef.visible = false;
     } catch (error) {
         console.warn(`Failed to load image for block ${block.id}:`, error);
         // Keep base tile visible if image fails to load.
         block.photoReady = false;
-        block.photoRef.visible = false;
+        if (block.photoRef) {
+            block.photoRef.visible = false;
+        }
         block.sprite.visible = true;
     } finally {
         block.photoLoading = false;
@@ -1499,23 +1656,36 @@ function getSoldBlocks() {
 }
 
 function getVisibleSoldBlocks(limit) {
-    const effectiveLimit = typeof limit === 'number' ? limit : state.maxVisibleMediaPreload;
-    const visibleBlocks = [];
-    const hiddenBlocks = [];
+    const effectiveLimit = Math.max(1, typeof limit === 'number' ? limit : state.maxVisibleMediaPreload);
+    const ordered = [];
+    const seen = new Set();
 
-    for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
-        const block = state.blocks[i];
-        if (!block || !block.sold || !block.sprite || !block.sprite.parent) continue;
+    const pushIfSold = (block) => {
+        if (!block || !block.sold || seen.has(block.id)) return false;
+        seen.add(block.id);
+        ordered.push(block);
+        return ordered.length >= effectiveLimit;
+    };
 
-        if (block.sprite.parent.visible) {
-            visibleBlocks.push(block);
-        } else {
-            hiddenBlocks.push(block);
+    // First pass: visible chunks only.
+    for (const chunk of state.chunks) {
+        if (!chunk || !chunk.visible || !chunk.blockIds) continue;
+
+        for (const blockId of chunk.blockIds) {
+            if (pushIfSold(state.blocks[blockId])) {
+                return ordered;
+            }
         }
     }
 
-    const ordered = visibleBlocks.concat(hiddenBlocks);
-    return ordered.slice(0, Math.max(1, effectiveLimit));
+    // Second pass: remaining sold blocks as fallback prefetch candidates.
+    for (const blockId of state.soldBlockIds) {
+        if (pushIfSold(state.blocks[blockId])) {
+            break;
+        }
+    }
+
+    return ordered;
 }
 
 function enqueuePhotoLoad(block) {
@@ -1572,6 +1742,12 @@ function startPhotoQueuePump() {
     }, 60);
 }
 
+function stopPhotoQueuePump() {
+    if (!state.photoQueuePumpTimer) return;
+    clearInterval(state.photoQueuePumpTimer);
+    state.photoQueuePumpTimer = null;
+}
+
 function getBlockYouTubeId(block) {
     if (!block || !block.sold || !block.data || !block.data.youtube_url) return null;
     return getYouTubeVideoId(block.data.youtube_url);
@@ -1586,7 +1762,7 @@ function getYouTubeThumbnailUrl(videoId) {
 }
 
 async function ensureBlockVideoTexture(block, videoId) {
-    if (!block.videoRef || !block.sold || !videoId) return;
+    if (!block || !block.sold || !videoId) return;
     if (block.videoLoading) return;
 
     const requestedUrl = `yt:${videoId}`;
@@ -1605,6 +1781,7 @@ async function ensureBlockVideoTexture(block, videoId) {
             cacheTextureWithLimit(
                 state.videoTextureCache,
                 state.videoCacheOrder,
+                state.videoTextureRefCounts,
                 requestedUrl,
                 texture,
                 state.videoTextureCacheLimit
@@ -1613,21 +1790,34 @@ async function ensureBlockVideoTexture(block, videoId) {
 
         if (block.videoUrl !== requestedUrl) return;
 
-        block.videoRef.texture = texture;
-        block.videoRef.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-        block.videoRef.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-        block.videoRef.tint = 0xFFFFFF;
+        const videoRef = ensureBlockVideoSprite(block);
+        if (!videoRef) return;
+
+        if (block.videoTextureKey !== requestedUrl) {
+            if (block.videoTextureKey) {
+                adjustTextureRefCount(state.videoTextureRefCounts, block.videoTextureKey, -1);
+            }
+            adjustTextureRefCount(state.videoTextureRefCounts, requestedUrl, 1);
+            block.videoTextureKey = requestedUrl;
+        }
+
+        videoRef.texture = texture;
+        videoRef.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+        videoRef.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
+        videoRef.tint = 0xFFFFFF;
         block.videoReady = true;
 
         if (state.viewMode === 'video') {
             block.sprite.visible = false;
-            block.videoRef.visible = true;
+            videoRef.visible = true;
         }
     } catch (error) {
         console.warn(`Failed to load YouTube thumbnail for block ${block.id}:`, error);
         block.videoReady = false;
         if (state.viewMode === 'video') {
-            block.videoRef.visible = false;
+            if (block.videoRef) {
+                block.videoRef.visible = false;
+            }
             block.sprite.visible = true;
         }
     } finally {
@@ -1687,6 +1877,12 @@ function startVideoQueuePump() {
             state.videoQueuePumpTimer = null;
         }
     }, 60);
+}
+
+function stopVideoQueuePump() {
+    if (!state.videoQueuePumpTimer) return;
+    clearInterval(state.videoQueuePumpTimer);
+    state.videoQueuePumpTimer = null;
 }
 
 function getGridVideoOverlayElement() {
@@ -2010,8 +2206,15 @@ function updateDynamicMediaQueues() {
         return;
     }
 
-    if (state.viewMode === 'text') {
-        preparePhotoMode();
+    // Keep text mode ultra-light: stop background media preloading.
+    state.videoLoadQueue.length = 0;
+    state.photoLoadQueue.length = 0;
+
+    if (state.activeVideoLoads === 0) {
+        stopVideoQueuePump();
+    }
+    if (state.activePhotoLoads === 0) {
+        stopPhotoQueuePump();
     }
 }
 
@@ -2019,6 +2222,7 @@ function applyBlockVisualMode(block) {
     if (!block) return;
 
     const shouldShowVideo = state.viewMode === 'video';
+    const canUseVideo = shouldShowVideo && hasYouTubeVideo(block);
 
     if (!block.sold) {
         if (block.photoRef) {
@@ -2043,12 +2247,18 @@ function applyBlockVisualMode(block) {
         block.photoRef.visible = false;
     }
 
-    if (block.videoRef) {
-        block.videoRef.visible = shouldShowVideo && hasYouTubeVideo(block) && block.videoReady;
-        if (shouldShowVideo) {
+    if (canUseVideo) {
+        const videoRef = ensureBlockVideoSprite(block);
+        if (videoRef) {
+            videoRef.visible = !!block.videoReady;
+        }
+
+        if (!block.videoReady) {
             enqueueVideoLoad(block);
             startVideoQueuePump();
         }
+    } else if (block.videoRef) {
+        block.videoRef.visible = false;
     }
 
     refreshBlockBorder(block);
@@ -2060,7 +2270,7 @@ function applyBlockVisualMode(block) {
         // In Text mode, keep the sold texture + owner color fill behavior.
         block.sprite.texture = shouldShowVideo ? state.baseTextures.std : state.baseTextures.sold;
         block.sprite.tint = shouldShowVideo ? 0xFFFFFF : ownerTint;
-        const useVideoTexture = shouldShowVideo && hasYouTubeVideo(block) && block.videoReady;
+        const useVideoTexture = canUseVideo && block.videoReady && !!block.videoRef;
         block.sprite.visible = !useVideoTexture;
     }
 
@@ -2111,8 +2321,14 @@ function updateBlock(id, data, options = {}) {
 
     if (!previousSold && b.sold) {
         state.soldCount = Math.min(CONFIG.TOTAL_BLOCKS, state.soldCount + 1);
+        state.soldBlockIds.add(id);
     } else if (previousSold && !b.sold) {
         state.soldCount = Math.max(0, state.soldCount - 1);
+        state.soldBlockIds.delete(id);
+    } else if (b.sold) {
+        state.soldBlockIds.add(id);
+    } else {
+        state.soldBlockIds.delete(id);
     }
     
     b.data = data;
@@ -2122,21 +2338,25 @@ function updateBlock(id, data, options = {}) {
     const nextVideoUrl = nextVideoId ? `yt:${nextVideoId}` : '';
 
     if (!b.sold) {
-        b.photoReady = false;
         b.photoQueued = false;
         b.photoLoading = false;
         b.photoUrl = '';
-        if (b.photoRef) {
-            b.photoRef.texture = PIXI.Texture.WHITE;
-        }
-        b.videoReady = false;
         b.videoQueued = false;
         b.videoLoading = false;
         b.videoUrl = '';
-        if (b.videoRef) {
-            b.videoRef.texture = PIXI.Texture.WHITE;
-        }
+
+        releaseBlockOverlays(b);
+        b.sprite.texture = state.baseTextures[b.tier] || state.baseTextures.std;
+        b.sprite.tint = 0xFFFFFF;
     } else {
+        if ((nextPhotoUrl !== previousPhotoUrl || !previousSold) && b.photoTextureKey) {
+            releaseBlockPhotoTexture(b);
+        }
+
+        if ((nextVideoUrl !== previousVideoUrl || !previousSold) && b.videoTextureKey) {
+            releaseBlockVideoTexture(b);
+        }
+
         if (nextPhotoUrl !== previousPhotoUrl || !previousSold) {
             b.photoReady = false;
             b.photoQueued = false;
@@ -2175,8 +2395,10 @@ function updateBlock(id, data, options = {}) {
     refreshBlockBorder(b);
 
     if (state.viewMode === 'video' && b.sold) {
-        enqueueVideoLoad(b);
-        startVideoQueuePump();
+        if (hasYouTubeVideo(b)) {
+            enqueueVideoLoad(b);
+            startVideoQueuePump();
+        }
     }
 
     state.slotRenderSignature.set(id, getSlotRenderSignature(b.sold ? { ...data, sold: true } : { sold: false }));
@@ -2196,11 +2418,26 @@ window.app = {
     resetCamera: () => centerCamera(),
     setViewMode: (mode) => {
         const normalized = mode === 'video' ? 'video' : 'text';
+        if (state.viewMode === normalized) {
+            updateModeButtons();
+            return;
+        }
+
         state.viewMode = normalized;
         state.lodQueueIndex = 0;
 
         if (normalized !== 'video') {
             window.closeGridVideoPlayer();
+            state.videoLoadQueue.length = 0;
+            state.photoLoadQueue.length = 0;
+            stopVideoQueuePump();
+            stopPhotoQueuePump();
+
+            for (const blockId of state.soldBlockIds) {
+                const block = state.blocks[blockId];
+                if (!block) continue;
+                releaseBlockOverlays(block);
+            }
         }
 
         if (normalized === 'video') {
@@ -2416,19 +2653,107 @@ window.togglePurchaseInfoPanel = () => {
     panel.classList.toggle('show');
 };
 
-window.openBuyNowForSelectedBlock = () => {
+window.closeBuyInstructionPanel = () => {
+    const panel = document.getElementById('buy-instruction-panel');
+    if (!panel) return;
+    panel.classList.remove('show');
+};
+
+function getSelectedUnsoldBlockForPurchase() {
     const block = state.blocks[state.selectedId];
     if (!block) {
         showError('No canvas selected.');
+        return null;
+    }
+
+    if (block.sold) {
+        showInfo(`Canvas #${block.id} is already sold.`);
+        return null;
+    }
+
+    return block;
+}
+
+window.openBuyNowForSelectedBlock = () => {
+    const block = getSelectedUnsoldBlockForPurchase();
+    if (!block) return;
+
+    const panel = document.getElementById('buy-instruction-panel');
+    if (!panel) {
+        showError('Unable to open instructions panel. Please refresh and try again.');
         return;
     }
 
-    if (!block.payment_link) {
-        showInfo(`Buy link is not added yet for Canvas #${block.id}. Add it in grid_price.json.`);
+    panel.classList.add('show');
+};
+
+window.proceedBuyNowForSelectedBlock = () => {
+    const block = getSelectedUnsoldBlockForPurchase();
+    if (!block) return;
+
+    window.closeBuyInstructionPanel();
+    startBuyNowPaymentForSelectedBlock(block);
+};
+
+function startBuyNowPaymentForSelectedBlock(block) {
+
+    if (typeof window.Razorpay !== 'function') {
+        showError('Payment gateway not loaded. Please refresh and try again.');
         return;
     }
 
-    window.open(block.payment_link, '_blank', 'noopener,noreferrer');
+    const amountInPaise = Math.round(Number(block.price || 0) * 100);
+    if (!Number.isFinite(amountInPaise) || amountInPaise <= 0) {
+        showError('Invalid price for this canvas.');
+        return;
+    }
+
+    const customerName = (formData.name || '').trim();
+
+    const options = {
+        key: 'rzp_live_SXMt3u6h8I4TJh',
+        amount: amountInPaise,
+        currency: 'INR',
+        name: 'The Pyramid of Emotions',
+        description: `Canvas #${block.id} Purchase`,
+        notes: {
+            slot_id: String(block.id),
+            slot_price_rupees: String(block.price)
+        },
+        prefill: {
+            name: customerName
+        },
+        theme: {
+            color: '#D4AF37'
+        },
+        handler: function (response) {
+            const paymentId = response && response.razorpay_payment_id ? response.razorpay_payment_id : 'N/A';
+            showSuccess(`Payment successful for Canvas #${block.id}. Payment ID: ${paymentId}`);
+        },
+        modal: {
+            ondismiss: function () {
+                showInfo('Payment cancelled.');
+            }
+        }
+    };
+
+    try {
+        const rzp = new window.Razorpay(options);
+        rzp.on('payment.failed', function (response) {
+            const reason = response && response.error && response.error.description
+                ? response.error.description
+                : 'Payment failed. Please try again.';
+            showError(reason);
+        });
+        rzp.open();
+    } catch (error) {
+        console.error('Razorpay initialization failed:', error);
+        if (block.payment_link) {
+            window.open(block.payment_link, '_blank', 'noopener,noreferrer');
+            return;
+        }
+        showError('Unable to start payment. Please try again.');
+    }
 };
 
 window.closeModal = (e) => {
@@ -2474,19 +2799,10 @@ function handleTestFormSubmit(event) {
     // Update the block with test data
     const block = state.blocks[testModeBlockId];
     if (block && !block.sold) {
-        block.sold = true;
-        block.data = formData;
-        block.sprite.texture = state.baseTextures.sold;
-        block.sprite.tint = formData.owner_color.replace('#', '0x');
-        
-        if (formData.owner_text) {
-            renderBlockText(block.sprite, formData.owner_text);
-        }
-
-        applyBlockVisualMode(block);
-        refreshBlockBorder(block);
-        
-        updateSalesCounter();
+        updateBlock(testModeBlockId, {
+            sold: true,
+            ...formData
+        });
         closeTestModal();
         
         // Show the test profile
@@ -2659,6 +2975,20 @@ window.openModal = () => {
             </div>
             <div class="purchase-info-panel" id="purchase-info-panel">
                 Please after purchase fill the google form so that we can update the information of yours on website.
+            </div>
+            <div class="buy-instruction-panel" id="buy-instruction-panel" onclick="closeBuyInstructionPanel()">
+                <div class="buy-instruction-card" onclick="event.stopPropagation()">
+                    <h3>Before You Proceed</h3>
+                    <ol class="buy-instruction-list">
+                        <li>The mobile number and email you use are used for verification on our side, so fill only active details that belong to you.</li>
+                        <li>Fill the Google Form with the correct data.</li>
+                        <li>If any doubt or problem occurs, contact us at creatorspyramid@gmail.com.</li>
+                    </ol>
+                    <div class="buy-instruction-actions">
+                        <button class="btn" type="button" onclick="closeBuyInstructionPanel()">Close</button>
+                        <button class="confirm-btn" type="button" onclick="proceedBuyNowForSelectedBlock()">Proceed</button>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <div style="font-size:1.2rem; font-weight:800; color:var(--gold)">₹${b.price}</div>
