@@ -86,7 +86,7 @@ const state = {
         tooltipEl: null
     },
     isMobileDevice: false,
-    viewMode: 'text',
+    viewMode: 'video',
     photoTextureCache: new Map(),
     videoTextureCache: new Map(),
     photoTextureRefCounts: new Map(),
@@ -122,7 +122,7 @@ const state = {
 };
 
 function setInitialViewModeRandomly() {
-    state.viewMode = 'text';
+    state.viewMode = 'video';
 }
 
 // Form data removed - no purchase modal needed
@@ -411,6 +411,23 @@ async function loadGridData() {
     }
 }
 
+function startRandomVideoOnLoad() {
+    const candidates = [];
+    for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
+        const block = state.blocks[i];
+        if (block && block.sold && hasYouTubeVideo(block)) {
+            candidates.push(block.id);
+        }
+    }
+
+    if (candidates.length === 0) return;
+
+    const randomIndex = Math.floor(Math.random() * candidates.length);
+    const blockId = candidates[randomIndex];
+    state.selectedId = blockId;
+    openGridVideoPlayer(blockId);
+}
+
 async function loadBasicPyramid() {
     showLoading('Loading basic pyramid...');
     // Initialize pyramid without any sold blocks
@@ -533,7 +550,7 @@ async function init() {
 
     createSharedTextures();
 
-    createStarfield();
+    // Starfield removed for pitch-black background.
     state.world = new PIXI.Container();
     state.pixi.ticker.maxFPS = state.isMobileDevice ? 30 : 50;
     
@@ -552,7 +569,6 @@ async function init() {
     state.pixi.ticker.add((ticker) => {
         if (document.hidden) return;
         updatePhysics(ticker.deltaTime);
-        updateStarfield();
         cullWorld();
         processLODQueue(); // Replaces the old updateLOD loop
         updateGridVideoOverlayPosition();
@@ -564,6 +580,8 @@ async function init() {
     
     // Load static data from JSON file
     await loadStaticData();
+
+    startRandomVideoOnLoad();
     
     // Load local purchases
     loadLocalPurchases();
@@ -626,32 +644,8 @@ function createSharedTextures() {
     };
 }
 
-function createStarfield() {
-    const starfield = new PIXI.Container();
-    const starCount = state.isMobileDevice ? 80 : 200;
-    
-    for (let i = 0; i < starCount; i++) {
-        const star = new PIXI.Graphics().circle(0, 0, Math.random() * 2).fill(0xFFFFFF);
-        star.x = Math.random() * window.innerWidth;
-        star.y = Math.random() * window.innerHeight;
-        star.alpha = Math.random();
-        star.parallax = 0.1 + Math.random() * 0.5;
-        starfield.addChild(star);
-    }
-    
-    state.pixi.stage.addChildAt(starfield, 0);
-    state.starfield = starfield;
-}
-
-function updateStarfield() {
-    if (!state.starfield) return;
-    
-    const offsetX = (state.cam.x - (window.innerWidth/2)) * 0.05;
-    const offsetY = (state.cam.y - (window.innerHeight/2)) * 0.05;
-    
-    state.starfield.x = offsetX;
-    state.starfield.y = offsetY;
-}
+function createStarfield() {}
+function updateStarfield() {}
 
 function buildPyramid() {
     state.soldCount = 0;
@@ -989,13 +983,10 @@ function setupInput() {
 
             // 1st tap => show tooltip, 2nd quick tap on same block => open modal.
             if (tappedId !== -1 && state.lastTouchTapId === tappedId && (now - state.lastTouchTapTime) < 700) {
-                state.selectedId = tappedId;
                 const tappedBlock = state.blocks[tappedId];
-                if (state.viewMode === 'video' && tappedBlock && tappedBlock.sold && hasYouTubeVideo(tappedBlock)) {
+                if (tappedBlock && tappedBlock.sold && hasYouTubeVideo(tappedBlock)) {
+                    state.selectedId = tappedId;
                     openGridVideoPlayer(tappedId);
-                } else {
-                    window.closeGridVideoPlayer();
-                    window.openModal();
                 }
                 state.lastTouchTapId = -1;
                 state.lastTouchTapTime = 0;
@@ -1079,15 +1070,10 @@ function handleClick(x, y) {
     const id = getBlockId(x, y);
     if (id !== -1) {
         const block = state.blocks[id];
-        if (state.viewMode === 'video' && block && block.sold && hasYouTubeVideo(block)) {
+        if (block && block.sold && hasYouTubeVideo(block)) {
             state.selectedId = id;
             openGridVideoPlayer(id);
-            return;
         }
-
-        window.closeGridVideoPlayer();
-        state.selectedId = id;
-        openModal();
     }
 }
 
@@ -1954,15 +1940,18 @@ function updateActiveVideoMarker() {
     const size = (CONFIG.BLOCK_SIZE - CONFIG.GAP) + (margin * 2);
     const safeColor = sanitizeBlockColor(block?.data?.owner_color);
     const markerColor = parseInt(safeColor.slice(1), 16);
+    const zoom = Math.max(state.cam.zoom, 0.0001);
+    const visibilityBoost = Math.min(2.2, Math.max(1, 0.18 / zoom));
+    const baseStroke = Math.min(18, Math.max(3, 0.25 / zoom));
     const pulse = (Math.sin(performance.now() * 0.01) + 1) * 0.5;
-    const glowOuterAlpha = 0.22 + (pulse * 0.38);
-    const glowMidAlpha = 0.3 + (pulse * 0.32);
+    const glowOuterAlpha = Math.min(0.95, (0.22 + (pulse * 0.38)) * visibilityBoost);
+    const glowMidAlpha = Math.min(0.98, (0.3 + (pulse * 0.32)) * visibilityBoost);
 
     marker.clear();
-    marker.rect(x - 2, y - 2, size + 4, size + 4).stroke({ width: 1, color: markerColor, alpha: glowOuterAlpha });
-    marker.rect(x - 1, y - 1, size + 2, size + 2).stroke({ width: 1, color: markerColor, alpha: glowMidAlpha });
-    marker.rect(x, y, size, size).stroke({ width: 1, color: markerColor, alpha: 0.95 });
-    marker.rect(x + 1, y + 1, size - 2, size - 2).stroke({ width: 0.5, color: 0xffffff, alpha: 0.3 });
+    marker.rect(x - 2, y - 2, size + 4, size + 4).stroke({ width: baseStroke * 2.4, color: markerColor, alpha: glowOuterAlpha });
+    marker.rect(x - 1, y - 1, size + 2, size + 2).stroke({ width: baseStroke * 1.8, color: markerColor, alpha: glowMidAlpha });
+    marker.rect(x, y, size, size).stroke({ width: baseStroke * 1.4, color: markerColor, alpha: 0.98 });
+    marker.rect(x + 1, y + 1, size - 2, size - 2).stroke({ width: Math.max(1.4, baseStroke * 0.9), color: 0xffffff, alpha: 0.45 });
     marker.visible = true;
 
     markerState.blockId = block.id;
@@ -1974,9 +1963,9 @@ function openGridVideoPlayer(blockId) {
     const videoId = getBlockYouTubeId(block);
     if (!block || !videoId) return;
 
-    const creatorName = block?.data?.owner_name || 'Anonymous';
-    const safeCreatorName = escapeHtml(creatorName);
-    const hasCreatorLink = !!(block?.data?.link_url && String(block.data.link_url).trim());
+    const priceValue = Number.isFinite(block?.price) ? block.price : (blockId * 10);
+    const priceLabel = `₹${Math.round(priceValue).toLocaleString()}`;
+
     const safeColor = sanitizeBlockColor(block?.data?.owner_color);
     const colorInt = parseInt(safeColor.slice(1), 16);
     const r = (colorInt >> 16) & 255;
@@ -1997,11 +1986,10 @@ function openGridVideoPlayer(blockId) {
                     allowfullscreen
                 ></iframe>
             </div>
-            <div class="grid-video-actions" aria-label="Creator actions">
-                <button type="button" class="grid-video-action-btn" onclick="openGridVideoCreatorProfile(${blockId})">View Profile</button>
-                <button type="button" class="grid-video-action-btn" onclick="openGridVideoCreatorLink(${blockId})" ${hasCreatorLink ? '' : 'disabled'}>Open Creator Link</button>
+            <div class="grid-video-footer">
+                <div class="grid-video-footer-item">Grid #${blockId}</div>
+                <div class="grid-video-footer-item">Paid ${priceLabel}</div>
             </div>
-            <div class="grid-video-owner">Now playing: #${blockId} | ${safeCreatorName}</div>
         </div>
     `;
 
@@ -2011,20 +1999,6 @@ function openGridVideoPlayer(blockId) {
     updateActiveVideoMarker();
     updateGridVideoOverlayPosition();
 }
-
-window.openGridVideoCreatorProfile = function(blockId) {
-    const block = state.blocks[blockId];
-    if (!block) return;
-    state.selectedId = blockId;
-    openModal();
-};
-
-window.openGridVideoCreatorLink = function(blockId) {
-    const block = state.blocks[blockId];
-    const url = block?.data?.link_url;
-    if (!url || !String(url).trim()) return;
-    window.open(String(url).trim(), '_blank', 'noopener,noreferrer');
-};
 
 window.closeGridVideoPlayer = function() {
     const overlay = document.getElementById('grid-video-overlay');
@@ -2289,20 +2263,7 @@ function applyVisualModeToAllBlocks() {
 }
 
 function updateModeButtons() {
-    const textBtn = document.getElementById('mode-text-btn');
-    const videoBtn = document.getElementById('mode-video-btn');
-    if (!textBtn || !videoBtn) return;
-
-    const isText = state.viewMode === 'text';
-    const isVideo = state.viewMode === 'video';
-
-    textBtn.classList.toggle('active', isText);
-    videoBtn.classList.toggle('active', isVideo);
-
-    document.body.classList.toggle('is-video-mode', isVideo);
-
-    textBtn.disabled = false;
-    videoBtn.disabled = false;
+    document.body.classList.toggle('is-video-mode', state.viewMode === 'video');
 }
 
 function updateBlock(id, data, options = {}) {
@@ -2411,417 +2372,10 @@ function updateBlock(id, data, options = {}) {
 // =========================================================================
 // 8. APP INTERFACE & UI
 // =========================================================================
-let testModeBlockId = null;
-let formData = { name: '', message: '', color: '#FFD700', text: '', imageUrl: '', linkUrl: '', linkDescription: '' };
-
 window.app = {
     resetCamera: () => centerCamera(),
-    setViewMode: (mode) => {
-        const normalized = mode === 'video' ? 'video' : 'text';
-        if (state.viewMode === normalized) {
-            updateModeButtons();
-            return;
-        }
-
-        state.viewMode = normalized;
-        state.lodQueueIndex = 0;
-
-        if (normalized !== 'video') {
-            window.closeGridVideoPlayer();
-            state.videoLoadQueue.length = 0;
-            state.photoLoadQueue.length = 0;
-            stopVideoQueuePump();
-            stopPhotoQueuePump();
-
-            for (const blockId of state.soldBlockIds) {
-                const block = state.blocks[blockId];
-                if (!block) continue;
-                releaseBlockOverlays(block);
-            }
-        }
-
-        if (normalized === 'video') {
-            prepareVideoMode();
-        }
-
-        checkLODTransition();
-        applyVisualModeToAllBlocks();
-        updateModeButtons();
-    },
-    toggleViewMode: () => {
-        if (state.viewMode === 'text') {
-            window.app.setViewMode('video');
-            return;
-        }
-
-        window.app.setViewMode('text');
-    },
-    toggleExplore: () => {
-        const centerControls = document.querySelector('.center-controls');
-        centerControls.classList.toggle('hidden');
-    },
-    updateForm: (f, v) => {
-        formData[f] = v;
-        
-        // Update character counters
-        if (f === 'message') {
-            const counter = document.getElementById('msg-counter');
-            if (counter) counter.textContent = `${v.length}/1000`;
-        } else if (f === 'linkDescription') {
-            const counter = document.getElementById('link-desc-counter');
-            if (counter) counter.textContent = `${v.length}/100`;
-        } else if (f === 'text') {
-            const counter = document.getElementById('char-counter');
-            if (counter) counter.textContent = `${v.length}/150`;
-            
-            // Update preview text
-            if (state.previewBlock && state.previewBlock.sprite) {
-                renderBlockText(state.previewBlock.sprite, v, true);
-            }
-        }
-    },
-    setColor: (color, elem) => {
-        formData.color = color;
-        document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('active'));
-        elem.classList.add('active');
-        
-        if (state.previewBlock && state.previewBlock.sprite) {
-            state.previewBlock.sprite.tint = color.replace('#', '0x');
-        }
-    },
-    handleImageUpload: (input) => {
-        const file = input.files[0];
-        if (file && file.size <= 5 * 1024 * 1024) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                formData.imageUrl = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        } else {
-            showError('Image must be less than 5MB');
-            input.value = '';
-        }
-    },
-    submit: () => {
-        if (!formData.name) {
-            showError('Name is required');
-            return;
-        }
-        if (!formData.text) {
-            showError('Engrave text is required');
-            return;
-        }
-        
-        try {
-            const block = state.blocks[state.selectedId];
-            if (!block) {
-                showError('Invalid canvas selected');
-                return;
-            }
-            
-            if (block.sold) {
-                showError('This canvas is already claimed');
-                return;
-            }
-            
-            // Create local purchase data
-            const purchaseData = {
-                owner_name: formData.name,
-                owner_color: formData.color,
-                owner_text: formData.text.substring(0, 150),
-                owner_text_color: '#FFFFFF',
-                message: formData.message || "Claimed locally in the pyramid!",
-                image_url: formData.imageUrl || '',
-                link_url: formData.linkUrl || '',
-                link_description: formData.linkDescription || '',
-                purchase_date: new Date().toISOString(),
-                block_id: state.selectedId,
-                price: block.price
-            };
-            
-            // Update the block immediately (local only)
-            updateBlock(state.selectedId, purchaseData);
-            
-            // Store in localStorage for persistence during session
-            const localPurchases = JSON.parse(localStorage.getItem('pyramidPurchases') || '[]');
-            localPurchases.push(purchaseData);
-            localStorage.setItem('pyramidPurchases', JSON.stringify(localPurchases));
-            
-            showSuccess(`Canvas #${state.selectedId} claimed successfully! This is a local preview - email us at thegoodguy08@gmail.com to make it permanent.`);
-            
-            // Close modal and show the profile
-            setTimeout(() => {
-                closeModal();
-                state.selectedId = state.selectedId; // Keep the same ID
-                openModal(); // Reopen to show the profile
-            }, 2000);
-            
-        } catch (error) {
-            console.error('Purchase error:', error);
-            showError('Failed to claim canvas. Please try again.');
-        }
-    },
-    simulate: () => {
-        if (state.viewMode !== 'text') {
-            showInfo('Simulate is available in Text Mode only.');
-            return;
-        }
-
-        if(state.simulating) return;
-        state.simulating = true;
-        const unsold = [];
-        for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) if(!state.blocks[i].sold) unsold.push(i);
-        if(unsold.length === 0) { alert("Grid Full!"); state.simulating = false; return; }
-        const simulationTexts = [
-            "Be yourself; everyone else is already taken.",
-            "The greatest glory in living lies not in never falling, but in rising every time we fall.",
-            "Two things are infinite: the universe and human stupidity; and I'm not sure about the universe.",
-            "I've learned that people will forget what you said, people will forget what you did, but people will never forget how you made them feel.",
-            "Be the change that you wish to see in the world."
-        ];
-        let count = 0;
-        const interval = setInterval(() => {
-            if (count >= unsold.length || unsold.length === 0) {
-                clearInterval(interval);
-                state.simulating = false;
-                updateSalesCounter();
-                return;
-            }
-
-            for(let k=0; k<50; k++) {
-                if(unsold.length === 0) break;
-                const randIdx = Math.floor(Math.random() * unsold.length);
-                const id = unsold[randIdx];
-                // "Swap and Pop" logic for the simulation array (simulation only runs once, so simple splice is okay here, but let's be consistent)
-                unsold[randIdx] = unsold[unsold.length - 1];
-                unsold.pop();
-
-                const simulatedText = simulationTexts[Math.floor(Math.random() * simulationTexts.length)];
-                const simulatedData = {
-                    sold: true,
-                    owner_name: "Sim " + id,
-                    owner_color: CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)],
-                    owner_text: simulatedText,
-                    owner_text_color: '#FFFFFF',
-                    message: "This canvas is part of the simulation.",
-                    image_url: '',
-                    link_url: "https://example.com/sim" + id,
-                    link_description: "Visit Profile",
-                    youtube_url: ''
-                };
-
-                state.simulatedSlots.set(id, simulatedData);
-                updateBlock(id, simulatedData, { skipSalesCounter: true });
-                count++;
-            }
-
-            updateSalesCounter();
-        }, 16); 
-    },
-    viewRandom: () => {
-        const sold = [];
-        for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) if(state.blocks[i].sold) sold.push(i);
-        if(sold.length === 0) return alert("No profiles found!");
-        state.selectedId = sold[Math.floor(Math.random() * sold.length)];
-        
-        // Ensure explore button stays visible when viewing profiles
-        const centerControls = document.querySelector('.center-controls');
-        centerControls.classList.remove('hidden');
-        
-        openModal();
-    },
-    // Purchase functionality removed - blocks now redirect to profile page
+    toggleExplore: () => {}
 };
-
-function handleBlockClick(id) {
-    const b = state.blocks[id];
-    
-    if (b.sold) {
-        // Show profile for sold blocks
-        state.selectedId = id;
-        openModal();
-    } else {
-        // Show purchase form for empty blocks
-        state.selectedId = id;
-        openModal();
-    }
-};
-
-window.togglePurchaseInfoPanel = () => {
-    const panel = document.getElementById('purchase-info-panel');
-    if (!panel) return;
-    panel.classList.toggle('show');
-};
-
-window.closeBuyInstructionPanel = () => {
-    const panel = document.getElementById('buy-instruction-panel');
-    if (!panel) return;
-    panel.classList.remove('show');
-};
-
-function getSelectedUnsoldBlockForPurchase() {
-    const block = state.blocks[state.selectedId];
-    if (!block) {
-        showError('No canvas selected.');
-        return null;
-    }
-
-    if (block.sold) {
-        showInfo(`Canvas #${block.id} is already sold.`);
-        return null;
-    }
-
-    return block;
-}
-
-window.openBuyNowForSelectedBlock = () => {
-    const block = getSelectedUnsoldBlockForPurchase();
-    if (!block) return;
-
-    const panel = document.getElementById('buy-instruction-panel');
-    if (!panel) {
-        showError('Unable to open instructions panel. Please refresh and try again.');
-        return;
-    }
-
-    panel.classList.add('show');
-};
-
-window.proceedBuyNowForSelectedBlock = () => {
-    const block = getSelectedUnsoldBlockForPurchase();
-    if (!block) return;
-
-    window.closeBuyInstructionPanel();
-    startBuyNowPaymentForSelectedBlock(block);
-};
-
-function startBuyNowPaymentForSelectedBlock(block) {
-
-    if (typeof window.Razorpay !== 'function') {
-        showError('Payment gateway not loaded. Please refresh and try again.');
-        return;
-    }
-
-    const amountInPaise = Math.round(Number(block.price || 0) * 100);
-    if (!Number.isFinite(amountInPaise) || amountInPaise <= 0) {
-        showError('Invalid price for this canvas.');
-        return;
-    }
-
-    const customerName = (formData.name || '').trim();
-
-    const options = {
-        key: 'rzp_live_SXMt3u6h8I4TJh',
-        amount: amountInPaise,
-        currency: 'INR',
-        name: 'The Pyramid of Emotions',
-        description: `Canvas #${block.id} Purchase`,
-        notes: {
-            slot_id: String(block.id),
-            slot_price_rupees: String(block.price)
-        },
-        prefill: {
-            name: customerName
-        },
-        theme: {
-            color: '#D4AF37'
-        },
-        handler: function (response) {
-            const paymentId = response && response.razorpay_payment_id ? response.razorpay_payment_id : 'N/A';
-            showSuccess(`Payment successful for Canvas #${block.id}. Payment ID: ${paymentId}`);
-        },
-        modal: {
-            ondismiss: function () {
-                showInfo('Payment cancelled.');
-            }
-        }
-    };
-
-    try {
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', function (response) {
-            const reason = response && response.error && response.error.description
-                ? response.error.description
-                : 'Payment failed. Please try again.';
-            showError(reason);
-        });
-        rzp.open();
-    } catch (error) {
-        console.error('Razorpay initialization failed:', error);
-        if (block.payment_link) {
-            window.open(block.payment_link, '_blank', 'noopener,noreferrer');
-            return;
-        }
-        showError('Unable to start payment. Please try again.');
-    }
-};
-
-window.closeModal = (e) => {
-    // This function now handles closing the profile modal
-    closeProfileModal(e);
-};
-
-function showTestModal(blockId) {
-    testModeBlockId = blockId;
-    const modal = document.getElementById('test-modal');
-    modal.classList.add('show');
-    
-    // Reset form
-    document.getElementById('test-form').reset();
-}
-
-function closeTestModal(event) {
-    if (event && event.target !== event.currentTarget) return;
-    const modal = document.getElementById('test-modal');
-    modal.classList.remove('show');
-    testModeBlockId = null;
-}
-
-function handleTestFormSubmit(event) {
-    event.preventDefault();
-    
-    if (!testModeBlockId) {
-        showError('No canvas selected for testing');
-        return;
-    }
-    
-    const formData = {
-        owner_name: document.getElementById('test-name').value,
-        message: document.getElementById('test-message').value,
-        owner_text: document.getElementById('test-engraved').value || 'TEST',
-        owner_text_color: '#FFFFFF',
-        link_url: document.getElementById('test-link').value,
-        link_description: document.getElementById('test-link-desc').value,
-        image_url: document.getElementById('test-image').value,
-        owner_color: CONFIG.COLORS[Math.floor(Math.random() * CONFIG.COLORS.length)]
-    };
-    
-    // Update the block with test data
-    const block = state.blocks[testModeBlockId];
-    if (block && !block.sold) {
-        updateBlock(testModeBlockId, {
-            sold: true,
-            ...formData
-        });
-        closeTestModal();
-        
-        // Show the test profile
-        state.selectedId = testModeBlockId;
-        openModal();
-        
-        showSuccess('Test canvas created! This will disappear when you refresh the page.');
-    } else {
-        showError('This canvas is not available for testing');
-    }
-}
-
-// Add event listener for test form
-document.addEventListener('DOMContentLoaded', () => {
-    const testForm = document.getElementById('test-form');
-    if (testForm) {
-        testForm.addEventListener('submit', handleTestFormSubmit);
-    }
-});
 
 function getUserStats(ownerName) {
     let count = 0;
@@ -2834,206 +2388,6 @@ function getUserStats(ownerName) {
     }
     return { count, totalValue };
 }
-
-window.openModal = () => {
-    window.closeGridVideoPlayer();
-    const id = state.selectedId;
-    const b = state.blocks[id];
-    const backdrop = document.getElementById('modal-backdrop');
-    const content = document.getElementById('modal-content');
-    
-    backdrop.style.display = 'flex';
-    void backdrop.offsetWidth; 
-    backdrop.classList.add('visible');
-    content.classList.remove('premium');
-    
-    if (b.sold) {
-        content.classList.add('premium');
-        const d = b.data;
-        
-        // Render profile content directly
-        let img;
-        if (d.image_url && d.image_url.trim() !== '') {
-            // Check if it's a local file path
-            if (d.image_url.startsWith('./') || d.image_url.startsWith('/')) {
-                // For local files, use the path directly but have fallback
-                img = d.image_url;
-            } else {
-                // For external URLs, use as-is
-                img = d.image_url;
-            }
-        } else {
-            // Fallback to avatar service
-            img = `https://ui-avatars.com/api/?name=${encodeURIComponent(d.owner_name || 'Anonymous')}&background=random&size=256`;
-        }
-        
-        const _blockColor = (d.owner_color && d.owner_color.startsWith('#') && d.owner_color.length === 7) ? d.owner_color : '#FF0000';
-        const _bcr = parseInt(_blockColor.slice(1, 3), 16);
-        const _bcg = parseInt(_blockColor.slice(3, 5), 16);
-        const _bcb = parseInt(_blockColor.slice(5, 7), 16);
-        const _colorVars = `--block-color:${_blockColor};--block-color-rgb:${_bcr} ${_bcg} ${_bcb}`;
-        
-        content.innerHTML = `
-            <div class="profile-modal" style="${_colorVars}">
-                <div class="prof-topbar">
-                    <div class="prof-price-badge">₹${b.price || '0'}</div>
-                    <button class="prof-close-btn" onclick="closeModal()">×</button>
-                </div>
-
-                <div class="prof-content">
-                    <div class="prof-left-section">
-                        <div class="prof-avatar-container">
-                            <img src="${img}" class="prof-avatar" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(d.owner_name || 'Anonymous')}&background=random&size=256';" alt="Profile">
-                        </div>
-                        <h2 class="prof-name">${d.owner_name || 'Anonymous'}</h2>
-                        ${d.link_url ? `
-                            ${d.link_description ? `<div class="prof-link-desc">${d.link_description}</div>` : ''}
-                            <a href="${d.link_url}" target="_blank" rel="noopener noreferrer" class="prof-btn-visit">
-                                <span>Visit Link</span>
-                                <svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
-                            </a>
-                        ` : ''}
-                    </div>
-
-                    <div class="prof-right-section">
-                        <div class="prof-right-top">
-                            <div class="prof-message">
-                                <div class="prof-message-text">${d.message || 'No message provided.'}</div>
-                            </div>
-                        </div>
-                        <div class="prof-right-bottom">
-                            ${(() => {
-                                const vidId = getYouTubeVideoId(d.youtube_url);
-                                if (!vidId) return '<div class="prof-no-video">No video added</div>';
-                                return `
-                                <div class="prof-youtube-player" onclick="loadYouTubeVideo(this, '${vidId}')" role="button" aria-label="Play video">
-                                    <img class="prof-youtube-thumb" src="https://img.youtube.com/vi/${vidId}/maxresdefault.jpg" onerror="this.src='https://img.youtube.com/vi/${vidId}/hqdefault.jpg'" alt="Video thumbnail">
-                                    <div class="prof-youtube-overlay"></div>
-                                    <div class="prof-youtube-play-btn" aria-hidden="true">
-                                        <svg viewBox="0 0 68 48" xmlns="http://www.w3.org/2000/svg">
-                                            <path d="M66.52 7.74c-.78-2.93-2.49-5.41-5.42-6.19C55.79.13 34 0 34 0S12.21.13 6.9 1.55c-2.93.78-4.63 3.26-5.42 6.19C.06 13.05 0 24 0 24s.06 10.95 1.48 16.26c.78 2.93 2.49 5.41 5.42 6.19C12.21 47.87 34 48 34 48s21.79-.13 27.1-1.55c2.93-.78 4.64-3.26 5.42-6.19C67.94 34.95 68 24 68 24s-.06-10.95-1.48-16.26z" fill="#FF0000"/>
-                                            <path d="M45 24L27 14v20z" fill="#FFFFFF"/>
-                                        </svg>
-                                    </div>
-                                    <div class="prof-youtube-label">Click to Play</div>
-                                </div>`;
-                            })()}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    } else {
-        content.classList.add('premium');
-        const d = b.data;
-        
-        content.innerHTML = `
-            <div class="modal-header">
-                <h2>Profile for Canvas #${b.id}</h2>
-                <button class="close-icon" onclick="closeModal()">✕</button>
-            </div>
-            <div class="modal-body">
-                <div class="col-left">
-                    <div class="input-group">
-                        <label>Name</label>
-                        <input type="text" maxlength="30" oninput="app.updateForm('name', this.value)">
-                    </div>
-                    <div class="input-group">
-                        <label>Message <span id="msg-counter" class="char-count">0/1000</span></label>
-                        <textarea maxlength="1000" oninput="app.updateForm('message', this.value)" style="height:100px"></textarea>
-                    </div>
-                    <div class="input-group">
-                        <label>Link URL</label>
-                        <input type="url" placeholder="https://example.com" oninput="app.updateForm('linkUrl', this.value)">
-                    </div>
-                    <div class="input-group">
-                        <label>Link Description <span id="link-desc-counter" class="char-count">0/100</span></label>
-                        <input type="text" maxlength="100" placeholder="Visit my profile..." oninput="app.updateForm('linkDescription', this.value)">
-                    </div>
-                    <div class="input-group">
-                        <label>Profile Photo</label>
-                        <div class="file-upload">
-                            <input type="file" accept="image/*" onchange="app.handleImageUpload(this)">
-                            <div class="file-upload-label">
-                                <div>📷 Upload Photo</div>
-                                <div style="font-size: 0.7rem; color: #666; margin-top: 5px;">Max 5MB</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="input-group">
-                        <label>Grid Color</label>
-                        <div class="color-selector">${CONFIG.COLOR_CHOICES.map(choice => `<button type="button" class="color-btn" onclick="app.setColor('${choice.value}', this)" title="${choice.name}" aria-label="${choice.name}" data-color-name="${choice.name}"><span class="color-dot" style="background:${choice.value}"></span><span class="color-name">${choice.name}</span></button>`).join('')}</div>
-                    </div>
-                </div>
-                <div class="col-right">
-                    <div class="input-group">
-                        <label>Engrave Text <span id="char-counter" class="char-count">0/150</span></label>
-                        <textarea maxlength="150" oninput="app.updateForm('text', this.value)" style="height:80px; text-align:center; font-weight:900; font-size:1.5rem" placeholder="..."></textarea>
-                    </div>
-                    <div class="preview-box" id="block-preview"></div>
-                </div>
-            </div>
-            <div class="purchase-info-panel" id="purchase-info-panel">
-                Please after purchase fill the google form so that we can update the information of yours on website.
-            </div>
-            <div class="buy-instruction-panel" id="buy-instruction-panel" onclick="closeBuyInstructionPanel()">
-                <div class="buy-instruction-card" onclick="event.stopPropagation()">
-                    <h3>Before You Proceed</h3>
-                    <ol class="buy-instruction-list">
-                        <li>The mobile number and email you use are used for verification on our side, so fill only active details that belong to you.</li>
-                        <li>Fill the Google Form with the correct data.</li>
-                        <li>If any doubt or problem occurs, contact us at creatorspyramid@gmail.com.</li>
-                    </ol>
-                    <div class="buy-instruction-actions">
-                        <button class="btn" type="button" onclick="closeBuyInstructionPanel()">Close</button>
-                        <button class="confirm-btn" type="button" onclick="proceedBuyNowForSelectedBlock()">Proceed</button>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <div style="font-size:1.2rem; font-weight:800; color:var(--gold)">₹${b.price}</div>
-                <div class="purchase-actions">
-                    <button class="btn purchase-info-toggle" type="button" onclick="togglePurchaseInfoPanel()">How to Update Info</button>
-                    <button class="confirm-btn" type="button" onclick="openBuyNowForSelectedBlock()">Buy Now</button>
-                    <button class="btn" type="button" onclick="app.submit()">Claim Canvas (Local)</button>
-                </div>
-            </div>`;
-        
-        // Reset form state for fresh modal
-        formData.color = '#FFD700';
-        formData.text = '';
-        
-        setTimeout(() => {
-            const previewDiv = document.getElementById('block-preview');
-            if (previewDiv && state.previewApp) {
-                previewDiv.innerHTML = '';
-                previewDiv.appendChild(state.previewApp.canvas);
-                state.previewBlock.sprite.tint = 0xFFD700;
-                renderBlockText(state.previewBlock.sprite, '');
-            }
-            // Mark default active swatch
-            const firstColorBtn = document.querySelector('.color-btn');
-            if (firstColorBtn) firstColorBtn.classList.add('active');
-        }, 50);
-    }
-};
-
-window.closeModal = (e) => {
-    if (!e || e.target.id === 'modal-backdrop' || e.target.classList.contains('close-icon') || e.target.classList.contains('prof-close')) {
-        const el = document.getElementById('modal-backdrop');
-        el.classList.remove('visible');
-        setTimeout(() => el.style.display = 'none', 300);
-    }
-};
-
-window.closeProfileModal = (event) => {
-    // Profile is now loaded in the main modal, just close it
-    if (!event || event.target.id === 'modal-backdrop' || event.target.classList.contains('close-icon')) {
-        const el = document.getElementById('modal-backdrop');
-        el.classList.remove('visible');
-        setTimeout(() => el.style.display = 'none', 300);
-    }
-};
 
 function centerCamera() {
     const screenCX = state.pixi.screen.width / 2;
@@ -3074,312 +2428,6 @@ window.hideHelp = (event) => {
     }
 };
 
-// =========================================================================
-// 9. SEARCH FUNCTIONALITY
-// =========================================================================
-
-// Global search state
-let searchResults = [];
-let currentSearchTerm = '';
-
-// Perform search across all blocks
-window.performSearch = function() {
-    const searchInput = document.getElementById('search-input');
-    const searchTerm = searchInput.value.trim().toLowerCase();
-    
-    if (!searchTerm) {
-        hideSearchResults();
-        return;
-    }
-    
-    currentSearchTerm = searchTerm;
-    searchResults = [];
-    
-    // Search through all blocks
-    for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
-        const block = state.blocks[i];
-        if (block && block.data && block.sold) {
-            const matches = searchInBlock(block, searchTerm);
-            if (matches.length > 0) {
-                searchResults.push({
-                    blockId: i,
-                    block: block,
-                    matches: matches
-                });
-            }
-        }
-    }
-    
-    displaySearchResults();
-};
-
-// Search within a single block for matches
-function searchInBlock(block, searchTerm) {
-    const matches = [];
-    const data = block.data;
-    
-    // Search in owner name
-    if (data.owner_name) {
-        const nameMatch = findTextMatches(data.owner_name, searchTerm);
-        if (nameMatch.length > 0) {
-            matches.push({ type: 'name', text: data.owner_name, highlights: nameMatch });
-        }
-    }
-    
-    // Search in owner text (engraved text)
-    if (data.owner_text) {
-        const textMatch = findTextMatches(data.owner_text, searchTerm);
-        if (textMatch.length > 0) {
-            matches.push({ type: 'text', text: data.owner_text, highlights: textMatch });
-        }
-    }
-    
-    // Search in message
-    if (data.message) {
-        const messageMatch = findTextMatches(data.message, searchTerm);
-        if (messageMatch.length > 0) {
-            matches.push({ type: 'message', text: data.message, highlights: messageMatch });
-        }
-    }
-    
-    // Search in price (new functionality)
-    if (block.price !== undefined && block.price !== null) {
-        const priceText = `₹${block.price}`;
-        const priceIntegerText = `₹${block.price}`;
-        const priceNumberText = block.price.toString();
-        
-        // Check for exact price match (e.g., "50" matches ₹50)
-        if (searchTerm === priceNumberText || searchTerm === priceIntegerText.substring(1)) {
-            matches.push({ 
-                type: 'price', 
-                text: priceText, 
-                highlights: [{ start: 0, end: priceText.length }] 
-            });
-        }
-        // Check for price text match (e.g., "$5" matches $5.00)
-        else {
-            const priceMatch = findTextMatches(priceText, searchTerm);
-            if (priceMatch.length > 0) {
-                matches.push({ type: 'price', text: priceText, highlights: priceMatch });
-            }
-        }
-    }
-    
-    return matches;
-}
-
-// Find all occurrences of search term in text
-function findTextMatches(text, searchTerm) {
-    const matches = [];
-    const lowerText = text.toLowerCase();
-    let index = 0;
-    
-    while ((index = lowerText.indexOf(searchTerm, index)) !== -1) {
-        matches.push({
-            start: index,
-            end: index + searchTerm.length
-        });
-        index += searchTerm.length;
-    }
-    
-    return matches;
-}
-
-// Display search results
-function displaySearchResults() {
-    const resultsContainer = document.getElementById('search-results');
-    
-    if (searchResults.length === 0) {
-        resultsContainer.innerHTML = `
-            <div class="search-no-results">
-                No canvases found containing "${escapeHtml(currentSearchTerm)}"
-            </div>
-        `;
-    } else {
-        const resultsHtml = searchResults.map(result => {
-            const blockId = result.blockId;
-            const block = result.block;
-            const matches = result.matches;
-            
-            // Get the best match for display
-            const bestMatch = matches[0];
-            const highlightedText = highlightSearchTerm(bestMatch.text, bestMatch.highlights);
-            
-            return `
-                <div class="search-result-item" onclick="navigateToBlock(${blockId})">
-                    <div class="search-result-block">#${blockId}</div>
-                    <div class="search-result-text">
-                        <div class="search-result-name">${escapeHtml(block.data.owner_name || 'Anonymous')}</div>
-                        <div class="search-result-message">${highlightedText}</div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        
-        resultsContainer.innerHTML = resultsHtml;
-    }
-    
-    resultsContainer.classList.add('show');
-}
-
-// Highlight search term in text
-function highlightSearchTerm(text, highlights) {
-    if (!highlights || highlights.length === 0) return escapeHtml(text);
-    
-    let result = '';
-    let lastIndex = 0;
-    
-    highlights.forEach(highlight => {
-        result += escapeHtml(text.substring(lastIndex, highlight.start));
-        result += `<span class="search-highlight">${escapeHtml(text.substring(highlight.start, highlight.end))}</span>`;
-        lastIndex = highlight.end;
-    });
-    
-    result += escapeHtml(text.substring(lastIndex));
-    return result;
-}
-
-// Navigate to a specific block with smooth animation
-window.navigateToBlock = function(blockId) {
-    const block = state.blocks[blockId];
-    if (!block) return;
-    
-    // Calculate block position
-    const blockX = block.sprite.x;
-    const blockY = block.sprite.y;
-    
-    // Center camera on block with zoom
-    const screenCX = state.pixi.screen.width / 2;
-    const screenCY = state.pixi.screen.height / 2;
-    
-    // Calculate target zoom and position
-    const targetZoom = 2.5;
-    const targetX = screenCX - (blockX * targetZoom);
-    const targetY = screenCY - (blockY * targetZoom);
-    
-    // Smooth animation to target
-    animateCameraTo(targetX, targetY, targetZoom, () => {
-        // Animation complete callback
-        hideSearchResults();
-        document.getElementById('search-input').value = '';
-        highlightBlock(blockId);
-    });
-};
-
-// Smooth camera animation function
-function animateCameraTo(targetX, targetY, targetZoom, callback) {
-    const duration = 1500; // 1.5 seconds
-    const startTime = Date.now();
-    const startX = state.target.x;
-    const startY = state.target.y;
-    const startZoom = state.target.zoom;
-    
-    function animate() {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // Easing function for smooth animation (ease-in-out)
-        const easeProgress = progress < 0.5 
-            ? 2 * progress * progress 
-            : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-        
-        // Update target position with easing
-        state.target.x = startX + (targetX - startX) * easeProgress;
-        state.target.y = startY + (targetY - startY) * easeProgress;
-        state.target.zoom = startZoom + (targetZoom - startZoom) * easeProgress;
-        
-        // Smooth camera follow
-        const followSpeed = 0.1;
-        state.cam.x += (state.target.x - state.cam.x) * followSpeed;
-        state.cam.y += (state.target.y - state.cam.y) * followSpeed;
-        state.cam.zoom += (state.target.zoom - state.cam.zoom) * followSpeed;
-        
-        if (progress < 1) {
-            requestAnimationFrame(animate);
-        } else {
-            // Animation complete
-            state.cam.x = state.target.x;
-            state.cam.y = state.target.y;
-            state.cam.zoom = state.target.zoom;
-            
-            if (callback) callback();
-        }
-    }
-    
-    animate();
-}
-
-// Enhanced block highlight with pulse effect
-function highlightBlock(blockId) {
-    const block = state.blocks[blockId];
-    if (!block || !block.sprite) return;
-    
-    const originalTint = block.sprite.tint;
-    const originalScale = block.sprite.scale.x;
-    
-    // Create pulsing highlight effect
-    let pulseCount = 0;
-    const maxPulses = 3;
-    
-    function pulse() {
-        if (pulseCount >= maxPulses) {
-            // Reset to original state
-            block.sprite.tint = originalTint;
-            block.sprite.scale.set(originalScale);
-            return;
-        }
-        
-        const isExpanding = pulseCount % 2 === 0;
-        const targetScale = isExpanding ? originalScale * 1.3 : originalScale;
-        const targetTint = isExpanding ? 0xFFFFFF : originalTint;
-        
-        // Smooth transition to target state
-        const duration = 300;
-        const startTime = Date.now();
-        const startScale = block.sprite.scale.x;
-        const startTint = block.sprite.tint;
-        
-        function animatePulse() {
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease-out cubic
-            
-            block.sprite.scale.set(startScale + (targetScale - startScale) * easeProgress);
-            
-            // Interpolate color (simplified - just switch between white and original)
-            if (progress >= 1) {
-                block.sprite.tint = targetTint;
-                
-                if (isExpanding) {
-                    // Start contracting
-                    setTimeout(() => {
-                        pulseCount++;
-                        pulse();
-                    }, 100);
-                } else {
-                    // Pulse complete, move to next
-                    pulseCount++;
-                    pulse();
-                }
-            } else {
-                requestAnimationFrame(animatePulse);
-            }
-        }
-        
-        animatePulse();
-    }
-    
-    pulse();
-}
-
-// Hide search results
-function hideSearchResults() {
-    const resultsContainer = document.getElementById('search-results');
-    resultsContainer.classList.remove('show');
-    searchResults = [];
-    currentSearchTerm = '';
-}
-
 // Extract YouTube video ID from various YouTube URL formats
 function getYouTubeVideoId(url) {
     if (!url) return null;
@@ -3405,108 +2453,6 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
-
-// Add keyboard support for search
-document.addEventListener('DOMContentLoaded', function() {
-    const searchInput = document.getElementById('search-input');
-    const resultsContainer = document.getElementById('search-results');
-    
-    // Real-time search as user types
-    searchInput.addEventListener('input', function(e) {
-        const searchTerm = e.target.value.trim();
-        if (searchTerm.length >= 1) {
-            performSearch();
-        } else {
-            hideSearchResults();
-        }
-    });
-    
-    // Search on Enter key (optional, for accessibility)
-    searchInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            performSearch();
-        }
-    });
-    
-    // Hide results on Escape key
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            hideSearchResults();
-            searchInput.value = '';
-            searchInput.blur();
-        }
-    });
-    
-    // Hide results when clicking outside
-    document.addEventListener('click', function(e) {
-        const searchContainer = document.querySelector('.search-container');
-        
-        // Check if click is on a search result item
-        if (e.target.closest('.search-result-item')) {
-            e.stopPropagation();
-            return; // Don't hide results, let the click handler work
-        }
-        
-        // Hide results if clicking outside search area
-        if (!searchContainer.contains(e.target) && !resultsContainer.contains(e.target)) {
-            hideSearchResults();
-        }
-    });
-    
-    // Add click event delegation for search results with better handling
-    resultsContainer.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const resultItem = e.target.closest('.search-result-item');
-        if (resultItem) {
-            // Extract block ID from multiple possible sources
-            let blockId = null;
-            
-            // Try onclick attribute first
-            const onclickAttr = resultItem.getAttribute('onclick');
-            if (onclickAttr) {
-                const match = onclickAttr.match(/navigateToBlock\((\d+)\)/);
-                if (match) {
-                    blockId = parseInt(match[1]);
-                }
-            }
-            
-            // Fallback: try data attribute if available
-            if (!blockId) {
-                const dataBlockId = resultItem.getAttribute('data-block-id');
-                if (dataBlockId) {
-                    blockId = parseInt(dataBlockId);
-                }
-            }
-            
-            // Fallback: try to extract from text content
-            if (!blockId) {
-                const blockText = resultItem.querySelector('.search-result-block');
-                if (blockText) {
-                    const textMatch = blockText.textContent.match(/#(\d+)/);
-                    if (textMatch) {
-                        blockId = parseInt(textMatch[1]);
-                    }
-                }
-            }
-            
-            if (blockId) {
-                console.log('Navigating to block:', blockId);
-                navigateToBlock(blockId);
-            } else {
-                console.error('Could not extract block ID from result item');
-            }
-        }
-    });
-    
-    // Prevent scroll events from bubbling to background
-    resultsContainer.addEventListener('wheel', function(e) {
-        e.stopPropagation();
-    }, { passive: false });
-    
-    resultsContainer.addEventListener('touchmove', function(e) {
-        e.stopPropagation();
-    }, { passive: false });
-});
 
 let resizeDebounceTimer = null;
 window.addEventListener('resize', () => {
