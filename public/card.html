@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insta Card — Presentation</title>
+    <meta name="description" content="Insta Card Profile Presentation">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600;1,700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; }
+        body {
+            background: #060917;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        /* ── Aurora Background ─────────────────── */
+        .aurora-bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; }
+        .aurora-blob { position: absolute; border-radius: 50%; filter: blur(90px); will-change: transform; }
+        .aurora-blob:nth-child(1) {
+            width: 700px; height: 700px;
+            background: radial-gradient(circle, rgba(108,58,255,.5), transparent 70%);
+            top: -250px; left: -200px;
+            animation: blob1 12s ease-in-out infinite;
+        }
+        .aurora-blob:nth-child(2) {
+            width: 550px; height: 550px;
+            background: radial-gradient(circle, rgba(220,39,67,.45), transparent 70%);
+            top: -100px; right: -150px;
+            animation: blob2 10s ease-in-out infinite;
+        }
+        .aurora-blob:nth-child(3) {
+            width: 500px; height: 500px;
+            background: radial-gradient(circle, rgba(244,162,97,.35), transparent 70%);
+            bottom: -200px; left: 30%;
+            animation: blob3 14s ease-in-out infinite;
+        }
+        .aurora-blob:nth-child(4) {
+            width: 400px; height: 400px;
+            background: radial-gradient(circle, rgba(30,215,96,.18), transparent 70%);
+            bottom: -100px; right: -50px;
+            animation: blob1 11s ease-in-out infinite reverse;
+        }
+        @keyframes blob1 {
+            0%,100%{ transform: translate(0,0) scale(1); }
+            40%    { transform: translate(60px,-50px) scale(1.08); }
+            70%    { transform: translate(-30px,40px) scale(.95); }
+        }
+        @keyframes blob2 {
+            0%,100%{ transform: translate(0,0) scale(1); }
+            35%    { transform: translate(-50px,60px) scale(1.1); }
+            70%    { transform: translate(40px,-30px) scale(.92); }
+        }
+        @keyframes blob3 {
+            0%,100%{ transform: translate(0,0) scale(1); }
+            40%    { transform: translate(-60px,-40px) scale(1.06); }
+            75%    { transform: translate(50px,30px) scale(.97); }
+        }
+
+        /* ── Particles ─────────────────────────── */
+        #ptcl { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+
+        /* ── Back btn ──────────────────────────── */
+        .back-btn {
+            position: fixed; top: 24px; left: 28px; z-index: 100;
+            color: rgba(255,255,255,.7); text-decoration: none;
+            font-size: .88rem; font-weight: 500;
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 18px;
+            background: rgba(255,255,255,.07);
+            border: 1px solid rgba(255,255,255,.12);
+            border-radius: 100px; backdrop-filter: blur(14px);
+            transition: all .3s ease;
+        }
+        .back-btn:hover { background: rgba(255,255,255,.14); color: #fff; transform: translateX(-4px); }
+
+        /* ── Stage ─────────────────────────────── */
+        .card-stage {
+            position: relative; z-index: 10;
+            display: flex; flex-direction: column; align-items: center; gap: 20px;
+            opacity: 0; transform: translateY(70px) scale(.88);
+            animation: entrance .9s cubic-bezier(.34,1.56,.64,1) .35s forwards;
+            max-width: 560px; width: 92vw; padding: 0 12px;
+        }
+        @keyframes entrance { to { opacity: 1; transform: translateY(0) scale(1); } }
+
+        /* ── Avatar Ring ───────────────────────── */
+        .cp-avatar-wrap {
+            position: relative; width: 148px; height: 148px; flex-shrink: 0;
+        }
+        .cp-avatar-wrap::before {
+            content: ''; position: absolute; inset: -4px; border-radius: 50%;
+            background: conic-gradient(#833ab4, #dc2743, #fcb045, #833ab4);
+            animation: spin 3.5s linear infinite; z-index: -1;
+        }
+        .cp-avatar-wrap::after {
+            content: ''; position: absolute; inset: -18px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(220,39,67,.35), transparent 70%);
+            filter: blur(16px); z-index: -2;
+            animation: glowPulse 2.5s ease-in-out infinite;
+        }
+        @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+        @keyframes glowPulse {
+            0%,100%{ opacity: .6; transform: scale(1); }
+            50%    { opacity: 1;  transform: scale(1.1); }
+        }
+        .cp-avatar {
+            width: 100%; height: 100%; border-radius: 50%;
+            object-fit: cover; object-position: top center;
+            border: 4px solid #060917; display: block;
+        }
+
+        /* ── Name ──────────────────────────────── */
+        .cp-name {
+            font-size: 2rem; font-weight: 900; color: #fff;
+            letter-spacing: -.5px; text-align: center;
+            animation: nameGlow 3s ease-in-out infinite;
+        }
+        @keyframes nameGlow {
+            0%,100%{ text-shadow: 0 0 30px rgba(220,39,67,.4); }
+            50%    { text-shadow: 0 0 60px rgba(220,39,67,.8), 0 0 80px rgba(131,58,180,.4); }
+        }
+
+        /* ── Platform pill ─────────────────────── */
+        .cp-pill {
+            display: inline-flex; align-items: center; gap: 7px;
+            padding: 5px 16px; border-radius: 100px;
+            font-size: .72rem; font-weight: 700; letter-spacing: 1.2px;
+            text-transform: uppercase; color: #fff;
+            margin-top: -8px; box-shadow: 0 4px 14px rgba(0,0,0,.3);
+        }
+        .cp-pill.youtube  { background: #ff0000; }
+        .cp-pill.instagram{ background: linear-gradient(90deg,#833ab4,#dc2743,#fcb045); }
+
+        /* ── Message Block ─────────────────────── */
+        .cp-msg-block {
+            width: 100%; position: relative;
+            padding: 22px 28px 22px 38px;
+            background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.09);
+            border-left: 4px solid #dc2743;
+            border-radius: 16px; backdrop-filter: blur(16px); overflow: hidden;
+        }
+        .cp-msg-block::before {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(135deg,rgba(131,58,180,.07),rgba(220,39,67,.05),transparent);
+            pointer-events: none;
+        }
+        .cp-quote {
+            position: absolute; top: 4px; left: 14px;
+            font-size: 3.5rem; line-height: 1;
+            color: rgba(220,39,67,.22);
+            font-family: Georgia, serif; user-select: none;
+        }
+        .cp-msg {
+            font-size: 1.05rem; font-weight: 500; font-style: italic;
+            color: rgba(255,255,255,.88); line-height: 1.65; position: relative; z-index: 1;
+        }
+
+        /* ── Price ─────────────────────────────── */
+        .cp-price {
+            font-size: .8rem; font-weight: 600;
+            color: rgba(255,255,255,.38);
+            letter-spacing: 2px; text-transform: uppercase;
+        }
+
+        /* ── Play Button ───────────────────────── */
+        .cp-play-btn {
+            display: flex; align-items: center; gap: 12px;
+            padding: 15px 40px; font-size: .95rem; font-weight: 800; color: #fff;
+            background: linear-gradient(135deg,#833ab4 0%,#dc2743 60%,#fcb045 100%);
+            border: none; border-radius: 100px; cursor: pointer;
+            letter-spacing: .5px;
+            box-shadow: 0 8px 32px rgba(220,39,67,.45);
+            transition: all .35s cubic-bezier(.34,1.56,.64,1);
+            font-family: 'Inter', sans-serif; position: relative; overflow: hidden;
+        }
+        .cp-play-btn::before {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(135deg,rgba(255,255,255,.18),transparent);
+        }
+        .cp-play-btn:hover { transform: translateY(-5px) scale(1.06); box-shadow: 0 16px 44px rgba(220,39,67,.65); }
+        .cp-play-btn span { position: relative; }
+
+        /* ── Error ─────────────────────────────── */
+        .error-state { text-align: center; color: rgba(255,255,255,.55); }
+        .error-state .err-emoji { font-size: 3.5rem; margin-bottom: 14px; }
+        .error-state p { margin-bottom: 18px; }
+        .error-state a { color: #dc2743; text-decoration: none; font-weight: 600; }
+
+        /* ── Video Modal ───────────────────────── */
+        .video-modal {
+            position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0,0,0,.82);
+            display: none; align-items: center; justify-content: center;
+            backdrop-filter: blur(10px);
+        }
+        .video-modal.show { display: flex; }
+        .vmi {
+            position: relative; width: 90vw; max-width: 700px;
+            aspect-ratio: 16/9; border-radius: 22px; overflow: hidden;
+            background: #000; box-shadow: 0 30px 80px rgba(0,0,0,.6);
+        }
+        .vmi.vertical { max-width: 400px; height: 75vh; aspect-ratio: auto; }
+        .vmi iframe, .vmi video { width: 100%; height: 100%; border: none; }
+        .vmc {
+            position: absolute; top: -14px; right: -14px;
+            width: 34px; height: 34px; border-radius: 50%;
+            background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
+            color: #fff; font-size: .9rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 10; transition: all .2s;
+        }
+        .vmc:hover { background: rgba(255,255,255,.25); transform: scale(1.1); }
+    </style>
+</head>
+<body>
+
+    <div class="aurora-bg">
+        <div class="aurora-blob"></div>
+        <div class="aurora-blob"></div>
+        <div class="aurora-blob"></div>
+        <div class="aurora-blob"></div>
+    </div>
+
+    <canvas id="ptcl"></canvas>
+    <a href="/" class="back-btn">&#8592; Back to Gallery</a>
+
+    <div class="card-stage" id="stage"></div>
+
+    <div class="video-modal" id="vmodal" onclick="closeVid(event)">
+        <div class="vmi" id="vmi" onclick="event.stopPropagation()">
+            <button class="vmc" onclick="closeVid()">&#10005;</button>
+            <div id="vslot"></div>
+        </div>
+    </div>
+
+    <script>
+        /* ── 1. Decode card data ─────────── */
+        const params = new URLSearchParams(location.search);
+        let card = null;
+        try { if (params.get('data')) card = JSON.parse(atob(params.get('data'))); } catch(e){}
+
+        /* ── 2. Render ──────────────────── */
+        const stage = document.getElementById('stage');
+        if (card) {
+            const isYT     = /youtube\.com|youtu\.be/.test(card.reelLink);
+            const isShorts = card.reelLink.includes('/shorts/');
+            const emoji    = isYT ? '&#128308;' : '&#128248;';
+            const plabel   = isYT ? (isShorts ? 'YouTube Shorts' : 'YouTube') : 'Instagram';
+            const pcls     = isYT ? 'youtube' : 'instagram';
+            document.title = '@' + card.name + ' — Insta Card';
+            stage.innerHTML = `
+                <div class="cp-avatar-wrap">
+                    <img class="cp-avatar" src="${card.profilePicture}"
+                         onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(card.name)}&size=200'">
+                </div>
+                <h1 class="cp-name">@${card.name}</h1>
+                <span class="cp-pill ${pcls}">${emoji} ${plabel}</span>
+                <div class="cp-msg-block">
+                    <span class="cp-quote">&#8220;</span>
+                    <p class="cp-msg">${card.message}&#8221;</p>
+                </div>
+                <div class="cp-price">Purchased for &#8377; ${Number(card.price).toLocaleString('en-IN')}</div>
+                <button class="cp-play-btn" onclick="openVid()">
+                    <span>&#9654;</span><span>Play Video</span>
+                </button>`;
+        } else {
+            stage.innerHTML = `
+                <div class="error-state">
+                    <div class="err-emoji">&#128532;</div>
+                    <p>Card not found or link is invalid.</p>
+                    <a href="/">&#8592; Back to Gallery</a>
+                </div>`;
+        }
+
+        /* ── 3. YouTube ID ──────────────── */
+        function ytId(url) {
+            const pats = [/[?&]v=([^&#]+)/,/youtu\.be\/([^?&#]+)/,/\/shorts\/([^?&#]+)/,/\/embed\/([^?&#]+)/];
+            for (const p of pats){ const m=url.match(p); if(m) return m[1]; }
+            return null;
+        }
+
+        /* ── 4. Video open / close ───────── */
+        function openVid() {
+            if (!card) return;
+            const vmi   = document.getElementById('vmi');
+            const vslot = document.getElementById('vslot');
+            const vid   = ytId(card.reelLink);
+            const shorts = card.reelLink.includes('/shorts/');
+            vmi.className = 'vmi'; vslot.innerHTML = '';
+            if (vid) {
+                if (shorts) vmi.classList.add('vertical');
+                vslot.innerHTML = `<iframe src="https://www.youtube.com/embed/${vid}?autoplay=1&rel=0"
+                    allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen></iframe>`;
+            } else {
+                vmi.classList.add('vertical');
+                const cu = card.reelLink.split('?')[0].replace(/\/?$/,'/');
+                vslot.innerHTML = `<blockquote class="instagram-media"
+                    data-instgrm-permalink="${cu}" data-instgrm-version="14"
+                    style="background:#FFF;border:0;margin:0;min-width:326px;width:100%;"></blockquote>`;
+                if (!document.getElementById('ig-s')) {
+                    const s=document.createElement('script'); s.id='ig-s';
+                    s.src='https://www.instagram.com/embed.js'; s.async=true;
+                    document.body.appendChild(s);
+                } else if (window.instgrm) window.instgrm.Embeds.process();
+            }
+            document.getElementById('vmodal').classList.add('show');
+        }
+        function closeVid(e) {
+            if (e && e.target !== e.currentTarget) return;
+            document.getElementById('vmodal').classList.remove('show');
+            document.getElementById('vslot').innerHTML='';
+        }
+
+        /* ── 5. Particles ────────────────── */
+        const cv  = document.getElementById('ptcl');
+        const cx  = cv.getContext('2d');
+        const rs  = () => { cv.width=innerWidth; cv.height=innerHeight; };
+        rs(); addEventListener('resize', rs);
+        const COLS = ['#833ab4','#dc2743','#fcb045','rgba(255,255,255,0.7)'];
+        const pts  = Array.from({length:90},()=>({
+            x:Math.random()*innerWidth, y:Math.random()*innerHeight,
+            r:Math.random()*1.8+.3,
+            vx:(Math.random()-.5)*.35, vy:-(Math.random()*.45+.15),
+            a:Math.random()*.55+.1,
+            c:COLS[Math.floor(Math.random()*COLS.length)]
+        }));
+        (function loop(){
+            cx.clearRect(0,0,cv.width,cv.height);
+            pts.forEach(p=>{
+                cx.save(); cx.globalAlpha=p.a; cx.fillStyle=p.c;
+                cx.beginPath(); cx.arc(p.x,p.y,p.r,0,Math.PI*2); cx.fill(); cx.restore();
+                p.x+=p.vx; p.y+=p.vy;
+                if(p.y<-10){p.y=cv.height+5;p.x=Math.random()*cv.width;}
+                if(p.x<0)p.x=cv.width; if(p.x>cv.width)p.x=0;
+            });
+            requestAnimationFrame(loop);
+        })();
+    </script>
+</body>
+</html>
