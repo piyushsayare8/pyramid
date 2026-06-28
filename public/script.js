@@ -1,2485 +1,620 @@
-// =========================================================================
-// 1. ENGINE CONFIGURATION & IMMORTAL CONSTANTS
-// =========================================================================
-const CONFIG = {
-    ROWS: 101,
-    BLOCK_SIZE: 40,
-    GAP: 2,
-    TOTAL_BLOCKS: 5151,
-    LOD_THRESHOLD: 0.35,
-    MOBILE_LOD_THRESHOLD: 1.001,
-    LOD_BATCH_SIZE: 250,
-    CHUNK_SIZE: 25,
-    MAX_ZOOM: 50.0,
-    MIN_ZOOM: 0.005,
-    FRICTION: 0.92, // Increased for smoother glide
-    COLOR_CHOICES: [
-        { name: 'Yellow', value: '#FFD700' },
-        { name: 'Red', value: '#FF6B6B' },
-        { name: 'Turquoise', value: '#4ECDC4' },
-        { name: 'Blue', value: '#45B7D1' },
-        { name: 'Green', value: '#96CEB4' },
-        { name: 'Amber', value: '#FECA57' },
-        { name: 'Purple', value: '#B983FF' },
-        { name: 'Pink', value: '#FD79A8' }
-    ],
-    COLORS: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#B983FF', '#FD79A8'],
-    API_BASE: '', // Empty for same-origin requests (frontend + API on same worker)
-    SLOTS_DATA_URL: 'https://pub-962497bf5b824ce986c4e28eb92fd400.r2.dev/data.json',
-    DATA_REFRESH_MS: 15000,
-    RETRY_ATTEMPTS: 3,
-    RETRY_DELAY: 1000,
-    MEDIA_QUEUE_UPDATE_MS: 400,
-    MAX_VISIBLE_MEDIA_PRELOAD: 96,
-    PHOTO_CACHE_LIMIT_DESKTOP: 96,
-    PHOTO_CACHE_LIMIT_MOBILE: 24,
-    VIDEO_CACHE_LIMIT_DESKTOP: 72,
-    VIDEO_CACHE_LIMIT_MOBILE: 18,
-    PHOTO_TEXTURE_SIZE_DESKTOP: 256,
-    PHOTO_TEXTURE_SIZE_MOBILE: 128,
-    VIDEO_TEXTURE_SIZE_DESKTOP: 384,
-    VIDEO_TEXTURE_SIZE_MOBILE: 160
-};
+// ========================================
+// INSTA CARDS — JAVASCRIPT v7.0
+// ========================================
 
-const PYRAMID_WIDTH = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
-const PYRAMID_HEIGHT = CONFIG.ROWS * CONFIG.BLOCK_SIZE;
+const DATA_VERSION = 7; // bump to force-clear old localStorage
 
-// =========================================================================
-// 2. STATE & DATA
-// =========================================================================
-const state = {
-    pixi: null,
-    previewApp: null,
-    previewBlock: null,
-    world: null,
-    chunks: [],
-    blocks: new Array(CONFIG.TOTAL_BLOCKS + 1),
-    
-    // --- IMMORTAL TEXT POOL ---
-    textPool: [],     // Dense array of text objects
-    
-    baseTextures: {},
-    cam: { x: 0, y: 0, zoom: 0.1 },
-    target: { x: 0, y: 0, zoom: 0.1 },
-    vel: { x: 0, y: 0 },
-    dragging: false,
-    dragStart: { x: 0, y: 0 },
-    dragOriginalStart: { x: 0, y: 0 },
-    hasMoved: false,
-    clickThreshold: 5,
-    hoverId: -1,
-    hoverRafId: 0,
-    pendingHoverPos: null,
-    selectedId: -1,
-    touches: [],
-    lastTouchDistance: 0,
-    lastTouchTapId: -1,
-    lastTouchTapTime: 0,
-    soldCount: 0,
-    soldBlockIds: new Set(),
-    simulating: false,
-    gridPriceMap: {},
-    slotRenderSignature: new Map(),
-    ui: {
-        salesCountEl: null,
-        salesProgressEl: null,
-        tooltipEl: null
+// ── Sample data ───────────────────────────────────────────────────────────────
+const sampleData = [
+    {
+        id: 1,
+        name: "Creative Artist",
+        profilePicture: "assets/profiles/5000.jpg",
+        message: "Creating amazing content daily! Follow for more inspiration and creative adventures across all platforms",
+        reelLink: "https://www.instagram.com/reel/DZ4f05ATGsf/",
+        price: 5000,
+        likes: 0
     },
-    isMobileDevice: false,
-    viewMode: 'video',
-    photoTextureCache: new Map(),
-    videoTextureCache: new Map(),
-    photoTextureRefCounts: new Map(),
-    videoTextureRefCounts: new Map(),
-    photoCacheOrder: [],
-    videoCacheOrder: [],
-    photoPrepInProgress: false,
-    photoPrepTimer: null,
-    photoPrepCountdown: 0,
-    maxVisibleMediaPreload: CONFIG.MAX_VISIBLE_MEDIA_PRELOAD,
-    photoLoadQueue: [],
-    videoLoadQueue: [],
-    photoQueuePumpTimer: null,
-    videoQueuePumpTimer: null,
-    activePhotoLoads: 0,
-    activeVideoLoads: 0,
-    maxConcurrentPhotoLoads: 3,
-    maxConcurrentVideoLoads: 2,
-    photoTextureCacheLimit: CONFIG.PHOTO_CACHE_LIMIT_DESKTOP,
-    videoTextureCacheLimit: CONFIG.VIDEO_CACHE_LIMIT_DESKTOP,
-    dataRefreshTimer: null,
-    dataRefreshInFlight: false,
-    activeGridVideo: null,
-    lastVideoCamSnapshot: null,
-    activeVideoMarker: null,
-    lastMediaQueueTick: 0,
-    simulatedSlots: new Map(),
-
-    // LOD State
-    lodVisible: false,
-    lodQueueIndex: 0,
-    lodBatchSize: CONFIG.LOD_BATCH_SIZE
-};
-
-function setInitialViewModeRandomly() {
-    state.viewMode = 'video';
-}
-
-// Form data removed - no purchase modal needed
-
-// =========================================================================
-// 3. API INTEGRATION LAYER
-// =========================================================================
-async function apiCall(endpoint, options = {}) {
-    const maxRetries = 3;
-    const baseDelay = 1000;
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const response = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
-                ...options,
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...options.headers
-                }
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            return await response.json();
-            
-        } catch (error) {
-            console.warn(`API call attempt ${attempt} failed:`, error);
-            
-            // If this is the last attempt, throw the error
-            if (attempt === maxRetries) {
-                throw error;
-            }
-            
-            // Wait before retrying (exponential backoff)
-            const delay = baseDelay * Math.pow(2, attempt - 1);
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
+    {
+        id: 2,
+        name: "Tech Influencer",
+        profilePicture: "assets/profiles/1000.jpg",
+        message: "Latest tech reviews and tutorials and many more things as we go on and we will do our best to get anything so keep trying you have great future okay.",
+        reelLink: "https://www.instagram.com/reel/DYK1M4tTxeS/?igsh=cmtpd3Q1cWRkMzc3",
+        price: 3500,
+        likes: 0
+    },
+    {
+        id: 3,
+        name: "Food Blogger",
+        profilePicture: "assets/profiles/500.jpg",
+        message: "Delicious recipes from around the world",
+        reelLink: "https://www.instagram.com/reel/DWgxI5nic5P/?igsh=MTdhNmFvbHJwdmc1dw==",
+        price: 2500,
+        likes: 0
+    },
+    {
+        id: 4,
+        name: "Music Curator",
+        profilePicture: "assets/profiles/200.jpg",
+        message: "Listen to the top trending music hits of the week",
+        reelLink: "https://www.youtube.com/watch?v=a18py61_F_w&list=RDa18py61_F_w&start_radio=1",
+        price: 6500,
+        likes: 0
+    },
+    {
+        id: 5,
+        name: "Shorts Creator",
+        profilePicture: "assets/profiles/100.jpg",
+        message: "Mind-bending daily coding animations",
+        reelLink: "https://www.youtube.com/shorts/Ae-5-2yXOu4",
+        price: 1500,
+        likes: 0
     }
-};
+];
 
-// Load local purchases from localStorage (disabled - using only JSON data)
-function loadLocalPurchases() {
-    // Disabled - keeping only JSON data
-    console.log('Local purchases loading disabled - using R2 slot data source');
-    return;
-    
-    // Original code preserved for reference:
-    // try {
-    //     const localPurchases = JSON.parse(localStorage.getItem('pyramidPurchases') || '[]');
-    //     localPurchases.forEach(purchase => {
-    //         if (purchase.block_id && state.blocks[purchase.block_id] && !state.blocks[purchase.block_id].sold) {
-    //             updateBlock(purchase.block_id, purchase);
-    //         }
-    //     });
-    //     console.log(`Loaded ${localPurchases.length} local purchases`);
-    // } catch (error) {
-    //     console.error('Failed to load local purchases:', error);
-    // }
+// ── State ─────────────────────────────────────────────────────────────────────
+let leaderboardData = [];
+let currentSort = 'price';
+let currentTab = 'youtube';
+let searchQuery = '';
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+function init() {
+    loadLocalData();
+    renderInstaCards();
+    updateSearchClearBtn();
+
+    // Collapse any open read-more when clicking outside cards
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('.reel-thumbnail-card, .yt-video-card')) {
+            collapseAllReadMore();
+        }
+    });
 }
 
-// Static data loader - replaces API calls
-function getSlotRenderSignature(data) {
-    if (!data || !data.sold) return '0';
-
-    const imageUrl = typeof data.image_url === 'string' ? data.image_url.trim() : '';
-    const youtubeUrl = typeof data.youtube_url === 'string' ? data.youtube_url.trim() : '';
-    const linkUrl = typeof data.link_url === 'string' ? data.link_url.trim() : '';
-    const textColor = '#FFFFFF';
-
-    return [
-        '1',
-        data.owner_name || 'Anonymous',
-        sanitizeBlockColor(data.owner_color || '#FFD700'),
-        data.owner_text || '',
-        textColor,
-        data.message || '',
-        imageUrl,
-        youtubeUrl,
-        linkUrl,
-        data.link_description || ''
-    ].join('|');
-}
-
-async function loadStaticData(options = {}) {
-    const silent = !!options.silent;
-    if (state.dataRefreshInFlight) return;
-
-    state.dataRefreshInFlight = true;
+// ── Data persistence ──────────────────────────────────────────────────────────
+function loadLocalData() {
     try {
-        if (!silent) {
-            showLoading('Loading pyramid data...');
-        }
+        const storedVersion = parseInt(localStorage.getItem('instagramLeaderboardVersion') || '0');
 
-        const cacheBustUrl = `${CONFIG.SLOTS_DATA_URL}${CONFIG.SLOTS_DATA_URL.includes('?') ? '&' : '?'}_ts=${Date.now()}`;
-        const response = await fetch(cacheBustUrl, { cache: 'no-store' });
-        if (!response.ok) {
-            throw new Error('Failed to load slots data');
-        }
-
-        const slotsData = await response.json();
-
-        // Optional pricing/payment map keyed by slot id (as string)
-        let gridPriceData = {};
-        try {
-            const gridPriceResponse = await fetch('./grid_price.json');
-            if (gridPriceResponse.ok) {
-                gridPriceData = await gridPriceResponse.json();
-            } else {
-                console.warn('grid_price.json not found; Buy Now links will be unavailable for unmapped slots.');
-            }
-        } catch (gridPriceError) {
-            console.warn('Failed to load grid_price.json:', gridPriceError);
-        }
-
-        state.gridPriceMap = gridPriceData || {};
-        if (!silent) {
-            hideLoading();
-        }
-
-        let hasBlockChanges = false;
-        
-        // Process all slots with unique IDs
-        for (let slotId = 1; slotId <= CONFIG.TOTAL_BLOCKS; slotId++) {
-            const slotData = slotsData[String(slotId)] || slotsData[slotId];
-            const gridData = state.gridPriceMap[String(slotId)] || null;
-            const simulatedSlotData = state.simulatedSlots.get(slotId);
-
-            if (state.blocks[slotId]) {
-                // Always keep deterministic pricing: slot id * Rs10.
-                // External JSON price fields are ignored to prevent accidental increment drift.
-                state.blocks[slotId].price = slotId * 10;
-
-                // Slot-specific payment link now comes only from grid_price.json
-                if (gridData && typeof gridData.payment_link === 'string' && gridData.payment_link.trim()) {
-                    state.blocks[slotId].payment_link = gridData.payment_link.trim();
-                } else {
-                    delete state.blocks[slotId].payment_link;
-                }
-            }
-
-            let nextData = null;
-            if (slotData && slotData.sold) {
-                nextData = {
-                    sold: true,
-                    owner_name: slotData.owner_name || 'Anonymous',
-                    owner_color: slotData.owner_color || '#FFD700',
-                    owner_text: slotData.owner_text || '',
-                    owner_text_color: '#FFFFFF',
-                    message: slotData.message || '',
-                    image_url: slotData.image_url || '',
-                    link_url: slotData.link_url || '',
-                    link_description: slotData.link_description || '',
-                    youtube_url: slotData.youtube_url || ''
-                };
-                if (simulatedSlotData) {
-                    state.simulatedSlots.delete(slotId);
-                }
-            } else if (simulatedSlotData) {
-                // Keep local simulation tiles stable during live refresh cycles.
-                nextData = { ...simulatedSlotData };
-            } else {
-                nextData = { sold: false };
-            }
-
-            const nextSignature = getSlotRenderSignature(nextData);
-            if (state.slotRenderSignature.get(slotId) !== nextSignature) {
-                updateBlock(slotId, nextData, { skipSalesCounter: true });
-                hasBlockChanges = true;
-            }
-        }
-        
-        if (hasBlockChanges) {
-            updateSalesCounter();
-        }
-        if (!silent) {
-            console.log('Static data loaded successfully');
-        }
-        
-    } catch (error) {
-        if (!silent) {
-            hideLoading();
-        }
-        console.error('Failed to load static data:', error);
-        if (!silent) {
-            showError('Failed to load pyramid data. Please refresh.');
-        }
-    } finally {
-        state.dataRefreshInFlight = false;
-    }
-}
-
-function startAutoDataRefresh() {
-    if (state.dataRefreshTimer) return;
-    state.dataRefreshTimer = setInterval(() => {
-        if (document.hidden) return;
-        loadStaticData({ silent: true });
-    }, CONFIG.DATA_REFRESH_MS);
-}
-
-async function loadGridData() {
-    try {
-        // Show initial loading state
-        showLoading('Loading pyramid data...');
-        
-        // Add timeout to prevent hanging
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-        
-        const data = await apiCall('/api/grid', {
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        hideLoading();
-        
-        if (!data || !data.slots) {
-            console.warn('No slots data received');
+        // If version mismatch, wipe old data and start fresh
+        if (storedVersion !== DATA_VERSION) {
+            localStorage.removeItem('instagramLeaderboardData');
+            localStorage.removeItem('likedCards');
+            localStorage.removeItem('viewedCards');
+            localStorage.setItem('instagramLeaderboardVersion', String(DATA_VERSION));
+            leaderboardData = [...sampleData];
+            saveLocalData();
             return;
         }
-        
-        // Process slots in batches to prevent UI freezing
-        const BATCH_SIZE = 50;
-        const soldSlots = data.slots.filter(slot => slot.status === 'sold');
-        
-        // Update loading progress
-        showLoading(`Loading ${soldSlots.length} profiles...`);
-        
-        // Process in chunks with small delays to keep UI responsive
-        for (let i = 0; i < soldSlots.length; i += BATCH_SIZE) {
-            const batch = soldSlots.slice(i, i + BATCH_SIZE);
-            
-            // Process batch synchronously to prevent race conditions
-            batch.forEach(slot => {
-                try {
-                    updateBlock(slot.slot_number, {
-                        owner_name: slot.owner_name || 'Anonymous',
-                        owner_color: slot.owner_color || '#FFD700',
-                        owner_text: slot.owner_text || '',
-                        message: slot.owner_message || '',
-                        image_url: slot.image_url || '',
-                        link_url: slot.link_url || '',
-                        link_description: slot.link_description || ''
-                    }, { skipSalesCounter: true });
-                } catch (blockError) {
-                    console.warn(`Failed to load block ${slot.slot_number}:`, blockError);
-                    // Continue processing other blocks
-                }
+
+        const stored = localStorage.getItem('instagramLeaderboardData');
+        if (stored) {
+            leaderboardData = JSON.parse(stored);
+            // Migrate: ensure required fields exist
+            leaderboardData.forEach(item => {
+                if (!item.likes) item.likes = 0;
+                if (!item.id) item.id = Date.now() + Math.random();
+                if (!item.reelLink) item.reelLink = '#';
+                if (!item.message) item.message = '';
+                if (!item.name) item.name = 'Unknown';
+                if (!item.price) item.price = 0;
             });
-
-            updateSalesCounter();
-            
-            // Small delay to allow UI to breathe
-            if (i + BATCH_SIZE < soldSlots.length) {
-                await new Promise(resolve => setTimeout(resolve, 10));
-                
-                // Update progress
-                const progress = Math.min(i + BATCH_SIZE, soldSlots.length);
-                showLoading(`Loaded ${progress}/${soldSlots.length} profiles...`);
-            }
-        }
-        
-        hideLoading();
-        console.log(`Successfully loaded ${soldSlots.length} profiles`);
-        
-    } catch (error) {
-        hideLoading();
-        
-        if (error.name === 'AbortError') {
-            console.error('Data loading timed out');
-            showError('Loading timed out. Please check your connection and refresh.');
+            saveLocalData();
         } else {
-            console.error('Failed to load grid data:', error);
-            showError('Failed to load pyramid data. Please refresh.');
+            leaderboardData = [...sampleData];
+            saveLocalData();
         }
-        
-        // Fallback: Try to load basic pyramid structure without profiles
+    } catch (e) {
+        console.warn('localStorage error, resetting data:', e);
+        leaderboardData = [...sampleData];
         try {
-            console.log('Attempting fallback load...');
-            await loadBasicPyramid();
-        } catch (fallbackError) {
-            console.error('Fallback load failed:', fallbackError);
-        }
+            localStorage.clear();
+            localStorage.setItem('instagramLeaderboardVersion', String(DATA_VERSION));
+            saveLocalData();
+        } catch (_) { /* storage may be blocked */ }
     }
 }
 
-function startRandomVideoOnLoad() {
-    const candidates = [];
-    for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
-        const block = state.blocks[i];
-        if (block && block.sold && hasYouTubeVideo(block)) {
-            candidates.push(block.id);
-        }
-    }
-
-    if (candidates.length === 0) return;
-
-    const randomIndex = Math.floor(Math.random() * candidates.length);
-    const blockId = candidates[randomIndex];
-    state.selectedId = blockId;
-    openGridVideoPlayer(blockId);
+function saveLocalData() {
+    try {
+        localStorage.setItem('instagramLeaderboardData', JSON.stringify(leaderboardData));
+    } catch (e) { console.warn('Could not save data:', e); }
 }
 
-async function loadBasicPyramid() {
-    showLoading('Loading basic pyramid...');
-    // Initialize pyramid without any sold blocks
-    hideLoading();
-    console.log('Basic pyramid loaded (profiles unavailable)');
-}
-
-// =========================================================================
-// 4. UI HELPERS
-// =========================================================================
-function showLoading(message) {
-    const loader = document.getElementById('loader');
-    if (loader) {
-        loader.querySelector('div:last-child').textContent = message;
-        loader.style.display = 'flex';
-        loader.style.opacity = '1';
+// ── Safe btoa for Unicode strings ─────────────────────────────────────────────
+function safeEncode(item) {
+    try {
+        // Use encodeURIComponent to handle Unicode, then btoa
+        const json = JSON.stringify(item);
+        const encoded = btoa(unescape(encodeURIComponent(json)));
+        return encodeURIComponent(encoded);
+    } catch (e) {
+        return '';
     }
 }
 
-function hideLoading() {
-    const loader = document.getElementById('loader');
-    if (loader) {
-        loader.style.opacity = '0';
-        setTimeout(() => loader.style.display = 'none', 500);
-    }
+// ── Viewed tracking ───────────────────────────────────────────────────────────
+function markViewed(itemId) {
+    try {
+        const key = 'viewedCards';
+        const set = new Set(JSON.parse(localStorage.getItem(key) || '[]'));
+        set.add(itemId);
+        localStorage.setItem(key, JSON.stringify([...set]));
+    } catch (e) { /* ignore */ }
 }
 
-function showInfo(message) {
-    hideLoading();
-    const infoDiv = document.createElement('div');
-    infoDiv.style.cssText = `
-        position: fixed; top: 20px; right: 20px; z-index: 1000;
-        background: linear-gradient(135deg, #4ECDC4, #45B7D1);
-        color: white; padding: 15px 25px; border-radius: 8px;
-        box-shadow: 0 4px 15px rgba(78, 205, 196, 0.3);
-        font-weight: 600; animation: slideIn 0.3s ease; max-width: 300px;
-    `;
-    infoDiv.textContent = message;
-    document.body.appendChild(infoDiv);
-    setTimeout(() => infoDiv.remove(), 4000);
+function isViewed(itemId) {
+    try {
+        return new Set(JSON.parse(localStorage.getItem('viewedCards') || '[]')).has(itemId);
+    } catch (e) { return false; }
 }
 
-function showError(message) {
-    hideLoading();
-    // Create a proper error notification instead of alert
-    const errorDiv = document.createElement('div');
-    errorDiv.style.cssText = `
-        position: fixed; top: 20px; right: 20px; z-index: 1001;
-        background: linear-gradient(135deg, #f44336, #d32f2f);
-        color: white; padding: 15px 25px; border-radius: 8px;
-        box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3);
-        font-weight: 600; animation: slideIn 0.3s ease; max-width: 300px;
-    `;
-    errorDiv.textContent = message;
-    document.body.appendChild(errorDiv);
-    setTimeout(() => errorDiv.remove(), 5000);
-}
-
-function showSuccess(message) {
-    hideLoading();
-    const successDiv = document.createElement('div');
-    successDiv.style.cssText = `
-        position: fixed; top: 20px; right: 20px; z-index: 1000;
-        background: linear-gradient(135deg, #4CAF50, #45a049);
-        color: white; padding: 15px 25px; border-radius: 8px;
-        box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
-        font-weight: 600; animation: slideIn 0.3s ease;
-    `;
-    successDiv.textContent = message;
-    document.body.appendChild(successDiv);
-    setTimeout(() => successDiv.remove(), 3000);
-}
-
-// =========================================================================
-// 3. ENGINE INITIALIZATION
-// =========================================================================
-async function init() {
-    state.isMobileDevice = window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
-    state.maxConcurrentPhotoLoads = state.isMobileDevice ? 1 : 3;
-    state.maxConcurrentVideoLoads = state.isMobileDevice ? 1 : 2;
-    state.maxVisibleMediaPreload = state.isMobileDevice ? 32 : CONFIG.MAX_VISIBLE_MEDIA_PRELOAD;
-    state.lodBatchSize = state.isMobileDevice ? 120 : CONFIG.LOD_BATCH_SIZE;
-    state.photoTextureCacheLimit = state.isMobileDevice ? CONFIG.PHOTO_CACHE_LIMIT_MOBILE : CONFIG.PHOTO_CACHE_LIMIT_DESKTOP;
-    state.videoTextureCacheLimit = state.isMobileDevice ? CONFIG.VIDEO_CACHE_LIMIT_MOBILE : CONFIG.VIDEO_CACHE_LIMIT_DESKTOP;
-    state.ui.salesCountEl = document.getElementById('sales-count');
-    state.ui.salesProgressEl = document.getElementById('sales-progress-bar');
-    state.ui.tooltipEl = document.getElementById('tooltip');
-
-    // Keep GPU memory stable on mobile to avoid WebGL context loss (white screen).
-    const pixelRatio = state.isMobileDevice
-        ? Math.min(window.devicePixelRatio || 1, 1.5)
-        : Math.min(window.devicePixelRatio || 1, 2);
-
-    state.pixi = new PIXI.Application();
-    await state.pixi.init({
-        resizeTo: window,
-        backgroundAlpha: 0,
-        resolution: pixelRatio,
-        autoDensity: true,
-        antialias: false,
-        powerPreference: 'high-performance'
-    });
-    document.getElementById('canvas-container').appendChild(state.pixi.canvas);
-
-    // Recover gracefully if GPU context is lost on low-memory mobile devices.
-    state.pixi.canvas.addEventListener('webglcontextlost', (event) => {
-        event.preventDefault();
-        showLoading('Graphics memory is being recovered...');
-    }, false);
-
-    state.pixi.canvas.addEventListener('webglcontextrestored', () => {
-        showInfo('Graphics recovered. Rebuilding scene...');
-        location.reload();
-    }, false);
-
-    PIXI.BitmapFont.install({
-        name: 'ImmortalFont',
-        style: { fontFamily: 'Arial', fontSize: 128, fontWeight: '900', fill: 'white', stroke: { color: 'black', width: 8 } }
-    });
-
-    createSharedTextures();
-
-    // Starfield removed for pitch-black background.
-    state.world = new PIXI.Container();
-    state.pixi.ticker.maxFPS = state.isMobileDevice ? 30 : 50;
-    
-    // --- IMMORTAL UPGRADE: Render Group for Pixi v8 ---
-    state.world.isRenderGroup = true;
-    
-    state.world.eventMode = 'none';
-    state.pixi.stage.addChild(state.world);
-    buildPyramid();
-
-    setupInput();
-    centerCamera(); 
-
-    await initPreviewApp();
-
-    state.pixi.ticker.add((ticker) => {
-        if (document.hidden) return;
-        updatePhysics(ticker.deltaTime);
-        cullWorld();
-        processLODQueue(); // Replaces the old updateLOD loop
-        updateGridVideoOverlayPosition();
-        updateDynamicMediaQueues();
-    });
-
-    setTimeout(() => document.getElementById('loader').style.opacity = '0', 500);
-    setTimeout(() => document.getElementById('loader').remove(), 1000);
-    
-    // Load static data from JSON file
-    await loadStaticData();
-
-    startRandomVideoOnLoad();
-    
-    // Load local purchases
-    loadLocalPurchases();
-
-    // Keep frontend synced with live R2 updates from Sheets.
-    startAutoDataRefresh();
-}
-
-async function initPreviewApp() {
-    state.previewApp = new PIXI.Application();
-    await state.previewApp.init({
-        width: 400,
-        height: 400,
-        backgroundAlpha: 0,
-        resolution: 2,
-        autoDensity: true
-    });
-    
-    const previewContainer = new PIXI.Container();
-    state.previewApp.stage.addChild(previewContainer);
-    
-    const g = new PIXI.Graphics()
-        .rect(0, 0, CONFIG.BLOCK_SIZE - CONFIG.GAP, CONFIG.BLOCK_SIZE - CONFIG.GAP)
-        .fill(0xFFFFFF);
-    
-    const texture = state.previewApp.renderer.generateTexture(g);
-    const sprite = new PIXI.Sprite(texture);
-    
-    const targetPreviewSize = 280; 
-    const scaleFactor = targetPreviewSize / (CONFIG.BLOCK_SIZE - CONFIG.GAP);
-    
-    sprite.anchor.set(0.5);
-    sprite.x = 200;
-    sprite.y = 200;
-    sprite.scale.set(scaleFactor);
-    sprite.tint = 0xFFD700;
-    
-    state.previewBlock = { 
-        container: previewContainer,
-        sprite: sprite, 
-        textRef: null, 
-        scaleFactor: scaleFactor 
-    };
-    
-    previewContainer.addChild(sprite);
-}
-
-function createSharedTextures() {
-    const make = (color, border) => {
-        const g = new PIXI.Graphics()
-            .rect(0, 0, CONFIG.BLOCK_SIZE - CONFIG.GAP, CONFIG.BLOCK_SIZE - CONFIG.GAP)
-            .fill(color);
-        return state.pixi.renderer.generateTexture(g);
-    };
-    state.baseTextures = {
-        gold: make(0x2a2a2a, 0xFFD700),
-        silver: make(0x2a2a2a, 0xFFD700),
-        std: make(0x2a2a2a, 0xFFD700),
-        sold: make(0xFFFFFF, 0xFFD700)
-    };
-}
-
-function createStarfield() {}
-function updateStarfield() {}
-
-function buildPyramid() {
-    state.soldCount = 0;
-    state.soldBlockIds.clear();
-    state.slotRenderSignature.clear();
-    let blockId = CONFIG.TOTAL_BLOCKS;
-    for (let row = 1; row <= CONFIG.ROWS; row++) {
-        if ((row - 1) % CONFIG.CHUNK_SIZE === 0) {
-            const chunk = new PIXI.Container();
-            chunk.yStart = (row - 1) * CONFIG.BLOCK_SIZE;
-            chunk.yEnd = chunk.yStart + (CONFIG.CHUNK_SIZE * CONFIG.BLOCK_SIZE);
-            chunk.visible = false;
-            chunk.textRefs = new Set();
-            chunk.blockIds = [];
-            state.chunks.push(chunk);
-            state.world.addChild(chunk);
-        }
-        
-        const chunk = state.chunks[state.chunks.length - 1];
-        const startX = -(row * CONFIG.BLOCK_SIZE) / 2;
-        const yPos = (row - 1) * CONFIG.BLOCK_SIZE;
-
-        for (let col = 0; col < row; col++) {
-            let price = blockId * 10;
-            let type = 'std';
-            if (blockId >= 4500) type = 'gold';
-            else if (row <= 60) type = 'silver';
-
-            const sprite = new PIXI.Sprite(state.baseTextures[type]);
-            sprite.x = startX + (col * CONFIG.BLOCK_SIZE);
-            sprite.y = yPos;
-            sprite.blockId = blockId;
-
-            state.blocks[blockId] = { 
-                id: blockId, 
-                price: price, 
-                tier: type, 
-                sold: false, 
-                sprite: sprite, 
-                photoRef: null,
-                videoRef: null,
-                borderRef: null,
-                photoUrl: '',
-                photoTextureKey: '',
-                photoReady: false,
-                photoQueued: false,
-                photoLoading: false,
-                videoUrl: '',
-                videoTextureKey: '',
-                videoReady: false,
-                videoQueued: false,
-                videoLoading: false,
-                data: null, 
-                textRef: null 
-            };
-            chunk.addChild(sprite);
-            chunk.blockIds.push(blockId);
-            state.slotRenderSignature.set(blockId, '0');
-            blockId--;
-        }
-    }
-    updateSalesCounter();
-}
-
-function updateSalesCounter() {
-    const soldCount = Math.max(0, Math.min(CONFIG.TOTAL_BLOCKS, state.soldCount));
-    const percentage = (soldCount / CONFIG.TOTAL_BLOCKS) * 100;
-    const countElement = state.ui.salesCountEl || document.getElementById('sales-count');
-    const progressBar = state.ui.salesProgressEl || document.getElementById('sales-progress-bar');
-
-    if (!state.ui.salesCountEl && countElement) {
-        state.ui.salesCountEl = countElement;
-    }
-    if (!state.ui.salesProgressEl && progressBar) {
-        state.ui.salesProgressEl = progressBar;
-    }
-    
-    if (countElement) countElement.textContent = `${soldCount.toLocaleString()} / ${CONFIG.TOTAL_BLOCKS.toLocaleString()}`;
-    if (progressBar) progressBar.style.width = `${percentage}%`;
-}
-
-// =========================================================================
-// 4. PHYSICS & CAMERA (UPDATED FOR MOMENTUM)
-// =========================================================================
-function constrainCamera() {
-    const fitW = state.pixi.screen.width / PYRAMID_WIDTH;
-    const fitH = state.pixi.screen.height / PYRAMID_HEIGHT;
-    const fullFitZoom = Math.min(fitW, fitH);
-    
-    const minAllowedZoom = fullFitZoom * 0.4; 
-    
-    if (state.target.zoom < minAllowedZoom) state.target.zoom = minAllowedZoom;
-
-    const pyLeft = -(PYRAMID_WIDTH / 2);
-    const pyRight = (PYRAMID_WIDTH / 2);
-    const pyTop = 0;
-    const pyBottom = PYRAMID_HEIGHT;
-
-    const screenCX = state.pixi.screen.width / 2;
-    const screenCY = state.pixi.screen.height / 2;
-    let worldCX = (screenCX - state.target.x) / state.target.zoom;
-    let worldCY = (screenCY - state.target.y) / state.target.zoom;
-
-    // Allow some overscroll ("Bounce") feeling
-    const marginX = 10;
-    const marginY = 10;
-
-    let clampedWX = Math.max(pyLeft - marginX, Math.min(pyRight + marginX, worldCX));
-    let clampedWY = Math.max(pyTop - marginY, Math.min(pyBottom + marginY, worldCY));
-
-    const correctionX = screenCX - (clampedWX * state.target.zoom);
-    const correctionY = screenCY - (clampedWY * state.target.zoom);
-
-    // Soft correction: Don't kill velocity, just gently push back
-    if (Math.abs(correctionX - state.target.x) > 1) {
-         state.target.x += (correctionX - state.target.x) * 0.1;
-         // Damping velocity gently instead of halving it
-         state.vel.x *= 0.8; 
-    }
-    if (Math.abs(correctionY - state.target.y) > 1) {
-         state.target.y += (correctionY - state.target.y) * 0.1;
-         state.vel.y *= 0.8;
-    }
-}
-
-function updatePhysics(dt) {
-    if (!state.dragging) {
-        state.target.x += state.vel.x * dt;
-        state.target.y += state.vel.y * dt;
-        state.vel.x *= CONFIG.FRICTION;
-        state.vel.y *= CONFIG.FRICTION;
-    }
-
-    constrainCamera(); 
-
-    const spring = 0.25; 
-    state.cam.zoom += (state.target.zoom - state.cam.zoom) * spring;
-    state.cam.x += (state.target.x - state.cam.x) * spring;
-    state.cam.y += (state.target.y - state.cam.y) * spring;
-
-    state.world.scale.set(state.cam.zoom);
-    state.world.position.set(state.cam.x, state.cam.y);
-    
-    // --- IMMORTAL UPGRADE: Trigger LOD Transition Check ---
-    checkLODTransition();
-}
-
-function cullWorld() {
-    const viewTop = -state.cam.y / state.cam.zoom;
-    const viewBottom = viewTop + (state.pixi.screen.height / state.cam.zoom);
-    const buffer = 200; 
-
-    for (const chunk of state.chunks) {
-        chunk.visible = !(chunk.yEnd < viewTop - buffer || chunk.yStart > viewBottom + buffer);
-    }
-}
-
-// =========================================================================
-// 5. IMMORTAL LOD SYSTEM (TIME-SLICED)
-// =========================================================================
-
-function checkLODTransition() {
-    const threshold = state.isMobileDevice ? CONFIG.MOBILE_LOD_THRESHOLD : CONFIG.LOD_THRESHOLD;
-    const showText = state.viewMode === 'text' && state.cam.zoom > threshold;
-    
-    // If the desired state is different from current state, reset the queue
-    if (showText !== state.lodVisible) {
-        state.lodVisible = showText;
-        state.lodQueueIndex = 0;
-    }
-}
-
-function processLODQueue() {
-    // If we have processed everyone, stop.
-    if (state.lodQueueIndex >= state.textPool.length) return;
-
-    let processed = 0;
-    const limit = state.lodBatchSize || CONFIG.LOD_BATCH_SIZE;
-
-    // Process a chunk of the array
-    while (processed < limit && state.lodQueueIndex < state.textPool.length) {
-        const text = state.textPool[state.lodQueueIndex];
-        const targetVisible = state.viewMode === 'text' && state.lodVisible;
-        
-        // Only update if it actually needs changing
-        if (text.visible !== targetVisible) {
-            text.visible = targetVisible;
-        }
-        
-        state.lodQueueIndex++;
-        processed++;
-    }
-    // If we finished the loop, we wait for next frame to continue
-}
-
-// =========================================================================
-// 6. INPUT SYSTEM
-// =========================================================================
-function setupInput() {
-    const dom = document.getElementById('canvas-container');
-
-    const clearTouchHover = () => {
-        const tt = document.getElementById('tooltip');
-        if (state.hoverId !== -1 && state.blocks[state.hoverId]) {
-            state.blocks[state.hoverId].sprite.alpha = 1;
-        }
-        state.hoverId = -1;
-        if (tt) tt.style.display = 'none';
-    };
-
-    dom.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const mouseX = e.clientX;
-        const mouseY = e.clientY;
-        const worldPos = { x: (mouseX - state.target.x) / state.target.zoom, y: (mouseY - state.target.y) / state.target.zoom };
-        const delta = -e.deltaY * 0.001;
-        let newZoom = state.target.zoom * (1 + delta);
-        newZoom = Math.min(Math.max(newZoom, CONFIG.MIN_ZOOM), CONFIG.MAX_ZOOM);
-        state.target.zoom = newZoom;
-        state.target.x = mouseX - (worldPos.x * newZoom);
-        state.target.y = mouseY - (worldPos.y * newZoom);
-    }, { passive: false });
-
-    dom.addEventListener('pointerdown', (e) => {
-        state.dragging = true;
-        state.hasMoved = false;
-        state.dragStart = { x: e.clientX, y: e.clientY };
-        state.dragOriginalStart = { x: e.clientX, y: e.clientY };
-        state.vel = { x: 0, y: 0 };
-        dom.style.cursor = 'grabbing';
-    });
-
-    window.addEventListener('pointermove', (e) => {
-        if (state.dragging) {
-            const dx = e.clientX - state.dragStart.x;
-            const dy = e.clientY - state.dragStart.y;
-            if (Math.hypot(e.clientX - state.dragOriginalStart.x, e.clientY - state.dragOriginalStart.y) > state.clickThreshold) state.hasMoved = true;
-            state.target.x += dx;
-            state.target.y += dy;
-            state.dragStart = { x: e.clientX, y: e.clientY };
-            state.vel = { x: dx, y: dy };
-        } else {
-            state.pendingHoverPos = { x: e.clientX, y: e.clientY };
-            if (!state.hoverRafId) {
-                state.hoverRafId = requestAnimationFrame(() => {
-                    state.hoverRafId = 0;
-                    if (state.dragging || !state.pendingHoverPos) return;
-                    const pos = state.pendingHoverPos;
-                    state.pendingHoverPos = null;
-                    handleHover(pos.x, pos.y);
-                });
-            }
-        }
-    });
-
-    window.addEventListener('pointerup', (e) => {
-        if (state.dragging) {
-            state.dragging = false;
-            dom.style.cursor = 'grab';
-            if (!state.hasMoved) handleClick(e.clientX, e.clientY);
-        }
-    });
-
-    dom.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        state.touches = Array.from(e.touches);
-        if (state.touches.length === 1) {
-            const t = state.touches[0];
-            state.dragging = true;
-            state.hasMoved = false;
-            state.dragStart = { x: t.clientX, y: t.clientY };
-            state.dragOriginalStart = { x: t.clientX, y: t.clientY };
-            state.vel = { x: 0, y: 0 };
-
-            // Mobile hover-like behavior: show tooltip immediately on touch.
-            handleHover(t.clientX, t.clientY);
-        } else if (state.touches.length === 2) {
-            state.dragging = false;
-            state.lastTouchTapId = -1;
-            const dx = state.touches[0].clientX - state.touches[1].clientX;
-            const dy = state.touches[0].clientY - state.touches[1].clientY;
-            state.lastTouchDistance = Math.hypot(dx, dy);
-            clearTouchHover();
-        }
-    }, { passive: false });
-
-    dom.addEventListener('touchmove', (e) => {
-        e.preventDefault();
-        state.touches = Array.from(e.touches);
-        if (state.touches.length === 1 && state.dragging) {
-            const t = state.touches[0];
-            const dx = t.clientX - state.dragStart.x;
-            const dy = t.clientY - state.dragStart.y;
-            const movedDistance = Math.hypot(t.clientX - state.dragOriginalStart.x, t.clientY - state.dragOriginalStart.y);
-
-            // Small finger movement behaves like hover tracking.
-            if (movedDistance <= state.clickThreshold * 1.5) {
-                handleHover(t.clientX, t.clientY);
-            } else {
-                state.hasMoved = true;
-                clearTouchHover();
-                state.target.x += dx;
-                state.target.y += dy;
-            }
-
-            state.dragStart = { x: t.clientX, y: t.clientY };
-            state.vel = { x: dx, y: dy };
-        } else if (state.touches.length === 2) {
-            clearTouchHover();
-            const p1 = state.touches[0];
-            const p2 = state.touches[1];
-            const dist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
-            if (state.lastTouchDistance > 0) {
-                const centerX = (p1.clientX + p2.clientX) / 2;
-                const centerY = (p1.clientY + p2.clientY) / 2;
-                const worldX = (centerX - state.target.x) / state.target.zoom;
-                const worldY = (centerY - state.target.y) / state.target.zoom;
-                const scaleFactor = dist / state.lastTouchDistance;
-                let newZoom = state.target.zoom * scaleFactor;
-                newZoom = Math.min(Math.max(newZoom, CONFIG.MIN_ZOOM), CONFIG.MAX_ZOOM);
-                state.target.zoom = newZoom;
-                state.target.x = centerX - (worldX * newZoom);
-                state.target.y = centerY - (worldY * newZoom);
-            }
-            state.lastTouchDistance = dist;
-        }
-    }, { passive: false });
-
-    dom.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        if (state.touches.length === 1 && state.dragging && !state.hasMoved) {
-            const t = e.changedTouches[0];
-            const tappedId = getBlockId(t.clientX, t.clientY);
-            const now = Date.now();
-
-            // 1st tap => show tooltip, 2nd quick tap on same block => open modal.
-            if (tappedId !== -1 && state.lastTouchTapId === tappedId && (now - state.lastTouchTapTime) < 700) {
-                const tappedBlock = state.blocks[tappedId];
-                if (tappedBlock && tappedBlock.sold && hasYouTubeVideo(tappedBlock)) {
-                    state.selectedId = tappedId;
-                    openGridVideoPlayer(tappedId);
-                }
-                state.lastTouchTapId = -1;
-                state.lastTouchTapTime = 0;
-            } else {
-                handleHover(t.clientX, t.clientY);
-                state.lastTouchTapId = tappedId;
-                state.lastTouchTapTime = now;
-            }
-        }
-
-        state.touches = Array.from(e.touches);
-        if (state.touches.length === 0) {
-            state.dragging = false;
-            state.lastTouchDistance = 0;
-        }
-    }, { passive: false });
-}
-
-function getBlockId(screenX, screenY) {
-    const worldX = (screenX - state.cam.x) / state.cam.zoom;
-    const worldY = (screenY - state.cam.y) / state.cam.zoom;
-    const row = Math.floor(worldY / CONFIG.BLOCK_SIZE) + 1;
-    if (row < 1 || row > CONFIG.ROWS) return -1;
-    const rowStartX = -(row * CONFIG.BLOCK_SIZE) / 2;
-    const col = Math.floor((worldX - rowStartX) / CONFIG.BLOCK_SIZE);
-    if (col < 0 || col >= row) return -1;
-    const blocksAbove = (row * (row - 1)) / 2;
-    return CONFIG.TOTAL_BLOCKS - blocksAbove - col;
-}
-
-function handleHover(x, y) {
-    const id = getBlockId(x, y);
-    const tt = state.ui.tooltipEl || document.getElementById('tooltip');
-    if (!state.ui.tooltipEl && tt) {
-        state.ui.tooltipEl = tt;
-    }
-    if (!tt) return;
-
-    if (id !== state.hoverId) {
-        if (state.hoverId !== -1 && state.blocks[state.hoverId]) state.blocks[state.hoverId].sprite.alpha = 1;
-        state.hoverId = id;
-        if (id !== -1 && state.blocks[id]) {
-            const b = state.blocks[id];
-            b.sprite.alpha = 0.6;
-            document.body.style.cursor = 'pointer';
-            tt.style.display = 'block';
-            tt.style.borderColor = '';
-            if (b.sold) {
-                const _name = b.data.owner_name || 'Owner';
-                const _color = sanitizeBlockColor(b.data.owner_color || '#FF0000');
-                const _fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(_name)}&background=${_color.replace('#','')}&color=fff&size=80&bold=true&rounded=true`;
-                const _src = b.data.image_url ? b.data.image_url : _fallback;
-                tt.innerHTML = `<div class="tt-yt-card">
-  <img class="tt-yt-avatar" src="${_src}" onerror="this.onerror=null;this.src='${_fallback}'" style="border-color:${_color}" alt="${_name}">
-  <div class="tt-yt-info">
-    <div class="tt-yt-name">${_name}</div>
-    <div class="tt-yt-sub">Canvas #${b.id}</div>
-    <div class="tt-yt-price" style="color:${_color}">₹${b.price}</div>
-  </div>
-</div>`;
-            } else {
-                tt.innerHTML = `<div class="tt-yt-card">
-  <div class="tt-yt-avatar-icon">🔓</div>
-  <div class="tt-yt-info">
-    <div class="tt-yt-name">Canvas #${b.id}</div>
-    <div class="tt-yt-sub">Available</div>
-    <div class="tt-yt-price" style="color:#FFD700">₹${b.price}</div>
-  </div>
-</div>`;
-            }
-        } else {
-            document.body.style.cursor = 'grab';
-            tt.style.display = 'none';
-        }
-
-    }
-    if (id !== -1) { tt.style.left = (x + 20) + 'px'; tt.style.top = (y - 30) + 'px'; }
-}
-
-function handleClick(x, y) {
-    const id = getBlockId(x, y);
-    if (id !== -1) {
-        const block = state.blocks[id];
-        if (block && block.sold && hasYouTubeVideo(block)) {
-            state.selectedId = id;
-            openGridVideoPlayer(id);
-        }
-    }
-}
-
-// =========================================================================
-// 7. CORE LOGIC (O(1) OPTIMIZED)
-// =========================================================================
-function smartBreakText(text) {
-    if (!text) return '';
-
-    // Break any single word longer than 12 chars
-    const words = text.split(' ').flatMap(word =>
-        word.length > 12 ? word.match(/.{1,12}/g) : [word]
-    );
-
-    if (words.length <= 1) return words[0] || '';
-
-    // Find the optimal chars-per-line so the resulting text block
-    // is as close to a square as possible (charWidth ≈ 0.55 × lineHeight)
-    const totalChars = words.reduce((s, w) => s + w.length, 0) + words.length - 1;
-    const optimalLines = Math.max(1, Math.round(Math.sqrt(totalChars * 0.6)));
-    const charsPerLine = Math.ceil(totalChars / optimalLines);
-
-    // Greedy packing into lines
-    const lines = [];
-    let cur = '';
-    for (const word of words) {
-        if (!cur) {
-            cur = word;
-        } else if ((cur + ' ' + word).length <= charsPerLine) {
-            cur += ' ' + word;
-        } else {
-            lines.push(cur);
-            cur = word;
-        }
-    }
-    if (cur) lines.push(cur);
-
-    return lines.join('\n');
-}
-
-// --- IMMORTAL POOL MANAGEMENT (Swap & Pop) ---
-function addToPool(textObj) {
-    textObj._poolIndex = state.textPool.length;
-    state.textPool.push(textObj);
-
-    // Init visibility based on current global LOD state
-    textObj.visible = state.viewMode === 'text' && state.lodVisible;
-}
-
-function removeFromPool(textObj) {
-    const idx = textObj._poolIndex;
-    if (idx === undefined || idx < 0 || idx >= state.textPool.length) return;
-
-    if (textObj._chunkRef && textObj._chunkRef.textRefs) {
-        textObj._chunkRef.textRefs.delete(textObj);
-    }
-
-    // 1. Get the last item in the array
-    const lastItem = state.textPool[state.textPool.length - 1];
-    
-    // 2. Overwrite the item to remove with the last item
-    state.textPool[idx] = lastItem;
-    
-    // 3. Update the last item's internal index reference
-    if (lastItem) {
-        lastItem._poolIndex = idx;
-    }
-    
-    // 4. Remove the last item (now duplicate)
-    state.textPool.pop();
-    
-    // Note: If textObj was the last one, idx == length-1, so it just overwrites itself then pops. Safe.
-}
-
-function renderBlockText(sprite, textData, isPreview = false) {
-    if (isPreview) {
-        // Preview mode is simple, no pool needed
-        if (state.previewBlock.textRef) {
-            state.previewBlock.textRef.destroy();
-            state.previewBlock.textRef = null;
-        }
-    } else {
-        // --- O(1) CLEANUP ---
-        // If the sprite already has text, we must remove it from the pool efficiently
-        if (sprite.textRef) {
-            removeFromPool(sprite.textRef); // O(1)
-            sprite.textRef.destroy();       // Destroy Pixi object
-            sprite.textRef = null;
-        }
-    }
-    
-    if (!textData) return;
-
-    const safeText = smartBreakText(textData);
-
-    const textObj = new PIXI.BitmapText({ 
-        text: safeText, 
-        style: { 
-            fontFamily: 'ImmortalFont', 
-            fontSize: 54,
-            align: 'center',
-            wordWrap: false,
-            lineHeight: 64
-        } 
-    });
-    
-    if (isPreview) {
-        textObj.anchor.set(0.5);
-        textObj.x = 200; 
-        textObj.y = 200; 
-        state.previewBlock.container.addChild(textObj);
-        state.previewBlock.textRef = textObj;
-    } else {
-        textObj.anchor.set(0.5);
-        // Parent to the chunk (sprite.parent), NOT the sprite itself.
-        // This prevents Pixi from multiplying the sprite's tint into the text color.
-        textObj.x = sprite.x + (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
-        textObj.y = sprite.y + (CONFIG.BLOCK_SIZE - CONFIG.GAP) / 2;
-        sprite.parent.addChild(textObj);
-        sprite.textRef = textObj;
-
-        textObj._isBlockText = true;
-        textObj._chunkRef = sprite.parent;
-        textObj.blockId = sprite.blockId;
-        if (sprite.parent && sprite.parent.textRefs) {
-            sprite.parent.textRefs.add(textObj);
-        }
-        
-        // --- O(1) ADDITION ---
-        addToPool(textObj);
-    }
-    
-    textObj.scale.set(1);
-    
-    if (isPreview) {
-        const scaledBlockSize = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * state.previewBlock.scaleFactor;
-        const targetSize = scaledBlockSize * 0.85;
-        const scale = Math.min(targetSize / textObj.width, targetSize / textObj.height);
-        textObj.scale.set(scale);
-    } else {
-        const targetSize = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * 0.92;
-        const scale = Math.min(targetSize / textObj.width, targetSize / textObj.height);
-        textObj.scale.set(scale);
-    }
-}
-
-function sanitizeBlockColor(color) {
-    const namedColors = {
-        yellow: '#FFD700',
-        red: '#FF6B6B',
-        turquoise: '#4ECDC4',
-        blue: '#45B7D1',
-        green: '#96CEB4',
-        amber: '#FECA57',
-        purple: '#B983FF',
-        pink: '#FD79A8'
-    };
-
-    if (typeof color !== 'string') return '#FFD700';
-
-    const raw = color.trim();
-    if (!raw) return '#FFD700';
-
-    if (/^#[0-9A-Fa-f]{6}$/.test(raw)) {
-        return raw.toUpperCase();
-    }
-
-    if (/^#[0-9A-Fa-f]{3}$/.test(raw)) {
-        const r = raw[1];
-        const g = raw[2];
-        const b = raw[3];
-        return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
-    }
-
-    const mapped = namedColors[raw.toLowerCase()];
-    return mapped || '#FFD700';
-}
-
-function sanitizeTextColor(color) {
-    return '#FFFFFF';
-}
-
-function ensureBlockPhotoSprite(block) {
-    if (!block || !block.sprite || !block.sprite.parent) return null;
-    if (block.photoRef) return block.photoRef;
-
-    const photoSprite = new PIXI.Sprite(PIXI.Texture.WHITE);
-    photoSprite.x = block.sprite.x;
-    photoSprite.y = block.sprite.y;
-    photoSprite.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-    photoSprite.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-    photoSprite.visible = false;
-    photoSprite.blockId = block.id;
-
-    block.photoRef = photoSprite;
-    block.sprite.parent.addChild(photoSprite);
-    return photoSprite;
-}
-
-function ensureBlockVideoSprite(block) {
-    if (!block || !block.sprite || !block.sprite.parent) return null;
-    if (block.videoRef) return block.videoRef;
-
-    const videoSprite = new PIXI.Sprite(PIXI.Texture.WHITE);
-    videoSprite.x = block.sprite.x;
-    videoSprite.y = block.sprite.y;
-    videoSprite.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-    videoSprite.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-    videoSprite.visible = false;
-    videoSprite.blockId = block.id;
-
-    block.videoRef = videoSprite;
-    block.sprite.parent.addChild(videoSprite);
-    return videoSprite;
-}
-
-function ensureBlockBorderGraphic(block) {
-    if (!block || !block.sprite || !block.sprite.parent) return null;
-    if (block.borderRef) return block.borderRef;
-
-    const borderGraphics = new PIXI.Graphics();
-    borderGraphics.visible = false;
-    borderGraphics.eventMode = 'none';
-    borderGraphics.blockId = block.id;
-
-    block.borderRef = borderGraphics;
-    block.sprite.parent.addChild(borderGraphics);
-    return borderGraphics;
-}
-
-function destroyDisplayObject(ref) {
-    if (!ref) return;
-    if (ref.parent) {
-        ref.parent.removeChild(ref);
-    }
-    ref.destroy();
-}
-
-function adjustTextureRefCount(refCounts, key, delta) {
-    if (!key) return;
-    const next = (refCounts.get(key) || 0) + delta;
-    if (next <= 0) {
-        refCounts.delete(key);
-    } else {
-        refCounts.set(key, next);
-    }
-}
-
-function releaseBlockPhotoTexture(block) {
-    if (!block) return;
-
-    if (block.photoTextureKey) {
-        adjustTextureRefCount(state.photoTextureRefCounts, block.photoTextureKey, -1);
-    }
-
-    block.photoTextureKey = '';
-    block.photoReady = false;
-    if (block.photoRef) {
-        block.photoRef.texture = PIXI.Texture.WHITE;
-        block.photoRef.visible = false;
-    }
-
-    trimTextureCacheToLimit(
-        state.photoTextureCache,
-        state.photoCacheOrder,
-        state.photoTextureRefCounts,
-        state.photoTextureCacheLimit
-    );
-}
-
-function releaseBlockVideoTexture(block) {
-    if (!block) return;
-
-    if (block.videoTextureKey) {
-        adjustTextureRefCount(state.videoTextureRefCounts, block.videoTextureKey, -1);
-    }
-
-    block.videoTextureKey = '';
-    block.videoReady = false;
-    if (block.videoRef) {
-        block.videoRef.texture = PIXI.Texture.WHITE;
-        block.videoRef.visible = false;
-    }
-
-    trimTextureCacheToLimit(
-        state.videoTextureCache,
-        state.videoCacheOrder,
-        state.videoTextureRefCounts,
-        state.videoTextureCacheLimit
-    );
-}
-
-function releaseBlockOverlays(block) {
-    if (!block) return;
-
-    releaseBlockPhotoTexture(block);
-    releaseBlockVideoTexture(block);
-
-    if (block.photoRef) {
-        destroyDisplayObject(block.photoRef);
-        block.photoRef = null;
-    }
-
-    if (block.videoRef) {
-        destroyDisplayObject(block.videoRef);
-        block.videoRef = null;
-    }
-
-    if (block.borderRef) {
-        destroyDisplayObject(block.borderRef);
-        block.borderRef = null;
-    }
-}
-
-function refreshBlockBorder(block) {
-    if (!block || !block.sprite) return;
-
-    if (!block.sold || !block.data || state.viewMode !== 'video') {
-        if (block.borderRef) {
-            block.borderRef.clear();
-            block.borderRef.visible = false;
-        }
-        return;
-    }
-
-    const border = ensureBlockBorderGraphic(block);
-    if (!border) return;
-
-    border.clear();
-
-    const safeColor = sanitizeBlockColor(block.data.owner_color);
-    const strokeColor = parseInt(safeColor.slice(1), 16);
-    const size = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-
-    border.rect(block.sprite.x, block.sprite.y, size, size).stroke({ width: 1, color: strokeColor, alpha: 0.95 });
-    border.rect(block.sprite.x + 1, block.sprite.y + 1, size - 2, size - 2).stroke({ width: 0.5, color: 0x000000, alpha: 0.25 });
-    border.visible = state.viewMode === 'video';
-}
-
-function getBlockPhotoUrl(block) {
-    if (!block.sold) return null;
-    if (block.data && typeof block.data.image_url === 'string' && block.data.image_url.trim()) {
-        return block.data.image_url.trim();
-    }
-    return null;
-}
-
-function hasUserImage(block) {
-    return !!(block && block.sold && block.data && typeof block.data.image_url === 'string' && block.data.image_url.trim());
-}
-
-async function loadTextureFromUrl(url) {
-    const img = await loadImageFromUrl(url);
-    if (!img || img.naturalWidth === 0 || img.naturalHeight === 0) {
-        throw new Error(`Invalid image texture: ${url}`);
-    }
-
-    // Clamp user image textures to a fixed tile size to keep GPU memory bounded.
-    const size = state.isMobileDevice ? CONFIG.PHOTO_TEXTURE_SIZE_MOBILE : CONFIG.PHOTO_TEXTURE_SIZE_DESKTOP;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-        throw new Error('Canvas context unavailable');
-    }
-
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
-    // Cover-fit keeps tiles visually dense while still capping texture size.
-    const scale = Math.max(size / img.naturalWidth, size / img.naturalHeight);
-    const drawW = Math.max(1, Math.round(img.naturalWidth * scale));
-    const drawH = Math.max(1, Math.round(img.naturalHeight * scale));
-    const dx = Math.floor((size - drawW) / 2);
-    const dy = Math.floor((size - drawH) / 2);
-
-    ctx.fillStyle = '#111111';
-    ctx.fillRect(0, 0, size, size);
-    ctx.drawImage(img, dx, dy, drawW, drawH);
-
-    const texture = PIXI.Texture.from(canvas);
-    texture.source.scaleMode = 'linear';
-    return texture;
-}
-
-function loadImageFromUrl(url) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error(`Image failed to load: ${url}`));
-        img.src = url;
-    });
-}
-
-async function createYouTubeTileTexture(videoId) {
-    const thumbCandidates = [
-        `https://i.ytimg.com/vi_webp/${videoId}/maxresdefault.webp`,
-        `https://i.ytimg.com/vi_webp/${videoId}/hq720.webp`,
-        `https://i.ytimg.com/vi_webp/${videoId}/sddefault.webp`,
-        `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-        `https://img.youtube.com/vi/${videoId}/hq720.jpg`,
-        `https://img.youtube.com/vi/${videoId}/sddefault.jpg`,
-        `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
-    ];
-
-    let img = null;
-    for (const candidate of thumbCandidates) {
-        try {
-            img = await loadImageFromUrl(candidate);
-            break;
-        } catch (e) {
-            // Try next candidate.
-        }
-    }
-
-    if (!img) {
-        throw new Error(`No thumbnail available for video ${videoId}`);
-    }
-
-    // Keep video thumbs bounded to avoid large GPU spikes.
-    const size = state.isMobileDevice ? CONFIG.VIDEO_TEXTURE_SIZE_MOBILE : CONFIG.VIDEO_TEXTURE_SIZE_DESKTOP;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-        throw new Error('Canvas context unavailable');
-    }
-
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
-    // Full thumbnail visible: use contain fit inside the square tile (no cropping).
-    const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight);
-    const drawW = Math.max(1, Math.round(img.naturalWidth * scale));
-    const drawH = Math.max(1, Math.round(img.naturalHeight * scale));
-    const dx = Math.floor((size - drawW) / 2);
-    const dy = Math.floor((size - drawH) / 2);
-
-    // Clean padded background for the unused area around contained image.
-    ctx.fillStyle = '#0f0f0f';
-    ctx.fillRect(0, 0, size, size);
-
-    // Subtle glow panel to avoid harsh bars while keeping full image intact.
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-    ctx.fillRect(dx, dy, drawW, drawH);
-    ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, dx, dy, drawW, drawH);
-
-    const texture = PIXI.Texture.from(canvas);
-    texture.source.scaleMode = 'linear';
-    return texture;
-}
-
-function touchCacheOrder(order, key) {
-    const existingIndex = order.indexOf(key);
-    if (existingIndex !== -1) {
-        order.splice(existingIndex, 1);
-    }
-    order.push(key);
-}
-
-function trimTextureCacheToLimit(cache, order, refCounts, limit) {
-    if (order.length <= limit) return;
-
-    // Guard prevents infinite loops when all entries are currently in use.
-    let guard = order.length;
-    while (order.length > limit && guard > 0) {
-        const oldestKey = order[0];
-        if (!oldestKey) break;
-
-        const refCount = refCounts.get(oldestKey) || 0;
-        if (refCount > 0) {
-            order.push(order.shift());
-            guard--;
-            continue;
-        }
-
-        order.shift();
-        const oldTexture = cache.get(oldestKey);
-        cache.delete(oldestKey);
-
-        if (oldTexture) {
-            oldTexture.destroy(true);
-        }
-
-        guard = order.length;
-    }
-}
-
-function cacheTextureWithLimit(cache, order, refCounts, key, texture, limit) {
-    cache.set(key, texture);
-    touchCacheOrder(order, key);
-    trimTextureCacheToLimit(cache, order, refCounts, limit);
-}
-
-async function ensureBlockPhotoTexture(block, imageUrl) {
-    if (!block || !block.sold || !imageUrl) return;
-    if (block.photoLoading) return;
-    if (block.photoReady && block.photoUrl === imageUrl) return;
-
-    block.photoLoading = true;
-    block.photoUrl = imageUrl;
-    const requestedUrl = imageUrl;
+// ── Likes ─────────────────────────────────────────────────────────────────────
+function toggleLike(event, itemId) {
+    event.stopPropagation();
+    const item = leaderboardData.find(d => d.id === itemId);
+    if (!item) return;
 
     try {
-        let texture = state.photoTextureCache.get(requestedUrl);
-        if (texture) {
-            touchCacheOrder(state.photoCacheOrder, requestedUrl);
-        }
-        if (!texture) {
-            texture = await loadTextureFromUrl(requestedUrl);
-            cacheTextureWithLimit(
-                state.photoTextureCache,
-                state.photoCacheOrder,
-                state.photoTextureRefCounts,
-                requestedUrl,
-                texture,
-                state.photoTextureCacheLimit
-            );
+        const likedKey = 'likedCards';
+        const likedSet = new Set(JSON.parse(localStorage.getItem(likedKey) || '[]'));
+
+        if (likedSet.has(itemId)) {
+            item.likes = Math.max(0, (item.likes || 0) - 1);
+            likedSet.delete(itemId);
+        } else {
+            item.likes = (item.likes || 0) + 1;
+            likedSet.add(itemId);
         }
 
-        if (block.photoUrl !== requestedUrl) return;
+        localStorage.setItem(likedKey, JSON.stringify([...likedSet]));
+        saveLocalData();
 
-        const photoRef = ensureBlockPhotoSprite(block);
-        if (!photoRef) return;
+        const btn = event.currentTarget;
+        btn.classList.toggle('liked', likedSet.has(itemId));
+        btn.querySelector('.like-count').textContent = formatLikes(item.likes);
+        btn.classList.add('like-pop');
+        btn.addEventListener('animationend', () => btn.classList.remove('like-pop'), { once: true });
+    } catch (e) { console.warn('Like error:', e); }
+}
 
-        if (block.photoTextureKey !== requestedUrl) {
-            if (block.photoTextureKey) {
-                adjustTextureRefCount(state.photoTextureRefCounts, block.photoTextureKey, -1);
-            }
-            adjustTextureRefCount(state.photoTextureRefCounts, requestedUrl, 1);
-            block.photoTextureKey = requestedUrl;
-        }
+function isLiked(itemId) {
+    try {
+        return new Set(JSON.parse(localStorage.getItem('likedCards') || '[]')).has(itemId);
+    } catch (e) { return false; }
+}
 
-        photoRef.texture = texture;
-        photoRef.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-        photoRef.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-        photoRef.tint = 0xFFFFFF;
-        block.photoReady = true;
+function formatLikes(n) {
+    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    return String(n || 0);
+}
 
-        photoRef.visible = false;
-    } catch (error) {
-        console.warn(`Failed to load image for block ${block.id}:`, error);
-        // Keep base tile visible if image fails to load.
-        block.photoReady = false;
-        if (block.photoRef) {
-            block.photoRef.visible = false;
-        }
-        block.sprite.visible = true;
-    } finally {
-        block.photoLoading = false;
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(tab) {
+    currentTab = tab;
+    const ytBtn = document.getElementById('tab-youtube');
+    const reelsBtn = document.getElementById('tab-reels');
+    const ytSection = document.getElementById('youtube-section');
+    const reelsSection = document.getElementById('reels-section');
+
+    if (ytBtn) ytBtn.classList.toggle('active', tab === 'youtube');
+    if (reelsBtn) reelsBtn.classList.toggle('active', tab === 'reels');
+    if (ytSection) ytSection.classList.toggle('active-section', tab === 'youtube');
+    if (reelsSection) reelsSection.classList.toggle('active-section', tab === 'reels');
+}
+
+// ── Sorting ───────────────────────────────────────────────────────────────────
+function sortLeaderboard(sortBy) {
+    currentSort = sortBy;
+    document.querySelectorAll('.sort-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.sort === sortBy);
+    });
+    renderInstaCards();
+}
+
+function getSortedData(data) {
+    const arr = [...data];
+    if (currentSort === 'price') arr.sort((a, b) => (b.price || 0) - (a.price || 0));
+    else if (currentSort === 'likes') arr.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+    else if (currentSort === 'random') arr.sort(() => Math.random() - 0.5);
+    return arr;
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+function onSearchInput() {
+    searchQuery = (document.getElementById('search-input').value || '').trim().toLowerCase();
+    updateSearchClearBtn();
+    renderInstaCards();
+}
+
+function clearSearch() {
+    const inp = document.getElementById('search-input');
+    if (inp) inp.value = '';
+    searchQuery = '';
+    updateSearchClearBtn();
+    renderInstaCards();
+}
+
+function updateSearchClearBtn() {
+    const btn = document.getElementById('search-clear');
+    if (btn) btn.style.display = searchQuery ? 'flex' : 'none';
+}
+
+function filterData(data) {
+    if (!searchQuery) return data;
+    return data.filter(item => {
+        const q = searchQuery;
+        return (
+            (item.name || '').toLowerCase().includes(q) ||
+            (item.message || '').toLowerCase().includes(q) ||
+            String(item.price || '').includes(q)
+        );
+    });
+}
+
+// ── Read More ─────────────────────────────────────────────────────────────────
+function collapseAllReadMore() {
+    document.querySelectorAll('.card-motto-message.expanded, .yt-motto-message.expanded').forEach(el => {
+        el.classList.remove('expanded');
+        const btn = el.nextElementSibling;
+        if (btn && btn.classList.contains('read-more-btn')) btn.textContent = 'more';
+    });
+}
+
+function toggleReadMore(event, btnEl) {
+    event.stopPropagation();
+    const msgEl = btnEl.previousElementSibling;
+    const willExpand = !msgEl.classList.contains('expanded');
+    collapseAllReadMore();
+    if (willExpand) {
+        msgEl.classList.add('expanded');
+        btnEl.textContent = 'less';
     }
 }
 
-function getSoldBlocks() {
-    const sold = [];
-    for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
-        const block = state.blocks[i];
-        if (block && block.sold) sold.push(block);
+// ── Main render ───────────────────────────────────────────────────────────────
+function renderInstaCards() {
+    const reelsGrid = document.getElementById('insta-cards-grid');
+    const ytGrid = document.getElementById('youtube-cards-grid');
+    if (!reelsGrid || !ytGrid) {
+        console.error('Grid containers not found in DOM');
+        return;
     }
-    return sold;
-}
-
-function getVisibleSoldBlocks(limit) {
-    const effectiveLimit = Math.max(1, typeof limit === 'number' ? limit : state.maxVisibleMediaPreload);
-    const ordered = [];
-    const seen = new Set();
-
-    const pushIfSold = (block) => {
-        if (!block || !block.sold || seen.has(block.id)) return false;
-        seen.add(block.id);
-        ordered.push(block);
-        return ordered.length >= effectiveLimit;
-    };
-
-    // First pass: visible chunks only.
-    for (const chunk of state.chunks) {
-        if (!chunk || !chunk.visible || !chunk.blockIds) continue;
-
-        for (const blockId of chunk.blockIds) {
-            if (pushIfSold(state.blocks[blockId])) {
-                return ordered;
-            }
-        }
-    }
-
-    // Second pass: remaining sold blocks as fallback prefetch candidates.
-    for (const blockId of state.soldBlockIds) {
-        if (pushIfSold(state.blocks[blockId])) {
-            break;
-        }
-    }
-
-    return ordered;
-}
-
-function enqueuePhotoLoad(block) {
-    if (!hasUserImage(block) || block.photoQueued || block.photoLoading || block.photoReady) return;
-    block.photoQueued = true;
-    state.photoLoadQueue.push(block);
-}
-
-function prioritizePhotoQueue() {
-    const visible = [];
-    const hidden = [];
-
-    for (const block of state.photoLoadQueue) {
-        const isVisible = !!(block.sprite && block.sprite.parent && block.sprite.parent.visible);
-        if (isVisible) visible.push(block);
-        else hidden.push(block);
-    }
-
-    state.photoLoadQueue = [...visible, ...hidden];
-}
-
-function pumpPhotoQueue() {
-    if (state.activePhotoLoads >= state.maxConcurrentPhotoLoads) return;
-    if (state.photoLoadQueue.length === 0) return;
-
-    while (state.activePhotoLoads < state.maxConcurrentPhotoLoads && state.photoLoadQueue.length > 0) {
-        const block = state.photoLoadQueue.shift();
-        if (!block) continue;
-
-        block.photoQueued = false;
-
-        if (block.photoLoading || block.photoReady) {
-            continue;
-        }
-
-        state.activePhotoLoads++;
-        ensureBlockPhotoTexture(block, getBlockPhotoUrl(block))
-            .finally(() => {
-                state.activePhotoLoads = Math.max(0, state.activePhotoLoads - 1);
-            });
-    }
-}
-
-function startPhotoQueuePump() {
-    if (state.photoQueuePumpTimer) return;
-    state.photoQueuePumpTimer = setInterval(() => {
-        prioritizePhotoQueue();
-        pumpPhotoQueue();
-
-        if (!state.photoPrepInProgress && state.photoLoadQueue.length === 0 && state.activePhotoLoads === 0) {
-            clearInterval(state.photoQueuePumpTimer);
-            state.photoQueuePumpTimer = null;
-        }
-    }, 60);
-}
-
-function stopPhotoQueuePump() {
-    if (!state.photoQueuePumpTimer) return;
-    clearInterval(state.photoQueuePumpTimer);
-    state.photoQueuePumpTimer = null;
-}
-
-function getBlockYouTubeId(block) {
-    if (!block || !block.sold || !block.data || !block.data.youtube_url) return null;
-    return getYouTubeVideoId(block.data.youtube_url);
-}
-
-function hasYouTubeVideo(block) {
-    return !!getBlockYouTubeId(block);
-}
-
-function getYouTubeThumbnailUrl(videoId) {
-    return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-}
-
-async function ensureBlockVideoTexture(block, videoId) {
-    if (!block || !block.sold || !videoId) return;
-    if (block.videoLoading) return;
-
-    const requestedUrl = `yt:${videoId}`;
-    if (block.videoReady && block.videoUrl === requestedUrl) return;
-
-    block.videoLoading = true;
-    block.videoUrl = requestedUrl;
 
     try {
-        let texture = state.videoTextureCache.get(requestedUrl);
-        if (texture) {
-            touchCacheOrder(state.videoCacheOrder, requestedUrl);
-        }
-        if (!texture) {
-            texture = await createYouTubeTileTexture(videoId);
-            cacheTextureWithLimit(
-                state.videoTextureCache,
-                state.videoCacheOrder,
-                state.videoTextureRefCounts,
-                requestedUrl,
-                texture,
-                state.videoTextureCacheLimit
-            );
-        }
+        const sorted = getSortedData(leaderboardData);
+        const filtered = filterData(sorted);
 
-        if (block.videoUrl !== requestedUrl) return;
+        const ytVideos = filtered.filter(item => isYouTubeVideoSafe(item.reelLink));
+        const reelsAndShorts = filtered.filter(item => !isYouTubeVideoSafe(item.reelLink));
 
-        const videoRef = ensureBlockVideoSprite(block);
-        if (!videoRef) return;
+        // Tab counts (from ALL data)
+        const ytAll = leaderboardData.filter(item => isYouTubeVideoSafe(item.reelLink));
+        const reelsAll = leaderboardData.filter(item => !isYouTubeVideoSafe(item.reelLink));
+        const ytCountEl = document.getElementById('yt-count');
+        const reelsCountEl = document.getElementById('reels-count');
+        if (ytCountEl) ytCountEl.textContent = ytAll.length;
+        if (reelsCountEl) reelsCountEl.textContent = reelsAll.length;
 
-        if (block.videoTextureKey !== requestedUrl) {
-            if (block.videoTextureKey) {
-                adjustTextureRefCount(state.videoTextureRefCounts, block.videoTextureKey, -1);
+        // YouTube grid
+        ytGrid.innerHTML = ytVideos.length === 0
+            ? `<div class="empty-state" style="grid-column:1/-1;"><h3>${searchQuery ? '🔍 No results' : 'No YouTube videos yet'}</h3><p>${searchQuery ? 'Try a different search.' : 'Tap "Create Card" to add one!'}</p></div>`
+            : ytVideos.map(item => { try { return getYouTubeVideoCardHtml(item); } catch (e) { console.error('YT card error', e); return ''; } }).join('');
+
+        // Reels grid
+        reelsGrid.innerHTML = reelsAndShorts.length === 0
+            ? `<div class="empty-state" style="grid-column:1/-1;"><h3>${searchQuery ? '🔍 No results' : 'No reels yet'}</h3><p>${searchQuery ? 'Try a different search.' : 'Tap "Create Card" to add one!'}</p></div>`
+            : reelsAndShorts.map(item => { try { return getReelThumbnailHtml(item); } catch (e) { console.error('Reel card error', e); return ''; } }).join('');
+
+        // Hover video preview
+        reelsGrid.querySelectorAll('.reel-thumbnail-card').forEach(card => {
+            const video = card.querySelector('video');
+            if (video) {
+                card.addEventListener('mouseenter', () => video.play().catch(() => {}));
+                card.addEventListener('mouseleave', () => { video.pause(); video.currentTime = 0; });
             }
-            adjustTextureRefCount(state.videoTextureRefCounts, requestedUrl, 1);
-            block.videoTextureKey = requestedUrl;
-        }
-
-        videoRef.texture = texture;
-        videoRef.width = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-        videoRef.height = CONFIG.BLOCK_SIZE - CONFIG.GAP;
-        videoRef.tint = 0xFFFFFF;
-        block.videoReady = true;
-
-        if (state.viewMode === 'video') {
-            block.sprite.visible = false;
-            videoRef.visible = true;
-        }
-    } catch (error) {
-        console.warn(`Failed to load YouTube thumbnail for block ${block.id}:`, error);
-        block.videoReady = false;
-        if (state.viewMode === 'video') {
-            if (block.videoRef) {
-                block.videoRef.visible = false;
-            }
-            block.sprite.visible = true;
-        }
-    } finally {
-        block.videoLoading = false;
+        });
+    } catch (e) {
+        console.error('renderInstaCards error:', e);
+        ytGrid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><h3>Something went wrong</h3><p>Please refresh the page.</p></div>`;
     }
 }
 
-function enqueueVideoLoad(block) {
-    if (!hasYouTubeVideo(block) || block.videoQueued || block.videoLoading || block.videoReady) return;
-    block.videoQueued = true;
-    state.videoLoadQueue.push(block);
+// ── URL helpers (safe versions) ───────────────────────────────────────────────
+function cleanInstagramUrl(url) {
+    if (!url || url === '#') return url || '#';
+    try {
+        const p = new URL(url);
+        if (!p.hostname.includes('instagram.com')) return url;
+        p.search = ''; p.hash = '';
+        if (!p.pathname.endsWith('/')) p.pathname += '/';
+        return p.toString();
+    } catch { return url; }
 }
 
-function prioritizeVideoQueue() {
-    const visible = [];
-    const hidden = [];
-
-    for (const block of state.videoLoadQueue) {
-        const isVisible = !!(block.sprite && block.sprite.parent && block.sprite.parent.visible);
-        if (isVisible) visible.push(block);
-        else hidden.push(block);
-    }
-
-    state.videoLoadQueue = [...visible, ...hidden];
-}
-
-function pumpVideoQueue() {
-    if (state.activeVideoLoads >= state.maxConcurrentVideoLoads) return;
-    if (state.videoLoadQueue.length === 0) return;
-
-    while (state.activeVideoLoads < state.maxConcurrentVideoLoads && state.videoLoadQueue.length > 0) {
-        const block = state.videoLoadQueue.shift();
-        if (!block) continue;
-
-        block.videoQueued = false;
-
-        if (block.videoLoading || block.videoReady) {
-            continue;
-        }
-
-        state.activeVideoLoads++;
-        ensureBlockVideoTexture(block, getBlockYouTubeId(block))
-            .finally(() => {
-                state.activeVideoLoads = Math.max(0, state.activeVideoLoads - 1);
-            });
-    }
-}
-
-function startVideoQueuePump() {
-    if (state.videoQueuePumpTimer) return;
-    state.videoQueuePumpTimer = setInterval(() => {
-        prioritizeVideoQueue();
-        pumpVideoQueue();
-
-        if (state.videoLoadQueue.length === 0 && state.activeVideoLoads === 0) {
-            clearInterval(state.videoQueuePumpTimer);
-            state.videoQueuePumpTimer = null;
-        }
-    }, 60);
-}
-
-function stopVideoQueuePump() {
-    if (!state.videoQueuePumpTimer) return;
-    clearInterval(state.videoQueuePumpTimer);
-    state.videoQueuePumpTimer = null;
-}
-
-function getGridVideoOverlayElement() {
-    let el = document.getElementById('grid-video-overlay');
-    if (!el) {
-        el = document.createElement('div');
-        el.id = 'grid-video-overlay';
-        document.body.appendChild(el);
-    }
-    return el;
-}
-
-function ensureActiveVideoMarker() {
-    if (state.activeVideoMarker && state.activeVideoMarker.graphics) {
-        return state.activeVideoMarker;
-    }
-
-    const marker = new PIXI.Graphics();
-    marker.visible = false;
-    marker.eventMode = 'none';
-    marker.alpha = 1;
-
-    state.activeVideoMarker = {
-        graphics: marker,
-        blockId: null,
-        parentChunk: null
-    };
-
-    return state.activeVideoMarker;
-}
-
-function clearActiveVideoMarker() {
-    if (!state.activeVideoMarker || !state.activeVideoMarker.graphics) return;
-
-    const marker = state.activeVideoMarker.graphics;
-    marker.visible = false;
-    marker.clear();
-
-    state.activeVideoMarker.blockId = null;
-    state.activeVideoMarker.parentChunk = null;
-}
-
-function updateActiveVideoMarker() {
-    if (!state.activeGridVideo) {
-        clearActiveVideoMarker();
-        return;
-    }
-
-    const block = state.blocks[state.activeGridVideo.blockId];
-    if (!block || !block.sprite || !block.sprite.parent) {
-        clearActiveVideoMarker();
-        return;
-    }
-
-    const markerState = ensureActiveVideoMarker();
-    const marker = markerState.graphics;
-    const chunk = block.sprite.parent;
-
-    if (marker.parent !== chunk) {
-        if (marker.parent) {
-            marker.parent.removeChild(marker);
-        }
-        chunk.addChild(marker);
-    }
-
-    const margin = 2;
-    const x = block.sprite.x - margin;
-    const y = block.sprite.y - margin;
-    const size = (CONFIG.BLOCK_SIZE - CONFIG.GAP) + (margin * 2);
-    const safeColor = sanitizeBlockColor(block?.data?.owner_color);
-    const markerColor = parseInt(safeColor.slice(1), 16);
-    const zoom = Math.max(state.cam.zoom, 0.0001);
-    const visibilityBoost = Math.min(2.2, Math.max(1, 0.18 / zoom));
-    const baseStroke = Math.min(18, Math.max(3, 0.25 / zoom));
-    const pulse = (Math.sin(performance.now() * 0.01) + 1) * 0.5;
-    const glowOuterAlpha = Math.min(0.95, (0.22 + (pulse * 0.38)) * visibilityBoost);
-    const glowMidAlpha = Math.min(0.98, (0.3 + (pulse * 0.32)) * visibilityBoost);
-
-    marker.clear();
-    marker.rect(x - 2, y - 2, size + 4, size + 4).stroke({ width: baseStroke * 2.4, color: markerColor, alpha: glowOuterAlpha });
-    marker.rect(x - 1, y - 1, size + 2, size + 2).stroke({ width: baseStroke * 1.8, color: markerColor, alpha: glowMidAlpha });
-    marker.rect(x, y, size, size).stroke({ width: baseStroke * 1.4, color: markerColor, alpha: 0.98 });
-    marker.rect(x + 1, y + 1, size - 2, size - 2).stroke({ width: Math.max(1.4, baseStroke * 0.9), color: 0xffffff, alpha: 0.45 });
-    marker.visible = true;
-
-    markerState.blockId = block.id;
-    markerState.parentChunk = chunk;
-}
-
-function openGridVideoPlayer(blockId) {
-    const block = state.blocks[blockId];
-    const videoId = getBlockYouTubeId(block);
-    if (!block || !videoId) return;
-
-    const priceValue = Number.isFinite(block?.price) ? block.price : (blockId * 10);
-    const priceLabel = `₹${Math.round(priceValue).toLocaleString()}`;
-
-    const safeColor = sanitizeBlockColor(block?.data?.owner_color);
-    const colorInt = parseInt(safeColor.slice(1), 16);
-    const r = (colorInt >> 16) & 255;
-    const g = (colorInt >> 8) & 255;
-    const b = colorInt & 255;
-
-    const overlay = getGridVideoOverlayElement();
-    overlay.style.setProperty('--player-accent', safeColor);
-    overlay.style.setProperty('--player-accent-rgb', `${r}, ${g}, ${b}`);
-    overlay.innerHTML = `
-        <div class="grid-video-shell">
-            <button class="grid-video-close" onclick="closeGridVideoPlayer()" aria-label="Close video">✕</button>
-            <div class="grid-video-frame-wrap">
-                <iframe
-                    src="https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1"
-                    frameborder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowfullscreen
-                ></iframe>
-            </div>
-            <div class="grid-video-footer">
-                <div class="grid-video-footer-item">Grid #${blockId}</div>
-                <div class="grid-video-footer-item">Paid ${priceLabel}</div>
-            </div>
-        </div>
-    `;
-
-    overlay.classList.add('show');
-    state.activeGridVideo = { blockId, mode: null, floating: false, left: 0, top: 0, width: 0, height: 0 };
-    state.lastVideoCamSnapshot = { x: state.cam.x, y: state.cam.y, zoom: state.cam.zoom };
-    updateActiveVideoMarker();
-    updateGridVideoOverlayPosition();
-}
-
-window.closeGridVideoPlayer = function() {
-    const overlay = document.getElementById('grid-video-overlay');
-    if (overlay) {
-        overlay.classList.remove('show');
-        overlay.innerHTML = '';
-    }
-    state.activeGridVideo = null;
-    state.lastVideoCamSnapshot = null;
-    clearActiveVideoMarker();
-};
-
-function pinGridVideoAsFloatingPlayer() {
-    if (!state.activeGridVideo) return;
-
-    const overlay = document.getElementById('grid-video-overlay');
-    if (!overlay) return;
-
-    const maxByViewport = Math.floor(window.innerWidth * 0.4);
-    const floatingWidth = window.innerWidth <= 700
-        ? Math.min(Math.max(320, Math.floor(window.innerWidth * 0.84)), 400)
-        : Math.min(Math.max(500, maxByViewport), 620);
-    const videoHeight = Math.round(floatingWidth * 0.5625);
-    const controlsHeight = 84;
-    const floatingHeight = videoHeight + controlsHeight;
-    const left = Math.max(8, window.innerWidth - floatingWidth - 18);
-    const top = Math.max(8, window.innerHeight - floatingHeight - 18);
-
-    state.activeGridVideo.floating = true;
-    state.activeGridVideo.mode = 'floating';
-    state.activeGridVideo.width = floatingWidth;
-    state.activeGridVideo.height = floatingHeight;
-    state.activeGridVideo.left = left;
-    state.activeGridVideo.top = top;
-
-    overlay.classList.remove('grid-track');
-    overlay.classList.add('floating');
-    overlay.style.left = `${left}px`;
-    overlay.style.top = `${top}px`;
-    overlay.style.width = `${floatingWidth}px`;
-    overlay.style.height = `${floatingHeight}px`;
-}
-
-function placeGridVideoOnTile(block) {
-    if (!state.activeGridVideo || !block || !block.sprite) return;
-
-    const overlay = document.getElementById('grid-video-overlay');
-    if (!overlay) return;
-
-    const blockSizePx = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * state.cam.zoom;
-    const screenX = state.cam.x + (block.sprite.x * state.cam.zoom);
-    const screenY = state.cam.y + (block.sprite.y * state.cam.zoom);
-
-    const width = Math.max(1, blockSizePx);
-    const height = Math.max(1, blockSizePx);
-
-    const maxLeft = window.innerWidth - width;
-    const maxTop = window.innerHeight - height;
-    const clampedLeft = Math.min(Math.max(0, screenX), Math.max(0, maxLeft));
-    const clampedTop = Math.min(Math.max(0, screenY), Math.max(0, maxTop));
-
-    state.activeGridVideo.floating = false;
-    state.activeGridVideo.mode = 'grid';
-    state.activeGridVideo.left = clampedLeft;
-    state.activeGridVideo.top = clampedTop;
-    state.activeGridVideo.width = width;
-    state.activeGridVideo.height = height;
-
-    overlay.classList.add('grid-track');
-    overlay.classList.remove('floating');
-    overlay.style.left = `${clampedLeft}px`;
-    overlay.style.top = `${clampedTop}px`;
-    overlay.style.width = `${width}px`;
-    overlay.style.height = `${height}px`;
-}
-
-function updateGridVideoOverlayPosition() {
-    if (!state.activeGridVideo) {
-        if (state.activeVideoMarker && state.activeVideoMarker.blockId !== null) {
-            clearActiveVideoMarker();
-        }
-        return;
-    }
-
-    updateActiveVideoMarker();
-
-    const overlay = document.getElementById('grid-video-overlay');
-    if (!overlay) return;
-
-    const block = state.blocks[state.activeGridVideo.blockId];
-    if (!block || !block.sprite) {
-        window.closeGridVideoPlayer();
-        return;
-    }
-
-    const blockSizePx = (CONFIG.BLOCK_SIZE - CONFIG.GAP) * state.cam.zoom;
-    const screenX = state.cam.x + (block.sprite.x * state.cam.zoom);
-    const screenY = state.cam.y + (block.sprite.y * state.cam.zoom);
-    const parentVisible = !!(block.sprite.parent && block.sprite.parent.visible);
-    const blockInViewport =
-        parentVisible &&
-        (screenX + blockSizePx) > 0 &&
-        screenX < window.innerWidth &&
-        (screenY + blockSizePx) > 0 &&
-        screenY < window.innerHeight;
-
-    // Super-low floating trigger: switch to side player only after heavy zoom-out.
-    // Target is roughly when ~20 grid rows are visible on screen.
-    const targetVisibleRows = state.isMobileDevice ? 16 : 20;
-    const baseZoomForRows = state.pixi.screen.height / (CONFIG.BLOCK_SIZE * targetVisibleRows);
-    const enterFloatingThreshold = baseZoomForRows * 0.9;
-    const exitFloatingThreshold = baseZoomForRows * 1.05;
-    const shouldFloatByLod = state.activeGridVideo.floating
-        ? state.cam.zoom < exitFloatingThreshold
-        : state.cam.zoom < enterFloatingThreshold;
-
-    // Combined rule:
-    // - Grid mode only when zoom is in AND user is actually viewing that grid tile.
-    // - Otherwise keep medium side player.
-    const shouldFloat = shouldFloatByLod || !blockInViewport;
-
-    // Reposition only when mode changes. Keep fixed within a mode.
-    if (state.activeGridVideo.mode === null) {
-        if (shouldFloat) {
-            pinGridVideoAsFloatingPlayer();
-        } else {
-            placeGridVideoOnTile(block);
-        }
-        state.lastVideoCamSnapshot = { x: state.cam.x, y: state.cam.y, zoom: state.cam.zoom };
-        return;
-    }
-
-    if (shouldFloat && state.activeGridVideo.mode !== 'floating') {
-        pinGridVideoAsFloatingPlayer();
-        state.lastVideoCamSnapshot = { x: state.cam.x, y: state.cam.y, zoom: state.cam.zoom };
-        return;
-    }
-
-    if (!shouldFloat && state.activeGridVideo.mode !== 'grid') {
-        placeGridVideoOnTile(block);
-        state.lastVideoCamSnapshot = { x: state.cam.x, y: state.cam.y, zoom: state.cam.zoom };
-        return;
-    }
-
-    // In grid mode, continuously track the tile exactly like thumbnail placement.
-    if (state.activeGridVideo.mode === 'grid') {
-        placeGridVideoOnTile(block);
-        state.lastVideoCamSnapshot = { x: state.cam.x, y: state.cam.y, zoom: state.cam.zoom };
-        return;
-    }
-
-    // Same mode: keep fixed, no movement while dragging/panning/zooming.
-    state.lastVideoCamSnapshot = { x: state.cam.x, y: state.cam.y, zoom: state.cam.zoom };
-}
-
-function preparePhotoMode() {
-    const soldBlocks = getVisibleSoldBlocks();
-    soldBlocks.forEach((block) => {
-        enqueuePhotoLoad(block);
-    });
-    startPhotoQueuePump();
-}
-
-function prepareVideoMode() {
-    const soldBlocks = getVisibleSoldBlocks();
-    soldBlocks.forEach((block) => {
-        enqueueVideoLoad(block);
-    });
-    startVideoQueuePump();
-}
-
-function updateDynamicMediaQueues() {
-    const now = performance.now();
-    if ((now - state.lastMediaQueueTick) < CONFIG.MEDIA_QUEUE_UPDATE_MS) return;
-    state.lastMediaQueueTick = now;
-
-    if (state.viewMode === 'video') {
-        prepareVideoMode();
-        return;
-    }
-
-    // Keep text mode ultra-light: stop background media preloading.
-    state.videoLoadQueue.length = 0;
-    state.photoLoadQueue.length = 0;
-
-    if (state.activeVideoLoads === 0) {
-        stopVideoQueuePump();
-    }
-    if (state.activePhotoLoads === 0) {
-        stopPhotoQueuePump();
-    }
-}
-
-function applyBlockVisualMode(block) {
-    if (!block) return;
-
-    const shouldShowVideo = state.viewMode === 'video';
-    const canUseVideo = shouldShowVideo && hasYouTubeVideo(block);
-
-    if (!block.sold) {
-        if (block.photoRef) {
-            block.photoRef.visible = false;
-        }
-        if (block.videoRef) {
-            block.videoRef.visible = false;
-        }
-        if (block.borderRef) {
-            block.borderRef.visible = false;
-        }
-        if (block.sprite) {
-            block.sprite.visible = true;
-        }
-        if (block.textRef) {
-            block.textRef.visible = false;
-        }
-        return;
-    }
-
-    if (block.photoRef) {
-        block.photoRef.visible = false;
-    }
-
-    if (canUseVideo) {
-        const videoRef = ensureBlockVideoSprite(block);
-        if (videoRef) {
-            videoRef.visible = !!block.videoReady;
-        }
-
-        if (!block.videoReady) {
-            enqueueVideoLoad(block);
-            startVideoQueuePump();
-        }
-    } else if (block.videoRef) {
-        block.videoRef.visible = false;
-    }
-
-    refreshBlockBorder(block);
-
-    if (block.sprite) {
-        const safeColor = sanitizeBlockColor(block?.data?.owner_color);
-        const ownerTint = parseInt(safeColor.slice(1), 16);
-        // In YouTube mode, force a dark tile with neutral tint so only the border carries color.
-        // In Text mode, keep the sold texture + owner color fill behavior.
-        block.sprite.texture = shouldShowVideo ? state.baseTextures.std : state.baseTextures.sold;
-        block.sprite.tint = shouldShowVideo ? 0xFFFFFF : ownerTint;
-        const useVideoTexture = canUseVideo && block.videoReady && !!block.videoRef;
-        block.sprite.visible = !useVideoTexture;
-    }
-
-    if (block.textRef) {
-        block.textRef.visible = state.viewMode === 'text' && state.lodVisible;
-    }
-}
-
-function applyVisualModeToAllBlocks() {
-    for (let i = 1; i <= CONFIG.TOTAL_BLOCKS; i++) {
-        const block = state.blocks[i];
-        if (block) {
-            applyBlockVisualMode(block);
-        }
-    }
-}
-
-function updateModeButtons() {
-    document.body.classList.toggle('is-video-mode', state.viewMode === 'video');
-}
-
-function updateBlock(id, data, options = {}) {
-    const b = state.blocks[id];
-    if(!b) return;
-    const previousSold = b.sold;
-    const previousPhotoUrl = b.photoUrl || '';
-    const previousVideoUrl = b.videoUrl || '';
-    
-    // Only set sold to true if data indicates it's sold, otherwise keep current state
-    if (data.sold !== undefined) {
-        b.sold = data.sold;
-    } else {
-        b.sold = true; // Default behavior for explicit updates
-    }
-
-    if (!previousSold && b.sold) {
-        state.soldCount = Math.min(CONFIG.TOTAL_BLOCKS, state.soldCount + 1);
-        state.soldBlockIds.add(id);
-    } else if (previousSold && !b.sold) {
-        state.soldCount = Math.max(0, state.soldCount - 1);
-        state.soldBlockIds.delete(id);
-    } else if (b.sold) {
-        state.soldBlockIds.add(id);
-    } else {
-        state.soldBlockIds.delete(id);
-    }
-    
-    b.data = data;
-
-    const nextPhotoUrl = (data && typeof data.image_url === 'string') ? data.image_url.trim() : '';
-    const nextVideoId = (data && typeof data.youtube_url === 'string') ? getYouTubeVideoId(data.youtube_url) : null;
-    const nextVideoUrl = nextVideoId ? `yt:${nextVideoId}` : '';
-
-    if (!b.sold) {
-        b.photoQueued = false;
-        b.photoLoading = false;
-        b.photoUrl = '';
-        b.videoQueued = false;
-        b.videoLoading = false;
-        b.videoUrl = '';
-
-        releaseBlockOverlays(b);
-        b.sprite.texture = state.baseTextures[b.tier] || state.baseTextures.std;
-        b.sprite.tint = 0xFFFFFF;
-    } else {
-        if ((nextPhotoUrl !== previousPhotoUrl || !previousSold) && b.photoTextureKey) {
-            releaseBlockPhotoTexture(b);
-        }
-
-        if ((nextVideoUrl !== previousVideoUrl || !previousSold) && b.videoTextureKey) {
-            releaseBlockVideoTexture(b);
-        }
-
-        if (nextPhotoUrl !== previousPhotoUrl || !previousSold) {
-            b.photoReady = false;
-            b.photoQueued = false;
-            b.photoLoading = false;
-        }
-        b.photoUrl = nextPhotoUrl;
-
-        if (nextVideoUrl !== previousVideoUrl || !previousSold) {
-            b.videoReady = false;
-            b.videoQueued = false;
-            b.videoLoading = false;
-        }
-        b.videoUrl = nextVideoUrl;
-    }
-    
-    // Only apply sold styling if the block is actually sold
-    if (b.sold) {
-        b.sprite.texture = state.baseTextures.sold;
-        const safeColor = sanitizeBlockColor(data.owner_color);
-        b.sprite.tint = parseInt(safeColor.slice(1), 16);
-    }
-
-    // This function now internally handles O(1) pool updates
-    if (b.sold && data.owner_text) {
-        renderBlockText(b.sprite, data.owner_text);
-    } else {
-        renderBlockText(b.sprite, null);
-    }
-
-    if (b.sold && b.sprite.textRef) {
-        const safeTextColor = sanitizeTextColor(data.owner_text_color || '#FFFFFF');
-        b.sprite.textRef.tint = parseInt(safeTextColor.slice(1), 16);
-    }
-
-    applyBlockVisualMode(b);
-    refreshBlockBorder(b);
-
-    if (state.viewMode === 'video' && b.sold) {
-        if (hasYouTubeVideo(b)) {
-            enqueueVideoLoad(b);
-            startVideoQueuePump();
-        }
-    }
-
-    state.slotRenderSignature.set(id, getSlotRenderSignature(b.sold ? { ...data, sold: true } : { sold: false }));
-
-    if (!options.skipSalesCounter) {
-        updateSalesCounter();
-    }
-}
-
-// =========================================================================
-// 8. APP INTERFACE & UI
-// =========================================================================
-window.app = {
-    resetCamera: () => centerCamera(),
-    toggleExplore: () => {}
-};
-
-function getUserStats(ownerName) {
-    let count = 0;
-    let totalValue = 0;
-    for(let i=1; i<=CONFIG.TOTAL_BLOCKS; i++) {
-        if(state.blocks[i] && state.blocks[i].sold && state.blocks[i].data && state.blocks[i].data.owner_name === ownerName) {
-            count++;
-            totalValue += state.blocks[i].price;
-        }
-    }
-    return { count, totalValue };
-}
-
-function centerCamera() {
-    const screenCX = state.pixi.screen.width / 2;
-    const screenCY = state.pixi.screen.height / 2;
-    
-    const availableW = state.pixi.screen.width - 60;
-    const availableH = state.pixi.screen.height - 180;
-    
-    const zoomX = availableW / PYRAMID_WIDTH;
-    const zoomY = availableH / PYRAMID_HEIGHT;
-    
-    const targetZoom = Math.min(zoomX, zoomY) * 0.9;
-    
-    state.target.zoom = targetZoom;
-    state.cam.zoom = targetZoom;
-
-    const pyramidCenterY = PYRAMID_HEIGHT / 2;
-    
-    state.target.x = screenCX;
-    state.target.y = screenCY - (pyramidCenterY * targetZoom);
-
-    state.cam.x = state.target.x;
-    state.cam.y = state.target.y;
-}
-
-window.showHelp = () => {
-    const modal = document.getElementById('help-modal');
-    modal.style.display = 'flex';
-    document.body.style.pointerEvents = 'none';
-    modal.style.pointerEvents = 'auto';
-};
-
-window.hideHelp = (event) => {
-    const modal = document.getElementById('help-modal');
-    if (!event || event.target.id === 'help-modal' || event.target.tagName === 'BUTTON') {
-        modal.style.display = 'none';
-        document.body.style.pointerEvents = 'auto';
-    }
-};
-
-// Extract YouTube video ID from various YouTube URL formats
 function getYouTubeVideoId(url) {
-    if (!url) return null;
-    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ \s]{11})/;
-    const match = url.match(regex);
-    return match ? match[1] : null;
+    if (!url || typeof url !== 'string') return null;
+    const m = url.match(/^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/);
+    return (m && m[2] && m[2].length === 11) ? m[2] : null;
 }
 
-// Replace YouTube thumbnail with embedded player on click
-window.loadYouTubeVideo = function(container, videoId) {
-    container.innerHTML = `<iframe
-        src="https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1"
-        frameborder="0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowfullscreen
-        style="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:12px;"
-    ></iframe>`;
-};
-
-// Escape HTML to prevent XSS
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+function isYouTubeShort(url) {
+    if (!url || typeof url !== 'string') return false;
+    return /youtube\.com\/shorts\//i.test(url) || /youtu\.be\//i.test(url);
 }
 
-let resizeDebounceTimer = null;
-window.addEventListener('resize', () => {
-    if (resizeDebounceTimer) {
-        clearTimeout(resizeDebounceTimer);
+function isYouTubeVideoSafe(url) {
+    if (!url || typeof url !== 'string' || url === '#') return false;
+    return getYouTubeVideoId(url) !== null && !isYouTubeShort(url);
+}
+
+function isDirectVideoUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    return /\.(mp4|webm|ogg|mov)(\?|$)/i.test(url);
+}
+
+// ── Modal player ──────────────────────────────────────────────────────────────
+function openReelModal(reelUrl, itemId) {
+    if (itemId !== undefined) {
+        markViewed(itemId);
+        const card = document.querySelector(`[data-item-id="${itemId}"]`);
+        if (card) {
+            card.classList.add('card-viewed');
+            const infos = card.querySelectorAll('.card-info-section, .yt-info-section');
+            infos.forEach(el => el.classList.add('info-viewed'));
+        }
     }
 
-    resizeDebounceTimer = setTimeout(() => {
-        state.isMobileDevice = window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
-        if (!state.pixi) return;
-        state.pixi.resize();
-        centerCamera();
-        state.lodQueueIndex = 0;
-    }, 120);
-});
+    const modal = document.getElementById('reel-modal');
+    const container = document.getElementById('reel-player-container');
+    const mc = modal ? modal.querySelector('.reel-modal-content') : null;
+    if (!modal || !container || !mc) return;
 
-document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-        loadStaticData({ silent: true });
-        state.lodQueueIndex = 0;
+    container.innerHTML = '';
+    mc.classList.remove('youtube-layout', 'instagram-layout');
+
+    const youtubeId = getYouTubeVideoId(reelUrl);
+    const isDirect = isDirectVideoUrl(reelUrl);
+
+    if (isDirect) {
+        mc.classList.add('youtube-layout');
+        container.innerHTML = `<video src="${reelUrl}" autoplay controls loop playsinline style="width:100%;height:100%;border-radius:20px;">Your browser does not support video.</video>`;
+        modal.classList.add('show');
+    } else if (youtubeId) {
+        mc.classList.add('youtube-layout');
+        container.innerHTML = `<iframe src="https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=0&rel=0" class="youtube-video-player" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+        modal.classList.add('show');
+    } else {
+        mc.classList.add('instagram-layout');
+        const cleanedUrl = cleanInstagramUrl(reelUrl);
+        container.innerHTML = `
+            <div class="instagram-notice"><span>👆 Tap video once to play (Instagram safety rule)</span></div>
+            <div class="reel-loader" id="reel-loader"><div class="spinner"></div><span>Loading Reel...</span></div>
+            <blockquote class="instagram-media" data-instgrm-permalink="${cleanedUrl}" data-instgrm-version="14"
+                style="background:#FFF;border:0;border-radius:12px;box-shadow:0 0 1px 0 rgba(0,0,0,.5),0 1px 10px 0 rgba(0,0,0,.15);margin:0;min-width:280px;width:100%;"></blockquote>`;
+        modal.classList.add('show');
+
+        const obs = new MutationObserver(() => {
+            const iframe = container.querySelector('iframe');
+            if (iframe) {
+                iframe.onload = () => { const l = document.getElementById('reel-loader'); if (l) l.classList.add('hidden'); };
+                setTimeout(() => { const l = document.getElementById('reel-loader'); if (l) l.classList.add('hidden'); }, 4000);
+                obs.disconnect();
+            }
+        });
+        obs.observe(container, { childList: true });
+
+        if (!document.getElementById('instagram-embed-script')) {
+            const s = document.createElement('script');
+            s.id = 'instagram-embed-script'; s.async = true;
+            s.src = 'https://www.instagram.com/embed.js';
+            document.body.appendChild(s);
+        } else if (window.instgrm) {
+            window.instgrm.Embeds.process();
+        }
     }
-});
+}
 
-document.addEventListener('DOMContentLoaded', () => {
-    updateModeButtons();
-});
+function closeReelModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    const modal = document.getElementById('reel-modal');
+    if (modal) {
+        modal.classList.remove('show');
+        const mc = modal.querySelector('.reel-modal-content');
+        if (mc) mc.classList.remove('youtube-layout', 'instagram-layout');
+    }
+    const c = document.getElementById('reel-player-container');
+    if (c) c.innerHTML = '';
+}
 
-setInitialViewModeRandomly();
+// ── Insert form ───────────────────────────────────────────────────────────────
+function openInsertModal() {
+    document.getElementById('insert-modal').classList.add('show');
+    document.getElementById('insert-form').reset();
+}
 
-init();
+function closeInsertModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('insert-modal').classList.remove('show');
+}
+
+function handleInsertSubmit(event) {
+    event.preventDefault();
+    const name = (document.getElementById('insert-name').value || '').trim();
+    const profilePicture = (document.getElementById('insert-profile').value || '').trim();
+    const message = (document.getElementById('insert-message').value || '').trim();
+    const reelLink = (document.getElementById('insert-reel').value || '').trim();
+    const price = parseInt(document.getElementById('insert-price').value) || 0;
+
+    const newEntry = {
+        id: Date.now(),
+        name: name || 'Anonymous',
+        profilePicture: profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'A')}&background=random&size=200`,
+        message: message || 'No message provided',
+        reelLink: reelLink || '#',
+        price,
+        likes: 0
+    };
+
+    leaderboardData.push(newEntry);
+    saveLocalData();
+    renderInstaCards();
+    switchTab(isYouTubeVideoSafe(newEntry.reelLink) ? 'youtube' : 'reels');
+    closeInsertModal({ target: document.getElementById('insert-modal'), currentTarget: document.getElementById('insert-modal') });
+    showSuccessMessage('Card created! ✅');
+}
+
+// ── Card HTML builders ────────────────────────────────────────────────────────
+// Like bar with price on the right
+function buildLikeBar(item) {
+    const liked = isLiked(item.id);
+    return `
+        <div class="card-like-bar" onclick="event.stopPropagation()">
+            <button class="like-btn${liked ? ' liked' : ''}" onclick="toggleLike(event,${item.id})" aria-label="Like">
+                <svg class="heart-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <span class="like-count">${formatLikes(item.likes || 0)}</span>
+            </button>
+            <div class="card-price-tag">
+                <span class="price-rupee">&#8377;</span>
+                <span class="price-value">${(item.price || 0).toLocaleString('en-IN')}</span>
+            </div>
+        </div>`;
+}
+
+function buildMessageBlock(msg, cssClass) {
+    const safeMsg = (msg || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    const isLong = (msg || '').length > 55;
+    return `<div class="${cssClass}">&ldquo;${safeMsg}&rdquo;</div>${isLong ? `<button class="read-more-btn" onclick="toggleReadMore(event,this)">more</button>` : ''}`;
+}
+
+// YouTube VIDEO card
+function getYouTubeVideoCardHtml(item) {
+    const youtubeId = getYouTubeVideoId(item.reelLink);
+    if (!youtubeId) return '';
+    const thumbUrl = `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
+    const encodedItem = safeEncode(item);
+    const viewed = isViewed(item.id);
+    const viewedClass = viewed ? ' card-viewed' : '';
+    const infoViewedClass = viewed ? ' info-viewed' : '';
+
+    return `
+        <div class="yt-video-card${viewedClass}" data-item-id="${item.id}" onclick="openReelModal('${item.reelLink.replace(/'/g, "\\'")}',${item.id})">
+            <div class="yt-thumb-section">
+                <img src="${thumbUrl}" alt="${(item.name||'').replace(/"/g,'')}" class="yt-thumb-img"
+                     onerror="this.src='https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg'">
+                <img src="${item.profilePicture||''}" class="yt-avatar" onerror="this.style.display='none'" alt="">
+                ${encodedItem ? `<button class="platform-badge youtube-badge" title="Copy link" onclick="copyCardLink(event,'${encodedItem}')">&#128308;</button>` : ''}
+                <div class="play-icon yt-play-icon">&#9654;</div>
+                ${viewed ? '<div class="viewed-badge">&#10003; Watched</div>' : ''}
+            </div>
+            <div class="yt-info-section${infoViewedClass}">
+                <div class="yt-creator-name">@${item.name||'Unknown'}</div>
+                ${buildMessageBlock(item.message, 'card-motto-message')}
+            </div>
+            ${buildLikeBar(item)}
+        </div>`;
+}
+
+// Reel / Short card
+function getReelThumbnailHtml(item) {
+    const youtubeId = getYouTubeVideoId(item.reelLink);
+    const isDirect = isDirectVideoUrl(item.reelLink);
+    const viewed = isViewed(item.id);
+    const encodedItem = safeEncode(item);
+    const viewedClass = viewed ? ' card-viewed' : '';
+    const infoViewedClass = viewed ? ' info-viewed' : '';
+
+    let mediaContent = '';
+    if (youtubeId) {
+        mediaContent = `<img src="https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg" alt="" class="reel-thumbnail-img">`;
+    } else if (isDirect) {
+        mediaContent = `<video src="${item.reelLink}" class="reel-thumbnail-img" muted preload="metadata" playsinline></video>`;
+    } else {
+        const cleanedUrl = cleanInstagramUrl(item.reelLink);
+        const instgrmThumb = cleanedUrl.replace('/reel/', '/p/') + 'media/?size=m';
+        mediaContent = `<div class="instagram-thumb-container" style="width:100%;height:100%;"><img src="${instgrmThumb}" class="reel-thumbnail-img" alt="" referrerpolicy="no-referrer" onerror="handleThumbError(this)"></div>`;
+    }
+
+    const badgeHtml = encodedItem ? (youtubeId
+        ? `<button class="platform-badge youtube-badge" title="Copy link" onclick="copyCardLink(event,'${encodedItem}')">&#128308;</button>`
+        : `<button class="platform-badge instagram-badge" title="Copy link" onclick="copyCardLink(event,'${encodedItem}')">&#128248;</button>`)
+        : '';
+
+    return `
+        <div class="reel-thumbnail-card${viewedClass}" data-item-id="${item.id}" onclick="openReelModal('${(item.reelLink||'#').replace(/'/g, "\\'")}',${item.id})">
+            <div class="card-photo-section">
+                <img src="${item.profilePicture||''}" class="card-cover-photo" onerror="this.style.display='none'">
+                ${badgeHtml}
+                <div class="play-icon">&#9654;</div>
+                ${viewed ? '<div class="viewed-badge">&#10003; Watched</div>' : ''}
+            </div>
+            <div class="card-info-section${infoViewedClass}">
+                <div class="card-creator-name">@${item.name||'Unknown'}</div>
+                ${buildMessageBlock(item.message, 'card-motto-message')}
+            </div>
+            ${buildLikeBar(item)}
+        </div>`;
+}
+
+// ── Copy link ─────────────────────────────────────────────────────────────────
+function copyCardLink(event, encodedItem) {
+    event.stopPropagation();
+    const url = window.location.origin + (window.location.pathname.replace(/\/[^/]*$/, '/')) + 'card.html?data=' + encodedItem;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(() => showToast('Link copied! 🔗')).catch(() => fallbackCopy(url));
+    } else { fallbackCopy(url); }
+}
+
+function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    document.body.removeChild(ta);
+    showToast('Link copied! 🔗');
+}
+
+// ── Toast & messages ──────────────────────────────────────────────────────────
+function showToast(msg) {
+    let t = document.getElementById('copy-toast');
+    if (!t) {
+        t = document.createElement('div'); t.id = 'copy-toast';
+        t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:linear-gradient(135deg,#833ab4,#dc2743);color:#fff;font-family:Roboto,sans-serif;font-size:.82rem;font-weight:700;padding:10px 20px;border-radius:100px;box-shadow:0 6px 20px rgba(220,39,67,.45);opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);z-index:9999;white-space:nowrap;pointer-events:none;';
+        document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    requestAnimationFrame(() => { t.style.opacity = '1'; t.style.transform = 'translateX(-50%) translateY(0)'; });
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(20px)'; }, 2500);
+}
+
+function showSuccessMessage(message) {
+    const d = document.createElement('div');
+    d.style.cssText = 'position:fixed;top:16px;right:16px;background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);color:white;padding:11px 20px;border-radius:10px;font-weight:700;font-size:.88rem;z-index:2000;animation:slideIn .3s ease;box-shadow:0 4px 14px rgba(220,39,67,.3);';
+    d.textContent = message;
+    document.body.appendChild(d);
+    setTimeout(() => { d.style.animation = 'slideOut .3s ease'; setTimeout(() => d.remove(), 300); }, 3000);
+}
+
+// ── Instagram thumb fallback ──────────────────────────────────────────────────
+function handleThumbError(imgElement) {
+    const c = imgElement.closest('.instagram-thumb-container');
+    if (c) { c.style.background = 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)'; imgElement.style.display = 'none'; }
+}
+
+// ── Keyframe styles ───────────────────────────────────────────────────────────
+const _s = document.createElement('style');
+_s.textContent = `
+    @keyframes slideIn  { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+    @keyframes slideOut { from{transform:translateX(0);opacity:1} to{transform:translateX(100%);opacity:0} }
+    @keyframes likePop  { 0%{transform:scale(1)} 40%{transform:scale(1.5)} 70%{transform:scale(.88)} 100%{transform:scale(1)} }
+    .like-btn.like-pop { animation:likePop .42s cubic-bezier(.36,.07,.19,.97) both; }
+`;
+document.head.appendChild(_s);
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', init);

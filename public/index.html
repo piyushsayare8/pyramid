@@ -1,157 +1,141 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="description" content="Get your permanent spot in The Pyramid of Emotions - a unique digital monument where you can engrave your message forever.">
-    <meta name="keywords" content="pyramid, emotions, digital monument, permanent, blockchain, NFT, memorial">
-    <meta name="author" content="The Pyramid of Emotions">
-    <meta property="og:title" content="The Pyramid of Emotions | True Immortal Edition">
-    <meta property="og:description" content="Get your permanent spot in The Pyramid of Emotions - a unique digital monument.">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Insta Cards - Discover and collect creative social media cards">
+    <meta name="keywords" content="instagram, reels, cards, collector, social media">
+    <meta name="author" content="Insta Cards">
+    <meta property="og:title" content="Insta Cards">
+    <meta property="og:description" content="Discover and collect creative social media cards">
     <meta property="og:type" content="website">
-    <meta property="og:image" content="https://your-domain.com/og-image.jpg">
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="theme-color" content="#FF0000">
+    <meta name="theme-color" content="#1a0a2e">
     <meta name="robots" content="index, follow">
-    <meta name="google-site-verification" content="your-site-verification-token">
-    <link rel="icon" type="image/png" href="https://your-domain.com/favicon.png">
-    <link rel="apple-touch-icon" type="image/png" href="https://your-domain.com/apple-touch-icon.png">
+    <!-- PWA mobile -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="preconnect" href="https://cdn.jsdelivr.net">
-    <link rel="dns-prefetch" href="https://ui-avatars.com">
-    <title>The Pyramid of Emotions | True Immortal Edition</title>
-    
-    <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.x/dist/pixi.min.js" crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>Insta Cards - Social Media Collector</title>
+    <link rel="stylesheet" href="style.css?v=7.2">
 </head>
-<body>
-    <!-- ... -->
-    <div id="loader">
-        <div class="spinner"></div>
-        <div>The pyramid is getting ready for you please wait</div>
-    </div>
-    
-    <div id="canvas-container"></div>
 
-    <div class="ui-layer" role="main">
-        <header class="header interactive">
-            <h1 id="main-heading">The Pyramid of Emotions</h1>
-            <div class="subtitle">The Quality That Speaks For Itself</div>
+<body>
+    <div class="container">
+
+        <!-- ── HEADER ── -->
+        <header class="header">
+            <div class="header-content">
+                <h1>📸 Insta Cards</h1>
+                <p class="header-sub">Creative social media cards</p>
+            </div>
+            <div class="header-actions">
+                <button class="insert-btn" onclick="openInsertModal()">➕ Create</button>
+            </div>
         </header>
 
-        <div class="search-container interactive">
-            <input type="text" class="search-input" id="search-input" placeholder="🔍 Search names, messages, or prices (₹10, ₹20...)" aria-label="Search pyramid">
-            <button class="search-btn" onclick="performSearch()" aria-label="Search">🔍</button>
-        </div>
-        
-        <div class="search-results" id="search-results"></div>
-
-        <div class="sales-counter interactive" aria-labelledby="sales-counter-heading">
-            <h2 id="sales-counter-heading" class="sr-only">Creative Canvases Claimed</h2>
-            <div class="sales-label">Creative Canvases Claimed</div>
-            <div class="sales-stats" id="sales-count">0 / 5,151</div>
-            <div class="sales-progress">
-                <div class="sales-progress-bar" id="sales-progress-bar" style="width: 0%"></div>
-            </div>
-        </div>
-
-        <button class="help-btn interactive" onclick="showHelp()" aria-label="Help">?</button>
-        
-        <div class="help-modal" id="help-modal" onclick="hideHelp(event)">
-            <div class="help-content" onclick="event.stopPropagation()">
-                <h3>Need Help?</h3>
-                <p>If any payment or any issue occurs contact freely with us with data, we will help you as soon as possible</p>
-                <div class="email">thegoodguy08@gmail.com</div>
-                <button onclick="hideHelp()" aria-label="Close help">Close</button>
-            </div>
-        </div>
-        
-        <div class="controls interactive">
-            <div class="mode-buttons" role="group" aria-label="Pyramid view mode">
-                <button class="toggle-btn mode-btn" id="mode-text-btn" onclick="app.setViewMode('text')">📝 Text Mode</button>
-                <button class="toggle-btn mode-btn" id="mode-video-btn" onclick="app.setViewMode('video')">▶ YouTube Mode</button>
-            </div>
-            <div style="display: flex; gap: 12px; margin-bottom: 8px;">
-                <button class="btn" onclick="app.resetCamera()">⟲ Reset View</button>
-                <button class="btn btn-accent" id="simulate-btn" onclick="app.simulate()">🚀 Simulate</button>
-            </div>
-            <button class="toggle-btn" onclick="app.toggleExplore()">👁️ Hide/Show Explore</button>
-        </div>
-
-        <div class="center-controls interactive">
-            <button class="profile-btn" onclick="app.viewRandom()">
-                <span>★ Explore Profiles</span>
+        <!-- ── TAB SWITCHER ── -->
+        <div class="tab-switcher" id="tab-switcher">
+            <button class="tab-btn active" id="tab-youtube" onclick="switchTab('youtube')">
+                <span class="tab-icon">▶️</span>
+                <span class="tab-label">YouTube</span>
+                <span class="tab-count" id="yt-count">0</span>
+            </button>
+            <button class="tab-btn" id="tab-reels" onclick="switchTab('reels')">
+                <span class="tab-icon">📱</span>
+                <span class="tab-label">Reels &amp; Shorts</span>
+                <span class="tab-count" id="reels-count">0</span>
             </button>
         </div>
-        
-    <div id="tooltip" class="tooltip"></div>
 
-    <!-- Purchase Modal -->
-    <div id="modal-backdrop" class="modal-backdrop interactive" onclick="closeModal(event)">
-        <div class="modal" id="modal-content"></div>
+        <!-- ── CONTROLS BAR ── -->
+        <div class="controls-bar">
+            <div class="sort-group">
+                <span class="sort-label">Sort</span>
+                <button class="sort-btn active" data-sort="price" onclick="sortLeaderboard('price')">💰 Price</button>
+                <button class="sort-btn" data-sort="likes" onclick="sortLeaderboard('likes')">❤️ Likes</button>
+                <button class="sort-btn" data-sort="random" onclick="sortLeaderboard('random')">🔀 Random</button>
+            </div>
+            <div class="search-group">
+                <span class="search-icon-wrap">🔍</span>
+                <input
+                    type="search"
+                    id="search-input"
+                    class="search-input"
+                    placeholder="Search name, message, price…"
+                    oninput="onSearchInput()"
+                    autocomplete="off"
+                >
+                <button class="search-clear" id="search-clear" onclick="clearSearch()" title="Clear">✕</button>
+            </div>
+        </div>
+
+        <!-- ── YOUTUBE VIDEOS SECTION ── -->
+        <section class="content-section active-section" id="youtube-section">
+            <div class="youtube-cards-grid" id="youtube-cards-grid">
+                <!-- YouTube video cards rendered here -->
+            </div>
+        </section>
+
+        <!-- ── REELS & SHORTS SECTION ── -->
+        <section class="content-section" id="reels-section">
+            <div class="insta-cards-grid" id="insta-cards-grid">
+                <!-- Reel / Short cards rendered here -->
+            </div>
+        </section>
+
+    </div><!-- /.container -->
+
+    <!-- ── CREATE CARD MODAL ── -->
+    <div id="insert-modal" class="modal-overlay" onclick="closeInsertModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Create New Card</h2>
+                <button class="close-btn" onclick="closeInsertModal()">✕</button>
+            </div>
+            <form id="insert-form" onsubmit="handleInsertSubmit(event)">
+                <div class="form-group">
+                    <label for="insert-name">Creator Name</label>
+                    <input type="text" id="insert-name" placeholder="Enter creator name">
+                </div>
+                <div class="form-group">
+                    <label for="insert-profile">Profile Picture URL</label>
+                    <input type="url" id="insert-profile" placeholder="https://example.com/profile.jpg">
+                </div>
+                <div class="form-group">
+                    <label for="insert-message">Card Message</label>
+                    <textarea id="insert-message" placeholder="Enter your card message or motto"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="insert-reel">Video Link</label>
+                    <input type="url" id="insert-reel" placeholder="Instagram Reel, YouTube Short or Video link">
+                </div>
+                <div class="form-group">
+                    <label for="insert-price">Card Price (₹)</label>
+                    <input type="number" id="insert-price" placeholder="Enter price" min="0">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-cancel" onclick="closeInsertModal()">Cancel</button>
+                    <button type="submit" class="btn-submit">Create Card ✨</button>
+                </div>
+            </form>
+        </div>
     </div>
 
-    <!-- Test Mode Modal Overlay -->
-    <div id="test-modal" class="test-modal-overlay" onclick="closeTestModal(event)">
-        <div class="test-modal-content" onclick="event.stopPropagation()">
-            <div class="test-modal-header">
-                🧪 Test Your Creative Canvas - See How It Looks!
-            </div>
-            <div class="test-modal-body">
-                <div class="test-info">
-                    <strong>📝 Local Preview:</strong> Fill out this form to see how your creative canvas will look in the pyramid. 
-                    This is a <strong>local preview only</strong> - your data will disappear when you refresh the page. 
-                    For permanent placement, contact us with your information.
-                </div>
-                
-                <form id="test-form">
-                    <div class="test-form-group">
-                        <label for="test-name">Your Name *</label>
-                        <input type="text" id="test-name" required placeholder="Enter your name">
-                    </div>
-                    
-                    <div class="test-form-group">
-                        <label for="test-message">Your Message *</label>
-                        <textarea id="test-message" required placeholder="Write your message that will appear on your profile..."></textarea>
-                    </div>
-                    
-                    <div class="test-form-group">
-                        <label for="test-engraved">Engraved Text (Short text on creative canvas)</label>
-                        <input type="text" id="test-engraved" maxlength="20" placeholder="e.g., CRYPTO, HODL, BTC">
-                    </div>
-                    
-                    <div class="test-form-group">
-                        <label for="test-link">Your Website/Social Link</label>
-                        <input type="url" id="test-link" placeholder="https://yourwebsite.com">
-                    </div>
-                    
-                    <div class="test-form-group">
-                        <label for="test-link-desc">Link Description</label>
-                        <input type="text" id="test-link-desc" placeholder="e.g., Visit My Portfolio">
-                    </div>
-                    
-                    <div class="test-form-group">
-                        <label for="test-image">Profile Image URL (optional)</label>
-                        <input type="url" id="test-image" placeholder="https://example.com/your-photo.jpg">
-                    </div>
-                    
-                    <div class="test-form-buttons">
-                        <button type="submit" class="btn btn-test" style="flex: 1;">🎨 Preview My Creative Canvas</button>
-                        <button type="button" class="btn" onclick="closeTestModal()" style="flex: 1;">Cancel</button>
-                    </div>
-                </form>
-                
-                <div class="test-info" style="margin-top: 20px;">
-                    <strong>🔗 For Permanent Placement:</strong> Screenshot your preview and email us at <strong>thegoodguy08@gmail.com</strong> 
-                    with your information to permanently purchase this creative canvas.
-                </div>
+    <!-- ── VIDEO MODAL ── -->
+    <div id="reel-modal" class="modal-overlay" onclick="closeReelModal(event)">
+        <div class="reel-modal-content" onclick="event.stopPropagation()">
+            <button class="close-btn" onclick="closeReelModal()">✕</button>
+            <div class="reel-player-container" id="reel-player-container">
+                <!-- Embedded player loaded here -->
             </div>
         </div>
     </div>
 
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-<script type="module" src="script.js"></script>
+    <script src="script.js?v=7.0"></script>
 </body>
+
 </html>
