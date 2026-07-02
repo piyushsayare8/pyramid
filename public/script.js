@@ -2,7 +2,7 @@
 // INSTA CARDS — JAVASCRIPT v7.0
 // ========================================
 
-const DATA_VERSION = 7; // bump to force-clear old localStorage
+const DATA_VERSION = 9; // bump to force-clear old localStorage
 
 // ── Sample data ───────────────────────────────────────────────────────────────
 const sampleData = [
@@ -10,6 +10,7 @@ const sampleData = [
         id: 1,
         name: "Creative Artist",
         profilePicture: "assets/profiles/5000.jpg",
+        coverImage: "assets/profiles/5000.jpg",
         message: "Creating amazing content daily! Follow for more inspiration and creative adventures across all platforms",
         reelLink: "https://www.instagram.com/reel/DZ4f05ATGsf/",
         price: 5000,
@@ -19,6 +20,7 @@ const sampleData = [
         id: 2,
         name: "Tech Influencer",
         profilePicture: "assets/profiles/1000.jpg",
+        coverImage: "assets/profiles/image.png",
         message: "Latest tech reviews and tutorials and many more things as we go on and we will do our best to get anything so keep trying you have great future okay.",
         reelLink: "https://www.instagram.com/reel/DYK1M4tTxeS/?igsh=cmtpd3Q1cWRkMzc3",
         price: 3500,
@@ -28,6 +30,7 @@ const sampleData = [
         id: 3,
         name: "Food Blogger",
         profilePicture: "assets/profiles/500.jpg",
+        coverImage: "assets/profiles/500.jpg",
         message: "Delicious recipes from around the world",
         reelLink: "https://www.instagram.com/reel/DWgxI5nic5P/?igsh=MTdhNmFvbHJwdmc1dw==",
         price: 2500,
@@ -36,7 +39,8 @@ const sampleData = [
     {
         id: 4,
         name: "Music Curator",
-        profilePicture: "assets/profiles/200.jpg",
+        profilePicture: "assets/profiles/image.png",
+        coverImage: "assets/profiles/image.png",
         message: "Listen to the top trending music hits of the week",
         reelLink: "https://www.youtube.com/watch?v=a18py61_F_w&list=RDa18py61_F_w&start_radio=1",
         price: 6500,
@@ -46,6 +50,7 @@ const sampleData = [
         id: 5,
         name: "Shorts Creator",
         profilePicture: "assets/profiles/100.jpg",
+        coverImage: "assets/profiles/100.jpg",
         message: "Mind-bending daily coding animations",
         reelLink: "https://www.youtube.com/shorts/Ae-5-2yXOu4",
         price: 1500,
@@ -56,7 +61,6 @@ const sampleData = [
 // ── State ─────────────────────────────────────────────────────────────────────
 let leaderboardData = [];
 let currentSort = 'price';
-let currentTab = 'youtube';
 let searchQuery = '';
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -100,6 +104,8 @@ function loadLocalData() {
                 if (!item.message) item.message = '';
                 if (!item.name) item.name = 'Unknown';
                 if (!item.price) item.price = 0;
+                // Migrate: set coverImage = profilePicture if missing
+                if (!item.coverImage) item.coverImage = item.profilePicture || '';
             });
             saveLocalData();
         } else {
@@ -191,20 +197,6 @@ function formatLikes(n) {
     return String(n || 0);
 }
 
-// ── Tab switching ─────────────────────────────────────────────────────────────
-function switchTab(tab) {
-    currentTab = tab;
-    const ytBtn = document.getElementById('tab-youtube');
-    const reelsBtn = document.getElementById('tab-reels');
-    const ytSection = document.getElementById('youtube-section');
-    const reelsSection = document.getElementById('reels-section');
-
-    if (ytBtn) ytBtn.classList.toggle('active', tab === 'youtube');
-    if (reelsBtn) reelsBtn.classList.toggle('active', tab === 'reels');
-    if (ytSection) ytSection.classList.toggle('active-section', tab === 'youtube');
-    if (reelsSection) reelsSection.classList.toggle('active-section', tab === 'reels');
-}
-
 // ── Sorting ───────────────────────────────────────────────────────────────────
 function sortLeaderboard(sortBy) {
     currentSort = sortBy;
@@ -276,10 +268,9 @@ function toggleReadMore(event, btnEl) {
 
 // ── Main render ───────────────────────────────────────────────────────────────
 function renderInstaCards() {
-    const reelsGrid = document.getElementById('insta-cards-grid');
-    const ytGrid = document.getElementById('youtube-cards-grid');
-    if (!reelsGrid || !ytGrid) {
-        console.error('Grid containers not found in DOM');
+    const grid = document.getElementById('insta-cards-grid');
+    if (!grid) {
+        console.error('Grid container "insta-cards-grid" not found');
         return;
     }
 
@@ -287,38 +278,20 @@ function renderInstaCards() {
         const sorted = getSortedData(leaderboardData);
         const filtered = filterData(sorted);
 
-        const ytVideos = filtered.filter(item => isYouTubeVideoSafe(item.reelLink));
-        const reelsAndShorts = filtered.filter(item => !isYouTubeVideoSafe(item.reelLink));
-
-        // Tab counts (from ALL data)
-        const ytAll = leaderboardData.filter(item => isYouTubeVideoSafe(item.reelLink));
-        const reelsAll = leaderboardData.filter(item => !isYouTubeVideoSafe(item.reelLink));
-        const ytCountEl = document.getElementById('yt-count');
-        const reelsCountEl = document.getElementById('reels-count');
-        if (ytCountEl) ytCountEl.textContent = ytAll.length;
-        if (reelsCountEl) reelsCountEl.textContent = reelsAll.length;
-
-        // YouTube grid
-        ytGrid.innerHTML = ytVideos.length === 0
-            ? `<div class="empty-state" style="grid-column:1/-1;"><h3>${searchQuery ? '🔍 No results' : 'No YouTube videos yet'}</h3><p>${searchQuery ? 'Try a different search.' : 'Tap "Create Card" to add one!'}</p></div>`
-            : ytVideos.map(item => { try { return getYouTubeVideoCardHtml(item); } catch (e) { console.error('YT card error', e); return ''; } }).join('');
-
-        // Reels grid
-        reelsGrid.innerHTML = reelsAndShorts.length === 0
-            ? `<div class="empty-state" style="grid-column:1/-1;"><h3>${searchQuery ? '🔍 No results' : 'No reels yet'}</h3><p>${searchQuery ? 'Try a different search.' : 'Tap "Create Card" to add one!'}</p></div>`
-            : reelsAndShorts.map(item => { try { return getReelThumbnailHtml(item); } catch (e) { console.error('Reel card error', e); return ''; } }).join('');
-
-        // Hover video preview
-        reelsGrid.querySelectorAll('.reel-thumbnail-card').forEach(card => {
-            const video = card.querySelector('video');
-            if (video) {
-                card.addEventListener('mouseenter', () => video.play().catch(() => {}));
-                card.addEventListener('mouseleave', () => { video.pause(); video.currentTime = 0; });
-            }
-        });
+        grid.innerHTML = filtered.length === 0
+            ? `<div class="empty-state" style="grid-column: 1 / -1; width: 100%; text-align: center; margin: 40px 0;"><h3>${searchQuery ? '🔍 No results found' : 'No design cards yet'}</h3><p>${searchQuery ? 'Try checking your spelling or a different query.' : 'Tap "Create Card" to add one!'}</p></div>`
+            : filtered.map(item => {
+                try {
+                    const isYT = isYouTubeVideoSafe(item.reelLink);
+                    return isYT ? getYouTubeVideoCardHtml(item) : getReelThumbnailHtml(item);
+                } catch (e) {
+                    console.error('Error rendering card:', e);
+                    return '';
+                }
+            }).join('');
     } catch (e) {
         console.error('renderInstaCards error:', e);
-        ytGrid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><h3>Something went wrong</h3><p>Please refresh the page.</p></div>`;
+        grid.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1; width: 100%; text-align: center; margin: 40px 0;"><h3>Something went wrong</h3><p>Please refresh the page and try again.</p></div>`;
     }
 }
 
@@ -444,14 +417,19 @@ function handleInsertSubmit(event) {
     event.preventDefault();
     const name = (document.getElementById('insert-name').value || '').trim();
     const profilePicture = (document.getElementById('insert-profile').value || '').trim();
+    const coverImageEl = document.getElementById('insert-cover');
+    const coverImage = coverImageEl ? (coverImageEl.value || '').trim() : '';
     const message = (document.getElementById('insert-message').value || '').trim();
     const reelLink = (document.getElementById('insert-reel').value || '').trim();
     const price = parseInt(document.getElementById('insert-price').value) || 0;
 
+    const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'A')}&background=random&size=200`;
+    const resolvedProfile = profilePicture || fallbackAvatar;
     const newEntry = {
         id: Date.now(),
         name: name || 'Anonymous',
-        profilePicture: profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'A')}&background=random&size=200`,
+        profilePicture: resolvedProfile,
+        coverImage: coverImage || resolvedProfile,
         message: message || 'No message provided',
         reelLink: reelLink || '#',
         price,
@@ -466,99 +444,147 @@ function handleInsertSubmit(event) {
     showSuccessMessage('Card created! ✅');
 }
 
-// ── Card HTML builders ────────────────────────────────────────────────────────
-// Like bar with price on the right
-function buildLikeBar(item) {
-    const liked = isLiked(item.id);
-    return `
-        <div class="card-like-bar" onclick="event.stopPropagation()">
-            <button class="like-btn${liked ? ' liked' : ''}" onclick="toggleLike(event,${item.id})" aria-label="Like">
-                <svg class="heart-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                </svg>
-                <span class="like-count">${formatLikes(item.likes || 0)}</span>
-            </button>
-            <div class="card-price-tag">
-                <span class="price-rupee">&#8377;</span>
-                <span class="price-value">${(item.price || 0).toLocaleString('en-IN')}</span>
-            </div>
-        </div>`;
+
+// ── Flip card helper ──────────────────────────────────────────
+function flipCard(event, innerEl) {
+    event.stopPropagation();
+    if (innerEl) innerEl.classList.toggle('flipped');
 }
 
-function buildMessageBlock(msg, cssClass) {
-    const safeMsg = (msg || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    const isLong = (msg || '').length > 55;
-    return `<div class="${cssClass}">&ldquo;${safeMsg}&rdquo;</div>${isLong ? `<button class="read-more-btn" onclick="toggleReadMore(event,this)">more</button>` : ''}`;
-}
-
-// YouTube VIDEO card
+// YouTube VIDEO card — flip design image → YT thumbnail
 function getYouTubeVideoCardHtml(item) {
     const youtubeId = getYouTubeVideoId(item.reelLink);
     if (!youtubeId) return '';
-    const thumbUrl = `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
+    const thumbUrl  = `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
     const encodedItem = safeEncode(item);
-    const viewed = isViewed(item.id);
-    const viewedClass = viewed ? ' card-viewed' : '';
-    const infoViewedClass = viewed ? ' info-viewed' : '';
+    const viewed    = isViewed(item.id);
+    const viewedCls = viewed ? ' card-viewed' : '';
+    const liked     = isLiked(item.id);
+    const coverSrc  = item.coverImage || item.profilePicture || '';
+    const innerId   = `fci-${item.id}`;
+    const safeLink  = item.reelLink.replace(/'/g, "\'");
+    const priceStr  = (item.price || 0).toLocaleString('en-IN');
+    const likesStr  = formatLikes(item.likes || 0);
+
+    const coverHTML = coverSrc
+        ? `<img src="${coverSrc}" class="fc-img" alt="Design"
+               onerror="this.parentElement.innerHTML='<div class=fc-img-placeholder></div>'">`
+        : `<div class="fc-img-placeholder"></div>`;
+
+    const likeBar = `
+        <div class="fc-bar" onclick="event.stopPropagation()">
+            <button class="fc-like${liked ? ' liked' : ''}"
+                    onclick="toggleLike(event,${item.id})" aria-label="Like">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <span class="like-count">${likesStr}</span>
+            </button>
+            <div class="fc-bar-right">
+                ${viewed ? '<span class="fc-watched-badge">&#10003; Watched</span>' : ''}
+                ${encodedItem ? `<button class="fc-share" onclick="copyCardLink(event,'${encodedItem}')" title="Copy link">🔗</button>` : ''}
+            </div>
+        </div>`;
 
     return `
-        <div class="yt-video-card${viewedClass}" data-item-id="${item.id}" onclick="openReelModal('${item.reelLink.replace(/'/g, "\\'")}',${item.id})">
-            <div class="yt-thumb-section">
-                <img src="${thumbUrl}" alt="${(item.name||'').replace(/"/g,'')}" class="yt-thumb-img"
-                     onerror="this.src='https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg'">
-                <img src="${item.profilePicture||''}" class="yt-avatar" onerror="this.style.display='none'" alt="">
-                ${encodedItem ? `<button class="platform-badge youtube-badge" title="Copy link" onclick="copyCardLink(event,'${encodedItem}')">&#128308;</button>` : ''}
-                <div class="play-icon yt-play-icon">&#9654;</div>
-                ${viewed ? '<div class="viewed-badge">&#10003; Watched</div>' : ''}
+    <div class="fc yt-fc${viewedCls}" data-item-id="${item.id}">
+      <div class="fc-inner" id="${innerId}">
+
+        <!-- FRONT: design/cover image (header, media area, and bar are separated) -->
+        <div class="fc-front" onclick="flipCard(event, document.getElementById('${innerId}'))">
+          <div class="fc-header">
+            <span class="fc-header-badge yt-badge">&#9654; YouTube</span>
+            <span class="fc-header-price">&#8377;${priceStr}</span>
+          </div>
+          <div class="fc-media-area">
+            ${coverHTML}
+            <div class="fc-tap-hint">Tap to flip &#8594;</div>
+          </div>
+          ${likeBar}
+        </div>
+
+        <!-- BACK: YouTube thumbnail -->
+        <div class="fc-back" onclick="openReelModal('${safeLink}',${item.id})">
+          <div class="fc-header">
+            <span class="fc-header-badge yt-badge">&#9654; YouTube</span>
+            <div class="fc-header-right">
+              <span class="fc-header-price">&#8377;${priceStr}</span>
+              <button class="fc-flip-back"
+                      onclick="event.stopPropagation(); document.getElementById('${innerId}').classList.remove('flipped')"
+                      title="Flip back">&#10005;</button>
             </div>
-            <div class="yt-info-section${infoViewedClass}">
-                <div class="yt-creator-name">@${item.name||'Unknown'}</div>
-                ${buildMessageBlock(item.message, 'card-motto-message')}
-            </div>
-            ${buildLikeBar(item)}
-        </div>`;
+          </div>
+          <div class="fc-media-area">
+            <img src="${thumbUrl}" class="fc-yt-img" alt="YouTube thumbnail"
+                 onerror="this.src='https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg'">
+            <div class="fc-back-overlay"></div>
+            <div class="fc-play-ring"><div class="fc-play-tri"></div></div>
+            <div class="fc-back-label">&#9654; Watch Video</div>
+          </div>
+          ${likeBar}
+        </div>
+
+      </div>
+    </div>`;
 }
 
-// Reel / Short card
+
+
+
+
+// Reel / Short card — click opens modal directly (no flip)
 function getReelThumbnailHtml(item) {
-    const youtubeId = getYouTubeVideoId(item.reelLink);
-    const isDirect = isDirectVideoUrl(item.reelLink);
-    const viewed = isViewed(item.id);
+    const youtubeId   = getYouTubeVideoId(item.reelLink);
     const encodedItem = safeEncode(item);
-    const viewedClass = viewed ? ' card-viewed' : '';
-    const infoViewedClass = viewed ? ' info-viewed' : '';
+    const viewed      = isViewed(item.id);
+    const viewedCls   = viewed ? ' card-viewed' : '';
+    const liked       = isLiked(item.id);
+    const coverSrc    = item.coverImage || item.profilePicture || '';
+    const isYtShort   = !!youtubeId;
+    const badgeCls    = isYtShort ? 'yt-badge' : 'ig-badge';
+    const badgeTxt    = isYtShort ? '&#9654; Shorts' : '&#128248; Reel';
+    const safeLink    = (item.reelLink || '#').replace(/'/g, "\'");
+    const priceStr    = (item.price || 0).toLocaleString('en-IN');
+    const likesStr = formatLikes(item.likes || 0);
 
-    let mediaContent = '';
-    if (youtubeId) {
-        mediaContent = `<img src="https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg" alt="" class="reel-thumbnail-img">`;
-    } else if (isDirect) {
-        mediaContent = `<video src="${item.reelLink}" class="reel-thumbnail-img" muted preload="metadata" playsinline></video>`;
-    } else {
-        const cleanedUrl = cleanInstagramUrl(item.reelLink);
-        const instgrmThumb = cleanedUrl.replace('/reel/', '/p/') + 'media/?size=m';
-        mediaContent = `<div class="instagram-thumb-container" style="width:100%;height:100%;"><img src="${instgrmThumb}" class="reel-thumbnail-img" alt="" referrerpolicy="no-referrer" onerror="handleThumbError(this)"></div>`;
-    }
+    const coverHTML = coverSrc
+        ? `<img src="${coverSrc}" class="fc-img" alt="Design"
+               onerror="this.parentElement.innerHTML='<div class=fc-img-placeholder></div>'">`
+        : `<div class="fc-img-placeholder"></div>`;
 
-    const badgeHtml = encodedItem ? (youtubeId
-        ? `<button class="platform-badge youtube-badge" title="Copy link" onclick="copyCardLink(event,'${encodedItem}')">&#128308;</button>`
-        : `<button class="platform-badge instagram-badge" title="Copy link" onclick="copyCardLink(event,'${encodedItem}')">&#128248;</button>`)
-        : '';
+    const likeBar = `
+        <div class="fc-bar" onclick="event.stopPropagation()">
+            <button class="fc-like${liked ? ' liked' : ''}"
+                    onclick="toggleLike(event,${item.id})" aria-label="Like">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <span class="like-count">${likesStr}</span>
+            </button>
+            <div class="fc-bar-right">
+                ${viewed ? '<span class="fc-watched-badge">&#10003; Watched</span>' : ''}
+                ${encodedItem ? `<button class="fc-share" onclick="copyCardLink(event,'${encodedItem}')" title="Copy link">&#128279;</button>` : ''}
+            </div>
+        </div>`;
 
     return `
-        <div class="reel-thumbnail-card${viewedClass}" data-item-id="${item.id}" onclick="openReelModal('${(item.reelLink||'#').replace(/'/g, "\\'")}',${item.id})">
-            <div class="card-photo-section">
-                <img src="${item.profilePicture||''}" class="card-cover-photo" onerror="this.style.display='none'">
-                ${badgeHtml}
-                <div class="play-icon">&#9654;</div>
-                ${viewed ? '<div class="viewed-badge">&#10003; Watched</div>' : ''}
-            </div>
-            <div class="card-info-section${infoViewedClass}">
-                <div class="card-creator-name">@${item.name||'Unknown'}</div>
-                ${buildMessageBlock(item.message, 'card-motto-message')}
-            </div>
-            ${buildLikeBar(item)}
-        </div>`;
+    <div class="fc reel-fc${viewedCls}" data-item-id="${item.id}"
+         onclick="openReelModal('${safeLink}',${item.id})">
+      <div class="fc-header">
+        <span class="fc-header-badge ${badgeCls}">${badgeTxt}</span>
+        <span class="fc-header-price">&#8377;${priceStr}</span>
+      </div>
+      <div class="fc-media-area">
+        ${coverHTML}
+        <div class="fc-reel-play"><div class="fc-reel-tri"></div></div>
+      </div>
+      ${likeBar}
+    </div>`;
 }
+
+
+
+
 
 // ── Copy link ─────────────────────────────────────────────────────────────────
 function copyCardLink(event, encodedItem) {
@@ -573,7 +599,7 @@ function fallbackCopy(text) {
     const ta = document.createElement('textarea');
     ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
     document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); } catch (_) {}
+    try { document.execCommand('copy'); } catch (_) { }
     document.body.removeChild(ta);
     showToast('Link copied! 🔗');
 }
@@ -612,7 +638,7 @@ _s.textContent = `
     @keyframes slideIn  { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
     @keyframes slideOut { from{transform:translateX(0);opacity:1} to{transform:translateX(100%);opacity:0} }
     @keyframes likePop  { 0%{transform:scale(1)} 40%{transform:scale(1.5)} 70%{transform:scale(.88)} 100%{transform:scale(1)} }
-    .like-btn.like-pop { animation:likePop .42s cubic-bezier(.36,.07,.19,.97) both; }
+    .like-btn.like-pop, .fc-like.like-pop { animation:likePop .42s cubic-bezier(.36,.07,.19,.97) both; }
 `;
 document.head.appendChild(_s);
 

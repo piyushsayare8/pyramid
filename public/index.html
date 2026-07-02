@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
     <meta name="description" content="Insta Cards - Discover and collect creative social media cards">
     <meta name="keywords" content="instagram, reels, cards, collector, social media">
     <meta name="author" content="Insta Cards">
@@ -18,7 +18,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,800;1,600&display=swap" rel="stylesheet">
     <title>Insta Cards - Social Media Collector</title>
     <link rel="stylesheet" href="style.css?v=7.2">
 </head>
@@ -29,27 +29,15 @@
         <!-- ── HEADER ── -->
         <header class="header">
             <div class="header-content">
-                <h1>📸 Insta Cards</h1>
-                <p class="header-sub">Creative social media cards</p>
+                <h1>✨ Pyramid Gallery</h1>
+                <p class="header-sub">Curated Social Design Collection</p>
             </div>
             <div class="header-actions">
                 <button class="insert-btn" onclick="openInsertModal()">➕ Create</button>
             </div>
         </header>
 
-        <!-- ── TAB SWITCHER ── -->
-        <div class="tab-switcher" id="tab-switcher">
-            <button class="tab-btn active" id="tab-youtube" onclick="switchTab('youtube')">
-                <span class="tab-icon">▶️</span>
-                <span class="tab-label">YouTube</span>
-                <span class="tab-count" id="yt-count">0</span>
-            </button>
-            <button class="tab-btn" id="tab-reels" onclick="switchTab('reels')">
-                <span class="tab-icon">📱</span>
-                <span class="tab-label">Reels &amp; Shorts</span>
-                <span class="tab-count" id="reels-count">0</span>
-            </button>
-        </div>
+
 
         <!-- ── CONTROLS BAR ── -->
         <div class="controls-bar">
@@ -73,17 +61,10 @@
             </div>
         </div>
 
-        <!-- ── YOUTUBE VIDEOS SECTION ── -->
-        <section class="content-section active-section" id="youtube-section">
-            <div class="youtube-cards-grid" id="youtube-cards-grid">
-                <!-- YouTube video cards rendered here -->
-            </div>
-        </section>
-
-        <!-- ── REELS & SHORTS SECTION ── -->
-        <section class="content-section" id="reels-section">
+        <!-- ── DESIGN CARD GALLERY ── -->
+        <section class="content-section active-section" id="gallery-section">
             <div class="insta-cards-grid" id="insta-cards-grid">
-                <!-- Reel / Short cards rendered here -->
+                <!-- All content cards rendered here -->
             </div>
         </section>
 
@@ -104,6 +85,10 @@
                 <div class="form-group">
                     <label for="insert-profile">Profile Picture URL</label>
                     <input type="url" id="insert-profile" placeholder="https://example.com/profile.jpg">
+                </div>
+                <div class="form-group">
+                    <label for="insert-cover">Cover Image URL <span style="font-size:.72rem;color:rgba(255,255,255,.4);font-weight:400;">(optional — shown on card front)</span></label>
+                    <input type="url" id="insert-cover" placeholder="https://example.com/cover.jpg (defaults to profile pic)">
                 </div>
                 <div class="form-group">
                     <label for="insert-message">Card Message</label>
