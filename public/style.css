@@ -2372,3 +2372,118 @@ body {
         radial-gradient(circle 600px at 85% 90%, rgba(220, 39, 67, 0.25) 0%, transparent 80%),
         radial-gradient(circle 700px at 50% 45%, rgba(91, 76, 249, 0.18) 0%, transparent 80%) !important;
 }
+/* ── Centered YouTube Thumbnail & PIP styles ── */
+
+.fc-yt-container {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #000 !important;
+    height: 100% !important;
+    position: relative !important;
+}
+
+.fc-yt-wrapper {
+    width: 100% !important;
+    height: 100% !important;
+    aspect-ratio: 16/9 !important;
+    position: relative !important;
+    transition: all 0.3s ease !important;
+}
+
+.fc-yt-img-centered {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+}
+
+.fc-yt-thumb-state {
+    width: 100% !important;
+    height: 100% !important;
+    position: relative !important;
+    cursor: pointer !important;
+}
+
+/* Picture in Picture (PiP) Floating Player via CSS positioning (avoids DOM moves so iframe doesn't reload) */
+.fc-yt-wrapper.fc-yt-wrapper-floating {
+    position: fixed !important;
+    bottom: 24px !important;
+    right: 24px !important;
+    width: 290px !important;
+    height: 163px !important; /* 16:9 ratio */
+    z-index: 999999 !important;
+    background: #000 !important;
+    border-radius: 12px !important;
+    border: 3px solid rgba(255, 255, 255, 0.85) !important; /* Thick premium border matching cards */
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85) !important;
+    overflow: hidden !important;
+    animation: pipSlideIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes pipSlideIn {
+    from { transform: translateY(50px) scale(0.85); opacity: 0; }
+    to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* Hide close button unless the wrapper is currently floating in PiP */
+.fc-yt-wrapper .pip-close-btn {
+    display: none !important;
+}
+.fc-yt-wrapper.fc-yt-wrapper-floating .pip-close-btn {
+    display: flex !important;
+}
+
+.pip-close-btn {
+    position: absolute !important;
+    top: 8px !important;
+    right: 8px !important;
+    width: 22px !important;
+    height: 22px !important;
+    background: rgba(0, 0, 0, 0.65) !important;
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    color: #fff !important;
+    border-radius: 50% !important;
+    font-size: 9px !important;
+    font-weight: 800 !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 9999999 !important;
+    transition: all 0.2s !important;
+}
+.pip-close-btn:hover {
+    background: #d32f2f !important;
+    transform: scale(1.1) !important;
+}
+
+/* Card Placeholder when video is floated in PiP */
+.fc-pip-placeholder-inline {
+    display: none;
+    width: 100% !important;
+    height: 100% !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: rgba(12, 13, 24, 0.95) !important;
+    color: #fff !important;
+    gap: 6px !important;
+    cursor: pointer !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+    padding: 10px !important;
+    z-index: 0 !important;
+}
+
+.pip-placeholder-icon {
+    font-size: 1.8rem !important;
+    animation: pipIconPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pipIconPulse {
+    0%, 100% { transform: scale(1); opacity: 0.7; }
+    50% { transform: scale(1.12); opacity: 1; }
+}

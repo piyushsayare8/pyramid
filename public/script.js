@@ -503,8 +503,8 @@ function getYouTubeVideoCardHtml(item) {
           ${likeBar}
         </div>
 
-        <!-- BACK: YouTube thumbnail -->
-        <div class="fc-back" onclick="openReelModal('${safeLink}',${item.id})">
+        <!-- BACK: YouTube thumbnail centered and playable inline -->
+        <div class="fc-back" onclick="flipCard(event, document.getElementById('${innerId}'))">
           <div class="fc-header">
             <span class="fc-header-badge yt-badge">&#9654; YouTube</span>
             <div class="fc-header-right">
@@ -514,12 +514,25 @@ function getYouTubeVideoCardHtml(item) {
                       title="Flip back">&#10005;</button>
             </div>
           </div>
-          <div class="fc-media-area">
-            <img src="${thumbUrl}" class="fc-yt-img" alt="YouTube thumbnail"
-                 onerror="this.src='https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg'">
-            <div class="fc-back-overlay"></div>
-            <div class="fc-play-ring"><div class="fc-play-tri"></div></div>
-            <div class="fc-back-label">&#9654; Watch Video</div>
+          <div class="fc-media-area fc-yt-container" id="media-yt-${item.id}">
+            <!-- Inline static PiP placeholder inside card -->
+            <div class="fc-pip-placeholder-inline" onclick="stopActiveInlinePlayer()">
+              <div class="pip-placeholder-icon">📺</div>
+              <div style="font-size: 0.65rem; font-weight:700;">Playing in PIP Mode</div>
+              <div style="font-size: 0.58rem; color: rgba(255,255,255,0.5);">Tap to close player</div>
+            </div>
+
+            <!-- Wrapper holding the play action/iframe -->
+            <div class="fc-yt-wrapper" id="yt-wrapper-${item.id}">
+              <button class="pip-close-btn" onclick="event.stopPropagation(); stopActiveInlinePlayer()" title="Close Player">✕</button>
+              <div class="fc-yt-thumb-state" onclick="playVideoInline(event, '${youtubeId}', ${item.id})">
+                <img src="${thumbUrl}" class="fc-yt-img-centered" alt="YouTube thumbnail"
+                     onerror="this.src='https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg'">
+                <div class="fc-back-overlay"></div>
+                <div class="fc-play-ring"><div class="fc-play-tri"></div></div>
+                <div class="fc-back-label">&#9654; Play Inline</div>
+              </div>
+            </div>
           </div>
           ${likeBar}
         </div>
@@ -527,6 +540,8 @@ function getYouTubeVideoCardHtml(item) {
       </div>
     </div>`;
 }
+
+
 
 
 
@@ -641,6 +656,151 @@ _s.textContent = `
     .like-btn.like-pop, .fc-like.like-pop { animation:likePop .42s cubic-bezier(.36,.07,.19,.97) both; }
 `;
 document.head.appendChild(_s);
+
+
+// ── Inline Video Player & Picture-in-Picture (PiP) ──────────────────────────
+let activeInlinePlayer = null;
+let pipObserver = null;
+
+function playVideoInline(event, youtubeId, itemId) {
+    event.stopPropagation();
+    
+    // Stop any currently running inline player first
+    stopActiveInlinePlayer();
+    
+    const wrapper = document.getElementById(`yt-wrapper-${itemId}`);
+    if (!wrapper) return;
+    
+    // Set viewed status
+    markViewed(itemId);
+    const card = document.querySelector(`[data-item-id="${itemId}"]`);
+    if (card) {
+        card.classList.add('card-viewed');
+        const watchedBadge = card.querySelector('.fc-bar-right');
+        if (watchedBadge && !watchedBadge.querySelector('.fc-watched-badge')) {
+            watchedBadge.insertAdjacentHTML('afterbegin', '<span class="fc-watched-badge">&#10003; Watched</span>');
+        }
+    }
+    
+    // Embed YouTube player inside the wrapper (this replaces the thumbnail click state)
+    wrapper.innerHTML = `
+        <button class="pip-close-btn" onclick="event.stopPropagation(); stopActiveInlinePlayer()" title="Close Player">✕</button>
+        <iframe id="iframe-yt-${itemId}" src="https://www.youtube.com/embed/${youtubeId}?autoplay=1&enablejsapi=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;"></iframe>`;
+    
+    activeInlinePlayer = {
+        itemId: itemId,
+        youtubeId: youtubeId,
+        isFloating: false
+    };
+    
+    // Monitor if the card scrolls out of the viewport
+    const cardInner = document.getElementById(`fci-${itemId}`);
+    if (cardInner) {
+        if (pipObserver) {
+            pipObserver.disconnect();
+        }
+        pipObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (!activeInlinePlayer || activeInlinePlayer.itemId !== itemId) return;
+                
+                if (!entry.isIntersecting) {
+                    floatVideo(itemId);
+                } else {
+                    returnVideoToCard(itemId);
+                }
+            });
+        }, { threshold: 0.1 });
+        pipObserver.observe(cardInner);
+    }
+}
+
+function stopActiveInlinePlayer() {
+    if (!activeInlinePlayer) return;
+    
+    const { itemId, youtubeId } = activeInlinePlayer;
+    
+    const wrapper = document.getElementById(`yt-wrapper-${itemId}`);
+    const container = document.getElementById(`media-yt-${itemId}`);
+    
+    if (container) {
+        container.classList.remove('is-pip-active');
+    }
+    
+    if (wrapper) {
+        wrapper.classList.remove('fc-yt-wrapper-floating');
+        const thumbUrl = `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
+        wrapper.innerHTML = `
+            <button class="pip-close-btn" onclick="event.stopPropagation(); stopActiveInlinePlayer()" title="Close Player">✕</button>
+            <div class="fc-yt-thumb-state" onclick="playVideoInline(event, '${youtubeId}', ${itemId})">
+                <img src="${thumbUrl}" class="fc-yt-img-centered" alt="YouTube thumbnail"
+                     onerror="this.src='https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg'">
+                <div class="fc-back-overlay"></div>
+                <div class="fc-play-ring"><div class="fc-play-tri"></div></div>
+                <div class="fc-back-label">&#9654; Play Inline</div>
+            </div>`;
+    }
+    
+    if (pipObserver) {
+        pipObserver.disconnect();
+        pipObserver = null;
+    }
+    activeInlinePlayer = null;
+}
+
+function floatVideo(itemId) {
+    if (!activeInlinePlayer || activeInlinePlayer.isFloating) return;
+    
+    const wrapper = document.getElementById(`yt-wrapper-${itemId}`);
+    const container = document.getElementById(`media-yt-${itemId}`);
+    
+    if (wrapper && container) {
+        // Toggle the floating class on the wrapper (positions it fixed at bottom-right viewport)
+        wrapper.classList.add('fc-yt-wrapper-floating');
+        container.classList.add('is-pip-active');
+        activeInlinePlayer.isFloating = true;
+    }
+}
+
+function returnVideoToCard(itemId) {
+    if (!activeInlinePlayer || !activeInlinePlayer.isFloating) return;
+    
+    const wrapper = document.getElementById(`yt-wrapper-${itemId}`);
+    const container = document.getElementById(`media-yt-${itemId}`);
+    
+    if (wrapper && container) {
+        // Remove the floating class to restore inline layout
+        wrapper.classList.remove('fc-yt-wrapper-floating');
+        container.classList.remove('is-pip-active');
+        activeInlinePlayer.isFloating = false;
+    }
+}
+
+// ── Touch Swipe Flip Gestures ──────────────────────────────────────────────
+let touchStartX = 0;
+let touchStartY = 0;
+
+document.addEventListener('touchstart', e => {
+    const fcInner = e.target.closest('.fc-inner');
+    if (!fcInner) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+}, { passive: true });
+
+document.addEventListener('touchend', e => {
+    const fcInner = e.target.closest('.fc-inner');
+    if (!fcInner) return;
+    
+    const diffX = e.changedTouches[0].clientX - touchStartX;
+    const diffY = e.changedTouches[0].clientY - touchStartY;
+    
+    // Check horizontal swipe gesture threshold
+    if (Math.abs(diffX) > 60 && Math.abs(diffY) < 40) {
+        // Don't flip if interacting with an active iframe
+        if (e.target.closest('iframe')) return;
+        fcInner.classList.toggle('flipped');
+    }
+}, { passive: true });
+
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
