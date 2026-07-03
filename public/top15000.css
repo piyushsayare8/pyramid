@@ -2119,16 +2119,6 @@ body>* {
   box-shadow: 9px 13px 0px var(--pop-shadow, rgba(67, 56, 202, 0.35)) !important;
 }
 
-.lb-card.liked-card {
-  background: #fdf2f8 !important;
-  border-color: #ec4899 !important;
-  box-shadow: 6px 8px 0px rgba(236, 72, 153, 0.3) !important;
-}
-
-:root[data-theme="dark"] .lb-card.liked-card {
-  background: #2e1424 !important;
-  border-color: #ec4899 !important;
-}
 
 /* Top Section: YouTube Video (Standard 16:9 Aspect Ratio) */
 .lb-card-video-wrap {
