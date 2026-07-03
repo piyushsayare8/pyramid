@@ -3,12 +3,11 @@
 // ==========================================
 
 // ── Constants ─────────────────────────────
-const TOTAL_PLACES = 50000;
+const TOTAL_PLACES = 100000;
 const ROWS_PER_PAGE = 30;
 
 function getPriceForPlace(place) {
-  if (place <= 10) return 1;
-  return +(1 + (place - 10) * 0.1).toFixed(2);
+  return +(place * 0.05).toFixed(2);
 }
 
 function formatPrice(price) {

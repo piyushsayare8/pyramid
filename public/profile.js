@@ -70,8 +70,7 @@ const PALETTES = ['#6366f1', '#ec4899', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf
 let currentUser = null;
 
 function getPriceForPlace(place) {
-  if (place <= 10) return 1;
-  return +(1 + (place - 10) * 0.1).toFixed(2);
+  return +(place * 0.05).toFixed(2);
 }
 
 function formatPrice(num) {
@@ -106,7 +105,7 @@ function initProfile() {
       id: placeNum,
       name: `Citizen #${placeNum}`,
       profilePicture: `https://ui-avatars.com/api/?name=Citizen+${placeNum}&background=${color.replace('#', '')}&color=fff&size=200`,
-      message: `Proud verified citizen of Place #${placeNum} on Top50000.com! My permanent mark on the internet grid.`,
+      message: `Proud verified citizen of Place #${placeNum} on web100k.com! My permanent mark on the internet grid.`,
       likes: Math.floor(Math.random() * 45) + 12,
       color: color
     };
@@ -325,7 +324,7 @@ function printCard() {
       allowTaint: true
     }).then(canvas => {
       const link = document.createElement('a');
-      link.download = `Top50000_Place_${currentUser.place}.png`;
+      link.download = `web100k_Place_${currentUser.place}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
 
