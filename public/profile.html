@@ -13,7 +13,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="top15000.css?v=3.0">
+  <link rel="stylesheet" href="dist/top15000-solid.css?v=4.0">
   <script>
     (function () {
       var savedTheme = localStorage.getItem('top15000_theme') || 'light';
@@ -27,13 +27,15 @@
     :root {
       --user-accent: #ff60a8;
       --card-bg: #fdf2f8;
-      --border-dark: #4338ca; /* Refined deep electric indigo border instead of harsh black */
+      --border-dark: #4338ca;
+      /* Refined deep electric indigo border instead of harsh black */
       --name-color: #6d28d9;
     }
 
     :root[data-theme="dark"] {
       --card-bg: #221326;
-      --border-dark: #f472b6; /* Luminous pink/orchid border in dark mode */
+      --border-dark: #f472b6;
+      /* Luminous pink/orchid border in dark mode */
       --name-color: #e879f9;
     }
 
@@ -123,7 +125,8 @@
     .profile-card-wrapper .lb-card {
       width: 100%;
       margin: 0;
-      cursor: default; /* Keep stable and not redirect back to itself */
+      cursor: default;
+      /* Keep stable and not redirect back to itself */
     }
 
     .profile-card-wrapper .lb-card:hover {
@@ -132,14 +135,29 @@
     }
 
     @keyframes slickCardEntrance {
-      0% { opacity: 0; transform: translateY(35px) scale(0.95) rotate(-1.5deg); }
-      100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+      0% {
+        opacity: 0;
+        transform: translateY(35px) scale(0.95) rotate(-1.5deg);
+      }
+
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotate(0deg);
+      }
     }
 
     @keyframes cardFloatLiving {
-      0% { transform: translateY(0px) rotate(0deg); }
-      50% { transform: translateY(-7px) rotate(0.4deg); }
-      100% { transform: translateY(0px) rotate(0deg); }
+      0% {
+        transform: translateY(0px) rotate(0deg);
+      }
+
+      50% {
+        transform: translateY(-7px) rotate(0.4deg);
+      }
+
+      100% {
+        transform: translateY(0px) rotate(0deg);
+      }
     }
 
     .profile-actions-under {
@@ -203,20 +221,31 @@
     }
 
     @media (max-height: 750px) {
-      body { height: auto; min-height: 100vh; overflow-y: auto; }
+      body {
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+      }
     }
 
     @media (max-width: 480px) {
-      body { height: auto; min-height: 100vh; overflow-y: auto; }
+      body {
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+      }
+
       .profile-card-wrapper {
         max-width: 100%;
         padding: 0 8px;
       }
+
       .profile-actions-under {
         flex-direction: column;
         gap: 10px;
         width: 100%;
       }
+
       .profile-actions-under .slick-btn {
         width: 100%;
       }
@@ -237,7 +266,8 @@
       <span>Leaderboard</span>
     </a>
     <div style="display: flex; gap: 10px;">
-      <button class="nav-back-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Switch Dark / Light Mode" aria-label="Toggle Theme" style="padding: 8px 14px;">
+      <button class="nav-back-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Switch Dark / Light Mode"
+        aria-label="Toggle Theme" style="padding: 8px 14px;">
         <span class="theme-icon">🌙</span>
       </button>
     </div>
@@ -248,10 +278,11 @@
     <div class="profile-card-wrapper">
       <!-- STANDALONE LEADERBOARD CARD -->
       <div class="lb-card" id="profile-card">
-        
+
         <!-- SECTION 1: YouTube Video -->
         <div class="lb-card-video-wrap" id="video-wrap-profile">
-          <div class="lb-card-video" id="card-video-profile" onclick="playCardVideo()" title="Click to play YouTube Video">
+          <div class="lb-card-video" id="card-video-profile" onclick="playCardVideo()"
+            title="Click to play YouTube Video">
             <img id="profile-video-thumb" src="" alt="YouTube Thumbnail">
           </div>
         </div>

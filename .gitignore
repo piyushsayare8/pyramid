@@ -56,3 +56,5 @@ coverage/
 build/
 *.pem
 .vercel
+.wrangler/
+

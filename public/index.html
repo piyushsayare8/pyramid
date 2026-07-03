@@ -1,233 +1,24 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
-    <meta name="description"
-        content="web100k.com — Own one of 100,000 permanent digital places on the internet. Only one place available at a time.">
-    <meta name="keywords" content="web100k, digital place, buy a spot, internet landmark, exclusive">
-    <meta name="author" content="web100k">
-    <meta property="og:title" content="web100k.com — Own Your Permanent Digital Place">
-    <meta property="og:description"
-        content="Only 100,000 places exist. One is available right now. Claim yours forever.">
-    <meta property="og:type" content="website">
-    <meta name="theme-color" content="#f8fafc">
-    <meta name="robots" content="index, follow">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Only 100,000 places exist. One is available right now. Claim yours forever.">
+    <title>web100k.com — Own Your Permanent Digital Place</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
-        rel="stylesheet">
-    <title>web100k.com — Own Your Permanent Digital Place</title>
-    <link rel="stylesheet" href="top15000.css?v=2.0">
-    <script>
-        (function () {
-            var savedTheme = localStorage.getItem('top15000_theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
-        })();
-    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="dist/top15000-solid.css?v=4.0">
 </head>
-
-<body>
-    <!-- THEME TOGGLE BUTTON -->
-    <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Switch Dark / Light Mode"
-        aria-label="Toggle Theme">
-        <span class="theme-icon">🌙</span>
-    </button>
-
-    <!-- AMBIENT LIVING ATMOSPHERE -->
-    <div class="user-ambient-wrapper">
-        <div id="user-ambient-bg" class="user-ambient-bg"></div>
-    </div>
-
-    <!-- HERO HEADER -->
-    <header class="site-header">
-        <div class="site-logo">
-            <span class="logo-text">web<span class="logo-accent">100k</span>.com</span>
-        </div>
-    </header>
-
-    <!-- HERO GRID CONTAINER (Counter left, Purchase Card right on desktop) -->
-    <div class="hero-grid-container">
-        <!-- COUNTER SECTION (LEFT) -->
-        <section class="counter-section" id="counter-section">
-            <div class="counter-label">Places Remaining On The Leaderboard</div>
-            <div class="counter-display">
-                <span class="counter-number" id="places-remaining">99,990</span>
-                <span class="counter-total">/ 1,00,000</span>
-            </div>
-            <div class="counter-progress-wrap">
-                <div class="counter-progress-bar">
-                    <div class="counter-progress-fill" id="counter-progress-fill"></div>
-                </div>
-                <div class="counter-progress-labels">
-                    <span>0</span>
-                    <span id="places-sold-label">10 sold</span>
-                    <span>1,00,000</span>
-                </div>
-            </div>
-
-            <!-- SPECIAL PHYSICAL CARD ANNOUNCEMENT -->
-            <div class="counter-special-notice">
-                <span class="notice-icon">🎁</span>
-                <span class="notice-text">Once it completed all the users will received the <strong>web100k.com special
-                        card</strong> for them to their home!</span>
-            </div>
-        </section>
-
-        <!-- BUY SECTION (RIGHT) -->
-        <section class="buy-section" id="buy-section">
-            <div class="buy-card">
-                <div class="buy-card-glow"></div>
-                <div class="buy-place-badge">
-                    <span class="buy-place-number">Place #<span id="current-place-number">11</span></span>
-                    <span class="buy-exclusive-tag">⚡ Available Now</span>
-                </div>
-                <div class="buy-price-display">
-                    <span class="buy-currency">₹</span>
-                    <span class="buy-price-amount" id="current-price">0.55</span>
-                </div>
-                <p class="buy-description">
-                    Secure <strong>Place #<span id="buy-place-desc">11</span></strong> forever on web100k.com.<br>
-                    Your name, message &amp; photo — permanently on the internet.
-                </p>
-                <div class="buy-features">
-                    <div class="buy-feature"><span class="feat-icon">🏆</span> Permanent leaderboard entry</div>
-                    <div class="buy-feature"><span class="feat-icon">♾️</span> Your place, forever</div>
-                    <div class="buy-feature"><span class="feat-icon">🌐</span> Visible to everyone</div>
-                </div>
-                <button class="buy-btn" id="buy-btn" onclick="openBuyModal()">
-                    <span class="buy-btn-icon">⚡</span>
-                    <span>Claim Place #<span id="buy-btn-place">11</span> for ₹<span
-                            id="buy-btn-price">0.55</span></span>
-                    <span class="buy-btn-arrow">→</span>
-                </button>
-                <div class="buy-urgency">
-                    <div class="urgency-dot"></div>
-                    <span id="buy-urgency-text">Next available spot: Place #12 for ₹0.60</span>
-                </div>
-            </div>
-        </section>
-    </div>
-
-    <!-- LEADERBOARD SECTION -->
-    <section class="leaderboard-section" id="leaderboard-section">
-        <div class="lb-header">
-            <div class="lb-title-wrap">
-                <h2 class="lb-title">✨ The Permanent 100,000 Leaderboard</h2>
-                <p class="lb-subtitle">Every name, message & photo — permanently displayed on the internet</p>
-            </div>
-            <div class="lb-controls">
-                <div class="lb-sort-group">
-                    <span class="lb-sort-label">Sort by</span>
-                    <button class="lb-sort-btn active" data-sort="price" onclick="sortLeaderboard('price')">💰
-                        Price</button>
-                    <button class="lb-sort-btn" data-sort="likes" onclick="sortLeaderboard('likes')">❤️ Likes</button>
-                    <button class="lb-sort-btn" data-sort="random" onclick="sortLeaderboard('random')">🔀
-                        Random</button>
-                </div>
-                <div class="lb-search-wrap">
-                    <span class="lb-search-icon">🔍</span>
-                    <input type="search" id="lb-search" class="lb-search" placeholder="Search name, message…"
-                        oninput="onLbSearch()" autocomplete="off">
-                    <button class="lb-search-clear" id="lb-search-clear" onclick="clearLbSearch()"
-                        title="Clear">✕</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Card Grid Body -->
-        <div class="lb-table-body" id="lb-table-body">
-            <!-- Cards rendered by JS -->
-        </div>
-
-        <div class="lb-empty" id="lb-empty" style="display:none;">
-            <div class="lb-empty-icon">🔍</div>
-            <div class="lb-empty-text">No results found</div>
-        </div>
-
-        <div class="lb-load-more-wrap" id="lb-load-more-wrap" style="display:none;">
-            <button class="lb-load-more-btn" id="lb-load-more-btn" onclick="loadMoreRows()">Load more entries</button>
-        </div>
-    </section>
-
-    <!-- FOOTER -->
-    <footer class="site-footer">
-        <div class="footer-logo">⚡ &nbsp; web100k.com &nbsp; ⚡</div>
-        <p class="footer-copy">100,000 exclusive digital places. Once claimed, yours forever.</p>
-        <p class="footer-legal">© 2026 web100k.com · All Rights Reserved · The Permanent Digital Grid</p>
-    </footer>
-
-    <!-- BUY MODAL -->
-    <div id="buy-modal" class="modal-overlay" onclick="closeBuyModal(event)">
-        <div class="modal-box" onclick="event.stopPropagation()">
-            <div class="modal-glow"></div>
-            <button class="modal-close-btn" onclick="closeBuyModal()">✕</button>
-            <div class="modal-header">
-                <div class="modal-place-badge">Place #<span id="modal-place-num">11</span> — Permanent Grid</div>
-                <h2 class="modal-title">Claim Your Permanent Place</h2>
-            </div>
-            <form id="buy-form" onsubmit="handleBuySubmit(event)">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="form-name">Your Name *</label>
-                        <input type="text" id="form-name" placeholder="Enter your name" required maxlength="80">
-                    </div>
-                    <div class="form-group">
-                        <label for="form-profile">Profile Picture URL</label>
-                        <input type="url" id="form-profile" placeholder="https://example.com/photo.jpg">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="form-youtube">YouTube Video / Reel URL <span class="form-label-hint">(Optional)</span></label>
-                    <input type="url" id="form-youtube" placeholder="https://www.youtube.com/watch?v=... or Reel link">
-                </div>
-                <div class="form-group">
-                    <label for="form-message">Your Message <span class="form-label-hint">(up to 300
-                            chars)</span></label>
-                    <textarea id="form-message" placeholder="Write something memorable — it stays here forever…"
-                        maxlength="300" rows="3"></textarea>
-                    <div class="form-char-count"><span id="form-char-remaining">300</span> characters remaining</div>
-                </div>
-                <div class="form-price-summary">
-                    <div class="fps-label">Total to pay</div>
-                    <div class="fps-price">₹<span id="fps-amount">0.55</span></div>
-                    <div class="fps-note">for Place #<span id="fps-place">11</span> · permanently yours</div>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="form-btn-cancel" onclick="closeBuyModal()">Cancel</button>
-                    <button type="submit" class="form-btn-pay" id="form-btn-pay">
-                        <span>Pay ₹<span id="form-pay-amount">0.55</span> &amp; Claim</span>
-                        <span class="pay-arrow">→</span>
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- TOAST -->
+<body class="theme-wrapper">
     <div id="toast" class="toast-popup"></div>
-
-    <!-- GLOBAL MINI PLAYER (YouTube style floating PiP) -->
-    <div id="lb-global-mini-player" class="lb-mini-player-hidden">
-        <div class="lbmp-bar">
-            <span class="lbmp-bar-title" id="lbmp-title">▶ Now Playing</span>
-            <div class="lbmp-bar-actions">
-                <button class="lbmp-expand-btn" id="lbmp-expand-btn" onclick="lbmpScrollToCard()" title="Go to video">⤢</button>
-                <button class="lbmp-close-btn" id="lbmp-close-btn" onclick="lbmpClose()" title="Close player">✕</button>
-            </div>
-        </div>
-        <div class="lbmp-screen" id="lbmp-screen">
-            <!-- iframe injected here by JS -->
+    <div id="root">
+        <div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f8fafc; font-family: 'Outfit', sans-serif; color: #0f172a;">
+            <div style="font-size: 2.2rem; font-weight: 800; letter-spacing: -0.04em; margin-bottom: 1.25rem;">web<span style="color: #6366f1;">100k</span>.com</div>
+            <div style="width: 44px; height: 44px; border: 3.5px solid #e2e8f0; border-top-color: #6366f1; border-radius: 50%; animation: root-spin 0.75s cubic-bezier(0.4, 0, 0.2, 1) infinite;"></div>
+            <style>@keyframes root-spin { to { transform: rotate(360deg); } }</style>
         </div>
     </div>
-
-    <script src="top15000.js?v=1.0"></script>
+    <script type="module" src="dist/top15000-solid.js?v=4.0"></script>
 </body>
-
 </html>
