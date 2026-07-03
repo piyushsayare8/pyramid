@@ -107,6 +107,7 @@ function init() {
   updateBuyUI();
   renderLeaderboard();
   setupCharCounter();
+  applyDynamicBackground();
 }
 
 // ── Data ──────────────────────────────────
@@ -735,4 +736,15 @@ function updateThemeIcon(theme) {
   document.querySelectorAll('.theme-icon').forEach(el => {
     el.textContent = theme === 'dark' ? '☀️' : '🌙';
   });
+}
+
+// ── Dynamic Background Aura ────────────────
+function applyDynamicBackground() {
+  const bgEl = document.getElementById('user-ambient-bg');
+  if (!bgEl) return;
+
+  const colors = ['#7c3aed', '#e91e8c', '#0d9488', '#f59e0b', '#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ea580c', '#0891b2'];
+  const randomColor = colors[Math.floor(Math.random() * colors.length)];
+  
+  bgEl.style.background = `radial-gradient(circle at 50% 50%, #ffffff 0%, ${randomColor} 70%)`;
 }

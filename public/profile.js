@@ -82,7 +82,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const savedTheme = localStorage.getItem('top15000_theme') || 'light';
   updateThemeIcon(savedTheme);
   initProfile();
-  loadDynamicWallpaper(false);
 });
 
 function initProfile() {
@@ -154,6 +153,17 @@ function renderUserProfile() {
 
   const msgEl = document.getElementById('profile-message');
   if (msgEl) msgEl.textContent = `“${currentUser.message || 'No inscription provided.'}”`;
+
+  // Render YouTube thumbnail
+  const ytId = getYoutubeVidId(currentUser.youtubeUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk') || 'jfKfPfyJRdk';
+  const thumbUrl = `https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`;
+  const videoThumbEl = document.getElementById('profile-video-thumb');
+  if (videoThumbEl) {
+    videoThumbEl.src = thumbUrl;
+    videoThumbEl.onerror = () => {
+      videoThumbEl.src = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+    };
+  }
 
   updateLikesUI();
 }
@@ -239,32 +249,6 @@ function showToast(msg) {
   setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-// ── Dynamic Free API Wallpaper ────────────
-function loadDynamicWallpaper(showNotification = true) {
-  const wallpaperEl = document.getElementById('dynamic-wallpaper');
-  if (!wallpaperEl) return;
-
-  if (showNotification) {
-    showToast('🎨 Fetching aesthetic background from API...');
-  }
-
-  const randomSeed = Math.floor(Math.random() * 999999);
-  const imgUrl = `https://picsum.photos/seed/${randomSeed}/1920/1080?blur=2`;
-
-  const tempImg = new Image();
-  tempImg.onload = () => {
-    wallpaperEl.style.opacity = '0';
-    setTimeout(() => {
-      wallpaperEl.style.backgroundImage = `url('${imgUrl}')`;
-      wallpaperEl.style.opacity = '0.88';
-      if (showNotification) showToast('✨ Background wallpaper updated!');
-    }, 250);
-  };
-  tempImg.onerror = () => {
-    if (showNotification) showToast('⚡ Using ambient default background');
-  };
-  tempImg.src = imgUrl;
-}
 
 // ── Theme Toggle ──────────────────────────
 function toggleTheme() {
@@ -279,4 +263,79 @@ function updateThemeIcon(theme) {
   document.querySelectorAll('.theme-icon').forEach(el => {
     el.textContent = theme === 'dark' ? '☀️' : '🌙';
   });
+}
+
+// ── YouTube Video Utils ────────────────────
+function getYoutubeVidId(url) {
+  if (!url) return null;
+  const m = url.match(/^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/);
+  return (m && m[2] && m[2].length === 11) ? m[2] : null;
+}
+
+function playCardVideo() {
+  const container = document.getElementById('card-video-profile');
+  if (!container || !currentUser) return;
+  const ytId = getYoutubeVidId(currentUser.youtubeUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk') || 'jfKfPfyJRdk';
+  container.innerHTML = `<iframe src="https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;display:block;"></iframe>`;
+}
+
+// ── Snapshot / Printing Feature ────────────
+function printCard() {
+  const card = document.getElementById('profile-card');
+  if (!card) return;
+
+  const btn = document.querySelector('.print-btn');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<span>⏳ Saving...</span>`;
+
+  showToast('📸 Capturing your beautiful digital card...');
+
+  // If video is currently playing, temporarily restore the thumbnail image for a clean canvas capture
+  const container = document.getElementById('card-video-profile');
+  const iframe = container ? container.querySelector('iframe') : null;
+  let restoredThumbnail = false;
+
+  if (iframe) {
+    const ytId = getYoutubeVidId(currentUser.youtubeUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk') || 'jfKfPfyJRdk';
+    const thumbUrl = `https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`;
+    container.innerHTML = `<img id="profile-video-thumb" src="${thumbUrl}" alt="YouTube Thumbnail">`;
+    restoredThumbnail = true;
+  }
+
+  // Small delay to allow DOM to settle
+  setTimeout(() => {
+    html2canvas(card, {
+      scale: 3, // 3x scale for crystal-clear snapshot resolution
+      useCORS: true,
+      backgroundColor: null,
+      logging: false,
+      allowTaint: true
+    }).then(canvas => {
+      const link = document.createElement('a');
+      link.download = `Top50000_Place_${currentUser.place}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+      showToast('✨ Card snapshot downloaded successfully!');
+
+      // Restore iframe if it was playing
+      if (restoredThumbnail && container) {
+        const ytId = getYoutubeVidId(currentUser.youtubeUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk') || 'jfKfPfyJRdk';
+        container.innerHTML = `<iframe src="https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;display:block;"></iframe>`;
+      }
+    }).catch(err => {
+      console.error('Error generating card snapshot:', err);
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+      showToast('❌ Error saving card. Please try again!');
+
+      if (restoredThumbnail && container) {
+        const ytId = getYoutubeVidId(currentUser.youtubeUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk') || 'jfKfPfyJRdk';
+        container.innerHTML = `<iframe src="https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;display:block;"></iframe>`;
+      }
+    });
+  }, 300);
 }
