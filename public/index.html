@@ -3,124 +3,233 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
-    <meta name="description" content="Insta Cards - Discover and collect creative social media cards">
-    <meta name="keywords" content="instagram, reels, cards, collector, social media">
-    <meta name="author" content="Insta Cards">
-    <meta property="og:title" content="Insta Cards">
-    <meta property="og:description" content="Discover and collect creative social media cards">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+    <meta name="description"
+        content="Top50000.com — Own one of 50,000 permanent digital places on the internet. Only one place available at a time.">
+    <meta name="keywords" content="top50000, digital place, buy a spot, internet landmark, exclusive">
+    <meta name="author" content="Top50000">
+    <meta property="og:title" content="Top50000.com — Own Your Permanent Digital Place">
+    <meta property="og:description"
+        content="Only 50,000 places exist. One is available right now. Claim yours forever.">
     <meta property="og:type" content="website">
-    <meta name="theme-color" content="#1a0a2e">
+    <meta name="theme-color" content="#f8fafc">
     <meta name="robots" content="index, follow">
-    <!-- PWA mobile -->
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,800;1,600&display=swap" rel="stylesheet">
-    <title>Insta Cards - Social Media Collector</title>
-    <link rel="stylesheet" href="style.css?v=7.2">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <title>Top50000.com — Own Your Permanent Digital Place</title>
+    <link rel="stylesheet" href="top15000.css?v=2.0">
+    <script>
+        (function () {
+            var savedTheme = localStorage.getItem('top15000_theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        })();
+    </script>
 </head>
 
 <body>
-    <div class="container">
+    <!-- THEME TOGGLE BUTTON -->
+    <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Switch Dark / Light Mode"
+        aria-label="Toggle Theme">
+        <span class="theme-icon">🌙</span>
+    </button>
 
-        <!-- ── HEADER ── -->
-        <header class="header">
-            <div class="header-content">
-                <h1>✨ Pyramid Gallery</h1>
-                <p class="header-sub">Curated Social Design Collection</p>
-            </div>
-            <div class="header-actions">
-                <button class="insert-btn" onclick="openInsertModal()">➕ Create</button>
-            </div>
-        </header>
+    <!-- AMBIENT BG -->
+    <div class="ambient-bg">
+        <div class="ambient-orb orb1"></div>
+        <div class="ambient-orb orb2"></div>
+        <div class="ambient-orb orb3"></div>
+    </div>
 
-
-
-        <!-- ── CONTROLS BAR ── -->
-        <div class="controls-bar">
-            <div class="sort-group">
-                <span class="sort-label">Sort</span>
-                <button class="sort-btn active" data-sort="price" onclick="sortLeaderboard('price')">💰 Price</button>
-                <button class="sort-btn" data-sort="likes" onclick="sortLeaderboard('likes')">❤️ Likes</button>
-                <button class="sort-btn" data-sort="random" onclick="sortLeaderboard('random')">🔀 Random</button>
-            </div>
-            <div class="search-group">
-                <span class="search-icon-wrap">🔍</span>
-                <input
-                    type="search"
-                    id="search-input"
-                    class="search-input"
-                    placeholder="Search name, message, price…"
-                    oninput="onSearchInput()"
-                    autocomplete="off"
-                >
-                <button class="search-clear" id="search-clear" onclick="clearSearch()" title="Clear">✕</button>
-            </div>
+    <!-- HERO HEADER -->
+    <header class="site-header">
+        <div class="site-logo">
+            <span class="logo-text">Top<span class="logo-accent">50000</span>.com</span>
         </div>
+    </header>
 
-        <!-- ── DESIGN CARD GALLERY ── -->
-        <section class="content-section active-section" id="gallery-section">
-            <div class="insta-cards-grid" id="insta-cards-grid">
-                <!-- All content cards rendered here -->
+    <!-- HERO GRID CONTAINER (Counter left, Purchase Card right on desktop) -->
+    <div class="hero-grid-container">
+        <!-- COUNTER SECTION (LEFT) -->
+        <section class="counter-section" id="counter-section">
+            <div class="counter-label">Places Remaining On The Leaderboard</div>
+            <div class="counter-display">
+                <span class="counter-number" id="places-remaining">49,990</span>
+                <span class="counter-total">/ 50,000</span>
+            </div>
+            <div class="counter-progress-wrap">
+                <div class="counter-progress-bar">
+                    <div class="counter-progress-fill" id="counter-progress-fill"></div>
+                </div>
+                <div class="counter-progress-labels">
+                    <span>0</span>
+                    <span id="places-sold-label">10 sold</span>
+                    <span>50,000</span>
+                </div>
+            </div>
+
+            <!-- SPECIAL PHYSICAL CARD ANNOUNCEMENT -->
+            <div class="counter-special-notice">
+                <span class="notice-icon">🎁</span>
+                <span class="notice-text">Once it completed all the users will received the <strong>Top50000.com special
+                        card</strong> for them to their home!</span>
             </div>
         </section>
 
-    </div><!-- /.container -->
-
-    <!-- ── CREATE CARD MODAL ── -->
-    <div id="insert-modal" class="modal-overlay" onclick="closeInsertModal(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
-            <div class="modal-header">
-                <h2>Create New Card</h2>
-                <button class="close-btn" onclick="closeInsertModal()">✕</button>
+        <!-- BUY SECTION (RIGHT) -->
+        <section class="buy-section" id="buy-section">
+            <div class="buy-card">
+                <div class="buy-card-glow"></div>
+                <div class="buy-place-badge">
+                    <span class="buy-place-number">Place #<span id="current-place-number">11</span></span>
+                    <span class="buy-exclusive-tag">⚡ Available Now</span>
+                </div>
+                <div class="buy-price-display">
+                    <span class="buy-currency">₹</span>
+                    <span class="buy-price-amount" id="current-price">1.10</span>
+                </div>
+                <p class="buy-description">
+                    Secure <strong>Place #<span id="buy-place-desc">11</span></strong> forever on Top50000.com.<br>
+                    Your name, message &amp; photo — permanently on the internet.
+                </p>
+                <div class="buy-features">
+                    <div class="buy-feature"><span class="feat-icon">🏆</span> Permanent leaderboard entry</div>
+                    <div class="buy-feature"><span class="feat-icon">♾️</span> Your place, forever</div>
+                    <div class="buy-feature"><span class="feat-icon">🌐</span> Visible to everyone</div>
+                </div>
+                <button class="buy-btn" id="buy-btn" onclick="openBuyModal()">
+                    <span class="buy-btn-icon">⚡</span>
+                    <span>Claim Place #<span id="buy-btn-place">11</span> for ₹<span
+                            id="buy-btn-price">1.10</span></span>
+                    <span class="buy-btn-arrow">→</span>
+                </button>
+                <div class="buy-urgency">
+                    <div class="urgency-dot"></div>
+                    <span id="buy-urgency-text">Next available spot: Place #12 for ₹1.20</span>
+                </div>
             </div>
-            <form id="insert-form" onsubmit="handleInsertSubmit(event)">
-                <div class="form-group">
-                    <label for="insert-name">Creator Name</label>
-                    <input type="text" id="insert-name" placeholder="Enter creator name">
+        </section>
+    </div>
+
+    <!-- LEADERBOARD SECTION -->
+    <section class="leaderboard-section" id="leaderboard-section">
+        <div class="lb-header">
+            <div class="lb-title-wrap">
+                <h2 class="lb-title">✨ The Permanent 50,000 Leaderboard</h2>
+                <p class="lb-subtitle">Every name, message & photo — permanently displayed on the internet</p>
+            </div>
+            <div class="lb-controls">
+                <div class="lb-sort-group">
+                    <span class="lb-sort-label">Sort by</span>
+                    <button class="lb-sort-btn active" data-sort="price" onclick="sortLeaderboard('price')">💰
+                        Price</button>
+                    <button class="lb-sort-btn" data-sort="likes" onclick="sortLeaderboard('likes')">❤️ Likes</button>
+                    <button class="lb-sort-btn" data-sort="random" onclick="sortLeaderboard('random')">🔀
+                        Random</button>
+                </div>
+                <div class="lb-search-wrap">
+                    <span class="lb-search-icon">🔍</span>
+                    <input type="search" id="lb-search" class="lb-search" placeholder="Search name, message…"
+                        oninput="onLbSearch()" autocomplete="off">
+                    <button class="lb-search-clear" id="lb-search-clear" onclick="clearLbSearch()"
+                        title="Clear">✕</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card Grid Body -->
+        <div class="lb-table-body" id="lb-table-body">
+            <!-- Cards rendered by JS -->
+        </div>
+
+        <div class="lb-empty" id="lb-empty" style="display:none;">
+            <div class="lb-empty-icon">🔍</div>
+            <div class="lb-empty-text">No results found</div>
+        </div>
+
+        <div class="lb-load-more-wrap" id="lb-load-more-wrap" style="display:none;">
+            <button class="lb-load-more-btn" id="lb-load-more-btn" onclick="loadMoreRows()">Load more entries</button>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="site-footer">
+        <div class="footer-logo">⚡ &nbsp; Top50000.com &nbsp; ⚡</div>
+        <p class="footer-copy">50,000 exclusive digital places. Once claimed, yours forever.</p>
+        <p class="footer-legal">© 2026 Top50000.com · All Rights Reserved · The Permanent Digital Grid</p>
+    </footer>
+
+    <!-- BUY MODAL -->
+    <div id="buy-modal" class="modal-overlay" onclick="closeBuyModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="modal-glow"></div>
+            <button class="modal-close-btn" onclick="closeBuyModal()">✕</button>
+            <div class="modal-header">
+                <div class="modal-place-badge">Place #<span id="modal-place-num">11</span> — Permanent Grid</div>
+                <h2 class="modal-title">Claim Your Permanent Place</h2>
+            </div>
+            <form id="buy-form" onsubmit="handleBuySubmit(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="form-name">Your Name *</label>
+                        <input type="text" id="form-name" placeholder="Enter your name" required maxlength="80">
+                    </div>
+                    <div class="form-group">
+                        <label for="form-profile">Profile Picture URL</label>
+                        <input type="url" id="form-profile" placeholder="https://example.com/photo.jpg">
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label for="insert-profile">Profile Picture URL</label>
-                    <input type="url" id="insert-profile" placeholder="https://example.com/profile.jpg">
+                    <label for="form-youtube">YouTube Video / Reel URL <span class="form-label-hint">(Optional)</span></label>
+                    <input type="url" id="form-youtube" placeholder="https://www.youtube.com/watch?v=... or Reel link">
                 </div>
                 <div class="form-group">
-                    <label for="insert-cover">Cover Image URL <span style="font-size:.72rem;color:rgba(255,255,255,.4);font-weight:400;">(optional — shown on card front)</span></label>
-                    <input type="url" id="insert-cover" placeholder="https://example.com/cover.jpg (defaults to profile pic)">
+                    <label for="form-message">Your Message <span class="form-label-hint">(up to 300
+                            chars)</span></label>
+                    <textarea id="form-message" placeholder="Write something memorable — it stays here forever…"
+                        maxlength="300" rows="3"></textarea>
+                    <div class="form-char-count"><span id="form-char-remaining">300</span> characters remaining</div>
                 </div>
-                <div class="form-group">
-                    <label for="insert-message">Card Message</label>
-                    <textarea id="insert-message" placeholder="Enter your card message or motto"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="insert-reel">Video Link</label>
-                    <input type="url" id="insert-reel" placeholder="Instagram Reel, YouTube Short or Video link">
-                </div>
-                <div class="form-group">
-                    <label for="insert-price">Card Price (₹)</label>
-                    <input type="number" id="insert-price" placeholder="Enter price" min="0">
+                <div class="form-price-summary">
+                    <div class="fps-label">Total to pay</div>
+                    <div class="fps-price">₹<span id="fps-amount">1.10</span></div>
+                    <div class="fps-note">for Place #<span id="fps-place">11</span> · permanently yours</div>
                 </div>
                 <div class="form-actions">
-                    <button type="button" class="btn-cancel" onclick="closeInsertModal()">Cancel</button>
-                    <button type="submit" class="btn-submit">Create Card ✨</button>
+                    <button type="button" class="form-btn-cancel" onclick="closeBuyModal()">Cancel</button>
+                    <button type="submit" class="form-btn-pay" id="form-btn-pay">
+                        <span>Pay ₹<span id="form-pay-amount">1.10</span> &amp; Claim</span>
+                        <span class="pay-arrow">→</span>
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- ── VIDEO MODAL ── -->
-    <div id="reel-modal" class="modal-overlay" onclick="closeReelModal(event)">
-        <div class="reel-modal-content" onclick="event.stopPropagation()">
-            <button class="close-btn" onclick="closeReelModal()">✕</button>
-            <div class="reel-player-container" id="reel-player-container">
-                <!-- Embedded player loaded here -->
+    <!-- TOAST -->
+    <div id="toast" class="toast-popup"></div>
+
+    <!-- GLOBAL MINI PLAYER (YouTube style floating PiP) -->
+    <div id="lb-global-mini-player" class="lb-mini-player-hidden">
+        <div class="lbmp-bar">
+            <span class="lbmp-bar-title" id="lbmp-title">▶ Now Playing</span>
+            <div class="lbmp-bar-actions">
+                <button class="lbmp-expand-btn" id="lbmp-expand-btn" onclick="lbmpScrollToCard()" title="Go to video">⤢</button>
+                <button class="lbmp-close-btn" id="lbmp-close-btn" onclick="lbmpClose()" title="Close player">✕</button>
             </div>
+        </div>
+        <div class="lbmp-screen" id="lbmp-screen">
+            <!-- iframe injected here by JS -->
         </div>
     </div>
 
-    <script src="script.js?v=7.0"></script>
+    <script src="top15000.js?v=1.0"></script>
 </body>
 
 </html>

@@ -2,7 +2,7 @@
 // INSTA CARDS — JAVASCRIPT v7.0
 // ========================================
 
-const DATA_VERSION = 9; // bump to force-clear old localStorage
+const DATA_VERSION = 10; // bump to force-clear old localStorage
 
 // ── Sample data ───────────────────────────────────────────────────────────────
 const sampleData = [
@@ -14,7 +14,8 @@ const sampleData = [
         message: "Creating amazing content daily! Follow for more inspiration and creative adventures across all platforms",
         reelLink: "https://www.instagram.com/reel/DZ4f05ATGsf/",
         price: 5000,
-        likes: 0
+        likes: 0,
+        views: 840
     },
     {
         id: 2,
@@ -24,7 +25,8 @@ const sampleData = [
         message: "Latest tech reviews and tutorials and many more things as we go on and we will do our best to get anything so keep trying you have great future okay.",
         reelLink: "https://www.instagram.com/reel/DYK1M4tTxeS/?igsh=cmtpd3Q1cWRkMzc3",
         price: 3500,
-        likes: 0
+        likes: 0,
+        views: 1240
     },
     {
         id: 3,
@@ -34,7 +36,8 @@ const sampleData = [
         message: "Delicious recipes from around the world",
         reelLink: "https://www.instagram.com/reel/DWgxI5nic5P/?igsh=MTdhNmFvbHJwdmc1dw==",
         price: 2500,
-        likes: 0
+        likes: 0,
+        views: 450
     },
     {
         id: 4,
@@ -44,7 +47,8 @@ const sampleData = [
         message: "Listen to the top trending music hits of the week",
         reelLink: "https://www.youtube.com/watch?v=a18py61_F_w&list=RDa18py61_F_w&start_radio=1",
         price: 6500,
-        likes: 0
+        likes: 0,
+        views: 1980
     },
     {
         id: 5,
@@ -54,7 +58,8 @@ const sampleData = [
         message: "Mind-bending daily coding animations",
         reelLink: "https://www.youtube.com/shorts/Ae-5-2yXOu4",
         price: 1500,
-        likes: 0
+        likes: 0,
+        views: 620
     }
 ];
 
@@ -75,6 +80,10 @@ function init() {
             collapseAllReadMore();
         }
     });
+
+    // Update global player positions on user scroll or window resize
+    window.addEventListener('scroll', updatePlayerPosition, { passive: true });
+    window.addEventListener('resize', updatePlayerPosition, { passive: true });
 }
 
 // ── Data persistence ──────────────────────────────────────────────────────────
@@ -99,6 +108,7 @@ function loadLocalData() {
             // Migrate: ensure required fields exist
             leaderboardData.forEach(item => {
                 if (!item.likes) item.likes = 0;
+                if (!item.views) item.views = 0;
                 if (!item.id) item.id = Date.now() + Math.random();
                 if (!item.reelLink) item.reelLink = '#';
                 if (!item.message) item.message = '';
@@ -330,6 +340,7 @@ function isDirectVideoUrl(url) {
 
 // ── Modal player ──────────────────────────────────────────────────────────────
 function openReelModal(reelUrl, itemId) {
+    if (itemId !== undefined) { incrementViews(itemId); }
     if (itemId !== undefined) {
         markViewed(itemId);
         const card = document.querySelector(`[data-item-id="${itemId}"]`);
@@ -473,13 +484,16 @@ function getYouTubeVideoCardHtml(item) {
 
     const likeBar = `
         <div class="fc-bar" onclick="event.stopPropagation()">
-            <button class="fc-like${liked ? ' liked' : ''}"
-                    onclick="toggleLike(event,${item.id})" aria-label="Like">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                </svg>
-                <span class="like-count">${likesStr}</span>
-            </button>
+            <div class="fc-bar-left">
+                <button class="fc-like${liked ? ' liked' : ''}"
+                        onclick="toggleLike(event,${item.id})" aria-label="Like">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+                    <span class="like-count">${likesStr}</span>
+                </button>
+                <span class="fc-views" title="Views">👁️ <span class="views-val" id="views-val-${item.id}">${formatLikes(item.views || 0)}</span></span>
+            </div>
             <div class="fc-bar-right">
                 ${viewed ? '<span class="fc-watched-badge">&#10003; Watched</span>' : ''}
                 ${encodedItem ? `<button class="fc-share" onclick="copyCardLink(event,'${encodedItem}')" title="Copy link">🔗</button>` : ''}
@@ -518,20 +532,17 @@ function getYouTubeVideoCardHtml(item) {
             <!-- Inline static PiP placeholder inside card -->
             <div class="fc-pip-placeholder-inline" onclick="stopActiveInlinePlayer()">
               <div class="pip-placeholder-icon">📺</div>
-              <div style="font-size: 0.65rem; font-weight:700;">Playing in PIP Mode</div>
+              <div style="font-size: 0.65rem; font-weight:700; margin-bottom: 2px;">Playing in PIP Mode</div>
               <div style="font-size: 0.58rem; color: rgba(255,255,255,0.5);">Tap to close player</div>
             </div>
 
-            <!-- Wrapper holding the play action/iframe -->
-            <div class="fc-yt-wrapper" id="yt-wrapper-${item.id}">
-              <button class="pip-close-btn" onclick="event.stopPropagation(); stopActiveInlinePlayer()" title="Close Player">✕</button>
-              <div class="fc-yt-thumb-state" onclick="playVideoInline(event, '${youtubeId}', ${item.id})">
-                <img src="${thumbUrl}" class="fc-yt-img-centered" alt="YouTube thumbnail"
-                     onerror="this.src='https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg'">
-                <div class="fc-back-overlay"></div>
-                <div class="fc-play-ring"><div class="fc-play-tri"></div></div>
-                <div class="fc-back-label">&#9654; Play Inline</div>
-              </div>
+            <!-- Wrapper holding the click trigger for overlay -->
+            <div class="fc-yt-wrapper" id="yt-wrapper-${item.id}" onclick="playVideoInline(event, '${youtubeId}', ${item.id})">
+              <img src="${thumbUrl}" class="fc-yt-img-centered" alt="YouTube thumbnail"
+                   onerror="this.src='https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg'">
+              <div class="fc-back-overlay"></div>
+              <div class="fc-play-ring"><div class="fc-play-tri"></div></div>
+              <div class="fc-back-label">&#9654; Play Inline</div>
             </div>
           </div>
           ${likeBar}
@@ -540,6 +551,7 @@ function getYouTubeVideoCardHtml(item) {
       </div>
     </div>`;
 }
+
 
 
 
@@ -569,13 +581,16 @@ function getReelThumbnailHtml(item) {
 
     const likeBar = `
         <div class="fc-bar" onclick="event.stopPropagation()">
-            <button class="fc-like${liked ? ' liked' : ''}"
-                    onclick="toggleLike(event,${item.id})" aria-label="Like">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                </svg>
-                <span class="like-count">${likesStr}</span>
-            </button>
+            <div class="fc-bar-left">
+                <button class="fc-like${liked ? ' liked' : ''}"
+                        onclick="toggleLike(event,${item.id})" aria-label="Like">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+                    <span class="like-count">${likesStr}</span>
+                </button>
+                <span class="fc-views" title="Views">👁️ <span class="views-val" id="views-val-${item.id}">${formatLikes(item.views || 0)}</span></span>
+            </div>
             <div class="fc-bar-right">
                 ${viewed ? '<span class="fc-watched-badge">&#10003; Watched</span>' : ''}
                 ${encodedItem ? `<button class="fc-share" onclick="copyCardLink(event,'${encodedItem}')" title="Copy link">&#128279;</button>` : ''}
@@ -596,6 +611,7 @@ function getReelThumbnailHtml(item) {
       ${likeBar}
     </div>`;
 }
+
 
 
 
@@ -660,16 +676,29 @@ document.head.appendChild(_s);
 
 // ── Inline Video Player & Picture-in-Picture (PiP) ──────────────────────────
 let activeInlinePlayer = null;
-let pipObserver = null;
+let pipAnimId = null;
+
+function incrementViews(itemId) {
+    const item = leaderboardData.find(d => d.id === itemId);
+    if (!item) return;
+    item.views = (item.views || 0) + 1;
+    saveLocalData();
+    const valEls = document.querySelectorAll(`#views-val-${itemId}`);
+    valEls.forEach(el => {
+        el.textContent = formatLikes(item.views);
+    });
+}
 
 function playVideoInline(event, youtubeId, itemId) {
+    incrementViews(itemId);
     event.stopPropagation();
     
-    // Stop any currently running inline player first
+    // Stop any active player first
     stopActiveInlinePlayer();
     
-    const wrapper = document.getElementById(`yt-wrapper-${itemId}`);
-    if (!wrapper) return;
+    const playerEl = document.getElementById('global-inline-player');
+    const container = document.getElementById(`media-yt-${itemId}`);
+    if (!playerEl || !container) return;
     
     // Set viewed status
     markViewed(itemId);
@@ -682,10 +711,12 @@ function playVideoInline(event, youtubeId, itemId) {
         }
     }
     
-    // Embed YouTube player inside the wrapper (this replaces the thumbnail click state)
-    wrapper.innerHTML = `
+    // Mount the iframe inside the single global overlay container
+    playerEl.innerHTML = `
         <button class="pip-close-btn" onclick="event.stopPropagation(); stopActiveInlinePlayer()" title="Close Player">✕</button>
-        <iframe id="iframe-yt-${itemId}" src="https://www.youtube.com/embed/${youtubeId}?autoplay=1&enablejsapi=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;"></iframe>`;
+        <iframe id="iframe-yt-player" src="https://www.youtube.com/embed/${youtubeId}?autoplay=1&enablejsapi=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;display:block;"></iframe>`;
+    
+    playerEl.style.display = 'block';
     
     activeInlinePlayer = {
         itemId: itemId,
@@ -693,85 +724,93 @@ function playVideoInline(event, youtubeId, itemId) {
         isFloating: false
     };
     
-    // Monitor if the card scrolls out of the viewport
-    const cardInner = document.getElementById(`fci-${itemId}`);
-    if (cardInner) {
-        if (pipObserver) {
-            pipObserver.disconnect();
-        }
-        pipObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (!activeInlinePlayer || activeInlinePlayer.itemId !== itemId) return;
-                
-                if (!entry.isIntersecting) {
-                    floatVideo(itemId);
-                } else {
-                    returnVideoToCard(itemId);
-                }
-            });
-        }, { threshold: 0.1 });
-        pipObserver.observe(cardInner);
-    }
+    // Update target container class
+    container.classList.add('is-player-active');
+    
+    // Start layout tracking loop
+    trackPlayerPosition();
 }
 
 function stopActiveInlinePlayer() {
     if (!activeInlinePlayer) return;
     
-    const { itemId, youtubeId } = activeInlinePlayer;
+    const { itemId } = activeInlinePlayer;
     
-    const wrapper = document.getElementById(`yt-wrapper-${itemId}`);
+    const playerEl = document.getElementById('global-inline-player');
+    if (playerEl) {
+        playerEl.style.display = 'none';
+        playerEl.innerHTML = '';
+        playerEl.className = '';
+    }
+    
     const container = document.getElementById(`media-yt-${itemId}`);
-    
     if (container) {
-        container.classList.remove('is-pip-active');
+        container.classList.remove('is-player-active', 'is-pip-active');
     }
     
-    if (wrapper) {
-        wrapper.classList.remove('fc-yt-wrapper-floating');
-        const thumbUrl = `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
-        wrapper.innerHTML = `
-            <button class="pip-close-btn" onclick="event.stopPropagation(); stopActiveInlinePlayer()" title="Close Player">✕</button>
-            <div class="fc-yt-thumb-state" onclick="playVideoInline(event, '${youtubeId}', ${itemId})">
-                <img src="${thumbUrl}" class="fc-yt-img-centered" alt="YouTube thumbnail"
-                     onerror="this.src='https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg'">
-                <div class="fc-back-overlay"></div>
-                <div class="fc-play-ring"><div class="fc-play-tri"></div></div>
-                <div class="fc-back-label">&#9654; Play Inline</div>
-            </div>`;
-    }
-    
-    if (pipObserver) {
-        pipObserver.disconnect();
-        pipObserver = null;
+    if (pipAnimId) {
+        cancelAnimationFrame(pipAnimId);
+        pipAnimId = null;
     }
     activeInlinePlayer = null;
 }
 
-function floatVideo(itemId) {
-    if (!activeInlinePlayer || activeInlinePlayer.isFloating) return;
-    
-    const wrapper = document.getElementById(`yt-wrapper-${itemId}`);
-    const container = document.getElementById(`media-yt-${itemId}`);
-    
-    if (wrapper && container) {
-        // Toggle the floating class on the wrapper (positions it fixed at bottom-right viewport)
-        wrapper.classList.add('fc-yt-wrapper-floating');
-        container.classList.add('is-pip-active');
-        activeInlinePlayer.isFloating = true;
-    }
+function trackPlayerPosition() {
+    if (!activeInlinePlayer) return;
+    updatePlayerPosition();
+    pipAnimId = requestAnimationFrame(trackPlayerPosition);
 }
 
-function returnVideoToCard(itemId) {
-    if (!activeInlinePlayer || !activeInlinePlayer.isFloating) return;
+function updatePlayerPosition() {
+    if (!activeInlinePlayer) return;
     
-    const wrapper = document.getElementById(`yt-wrapper-${itemId}`);
+    const { itemId } = activeInlinePlayer;
+    const playerEl = document.getElementById('global-inline-player');
     const container = document.getElementById(`media-yt-${itemId}`);
+    const cardInner = document.getElementById(`fci-${itemId}`);
     
-    if (wrapper && container) {
-        // Remove the floating class to restore inline layout
-        wrapper.classList.remove('fc-yt-wrapper-floating');
+    if (!playerEl || !container) return;
+    
+    // Close player immediately if the card is flipped back to front
+    if (cardInner && !cardInner.classList.contains('flipped')) {
+        stopActiveInlinePlayer();
+        return;
+    }
+    
+    const rect = container.getBoundingClientRect();
+    const inViewport = (rect.bottom > 0 && rect.top < window.innerHeight);
+    const closeBtn = playerEl.querySelector('.pip-close-btn');
+    
+    if (inViewport) {
+        // Overlay inline: match position of the card's media viewport exactly
+        playerEl.classList.remove('fc-yt-wrapper-floating');
         container.classList.remove('is-pip-active');
+        
+        playerEl.style.position = 'absolute';
+        playerEl.style.top = `${rect.top + window.scrollY}px`;
+        playerEl.style.left = `${rect.left + window.scrollX}px`;
+        playerEl.style.width = `${rect.width}px`;
+        playerEl.style.height = `${rect.height}px`;
+        
+        if (closeBtn) closeBtn.style.display = 'none';
         activeInlinePlayer.isFloating = false;
+    } else {
+        // Overlay floating: anchor fixed in bottom-right corner (iframe runs uninterrupted!)
+        if (!activeInlinePlayer.isFloating) {
+            playerEl.classList.add('fc-yt-wrapper-floating');
+            container.classList.add('is-pip-active');
+            
+            playerEl.style.position = 'fixed';
+            playerEl.style.top = 'auto';
+            playerEl.style.left = 'auto';
+            playerEl.style.bottom = '24px';
+            playerEl.style.right = '24px';
+            playerEl.style.width = '290px';
+            playerEl.style.height = '163px';
+            
+            if (closeBtn) closeBtn.style.display = 'flex';
+            activeInlinePlayer.isFloating = true;
+        }
     }
 }
 
