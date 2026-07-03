@@ -214,6 +214,18 @@ function likeProfile() {
     btn.classList.add('like-pop');
     setTimeout(() => btn.classList.remove('like-pop'), 400);
   }
+
+  const isNowLiked = likedSet.has(id);
+  if (isNowLiked) {
+    const card = document.getElementById('profile-card');
+    if (card) {
+      card.classList.add('card-shake');
+      card.addEventListener('animationend', () => {
+        card.classList.remove('card-shake');
+      }, { once: true });
+    }
+    if (btn) throwHearts(btn);
+  }
 }
 
 function getLikedSet() {
@@ -338,4 +350,35 @@ function printCard() {
       }
     });
   }, 300);
+}
+
+// ── Heart Confetti Effect ──────────────────
+function throwHearts(element) {
+  const rect = element.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2 + window.scrollX;
+  const centerY = rect.top + rect.height / 2 + window.scrollY;
+
+  for (let i = 0; i < 10; i++) {
+    const heart = document.createElement('div');
+    heart.className = 'floating-heart';
+    heart.textContent = Math.random() > 0.5 ? '❤️' : '💖';
+    heart.style.left = `${centerX}px`;
+    heart.style.top = `${centerY}px`;
+
+    // Random spread (30 to 150 degrees)
+    const angle = (Math.random() * 120 + 30) * Math.PI / 180;
+    const velocity = 60 + Math.random() * 80;
+    const tx = Math.cos(angle) * velocity;
+    const ty = -Math.sin(angle) * velocity;
+
+    heart.style.setProperty('--tx', `${tx}px`);
+    heart.style.setProperty('--ty', `${ty}px`);
+    heart.style.fontSize = `${14 + Math.random() * 14}px`;
+
+    document.body.appendChild(heart);
+
+    heart.addEventListener('animationend', () => {
+      heart.remove();
+    });
+  }
 }
