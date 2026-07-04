@@ -15,8 +15,8 @@ export default defineConfig({
     lib: {
       entry: resolve(__dirname, 'src/main.js'),
       name: 'Top15000Svelte',
-      fileName: () => 'top15000-solid.js',
-      cssFileName: 'top15000-solid',
+      fileName: () => 'app.js',
+      cssFileName: 'app',
       formats: ['es']
     }
   }

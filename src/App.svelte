@@ -81,7 +81,6 @@
       _rawMsg: raw.message || "—",
       _isShortMsg: (raw.message || "—").length <= 85,
       _msgPreview: (raw.message || "—").length > 85 ? (raw.message || "—").slice(0, 85).trim() + "..." : null,
-      _searchText: `${name.toLowerCase()} ${(raw.message || "").toLowerCase()} ${place}`,
     };
   }
 
@@ -156,15 +155,12 @@
 
   // Core data: Map<placeNumber, enrichedItem> for O(1) lookups
   let itemsMap = $state(new Map());
-  // Sorted array cache — only rebuilt when sort key or items change
-  let _sortedArray = $state([]);
-  let _lastSortKey = $state("");
-  let _lastItemsVersion = $state(0);
   let itemsVersion = $state(0); // bump on any mutation
 
+  // Sort UI state — kept for future server integration (no local sorting)
   let currentSort = $state("price");
+  // Search UI state — kept for future server integration (no local filtering)
   let searchQuery = $state("");
-  let _debouncedQuery = $state(""); // actual filter trigger (debounced)
   let likedSet = $state(new Set());
   let expandedMessages = $state(new Set());
   let theme = $state("light");
@@ -198,48 +194,28 @@
 
   // ─── Helper: set items from array ────────────────────────────────────
   function setItemsFromArray(arr) {
-    const map = new Map();
+    // Clear + re-populate in-place to preserve the $state reactive proxy
+    itemsMap.clear();
     for (let i = 0; i < arr.length; i++) {
       const item = enrichItem(arr[i]);
-      map.set(item.place, item);
+      itemsMap.set(item.place, item);
     }
-    itemsMap = map;
     itemsVersion++;
   }
 
   // Initialize with sample data
   setItemsFromArray(SAMPLE_BUYERS);
 
-  // ─── Sorted array cache — O(n log n) only on sort key change ────────
-  let sortedItems = $derived.by(() => {
-    const ver = itemsVersion;
-    const sort = currentSort;
-
-    // Rebuild sorted array only when items changed or sort key changed
-    const arr = Array.from(itemsMap.values());
-
-    if (sort === "price") {
-      arr.sort((a, b) => b.place - a.place);
-    } else if (sort === "likes") {
-      arr.sort((a, b) => (b.likes || 0) - (a.likes || 0));
-    } else if (sort === "random") {
-      arr.sort((a, b) => ((a.id * 13) % 7) - ((b.id * 13) % 7));
-    }
-
-    return arr;
+  // ─── Items list — display in server/insertion order (no local sort) ──
+  let itemsList = $derived.by(() => {
+    void itemsVersion; // track mutations
+    return Array.from(itemsMap.values());
   });
 
-  // ─── Debounced search — filter only on debounced query ──────────────
-  let filteredData = $derived.by(() => {
-    const q = _debouncedQuery;
-    if (!q) return sortedItems;
-    return sortedItems.filter((item) => item._searchText.includes(q));
-  });
-
-  // Chunk items into rows — only when filteredData changes
+  // Chunk items into rows
   let rows = $derived.by(() => {
     const cols = columns;
-    const data = filteredData;
+    const data = itemsList;
     const len = data.length;
     const result = new Array(Math.ceil(len / cols));
     for (let i = 0, r = 0; i < len; i += cols, r++) {
@@ -249,7 +225,7 @@
   });
 
   // ─── Virtual Scroll Engine ──────────────────────────────────────────
-  const ROW_HEIGHT = 480;
+  let ROW_HEIGHT = $derived(columns === 1 ? 540 : 480);
   const OVERSCAN = 3;
   let totalGridHeight = $derived(rows.length * ROW_HEIGHT);
   let relativeScrollTop = $derived(Math.max(0, scrollTop - gridTopOffset));
@@ -289,20 +265,14 @@
     if (gridRef) gridTopOffset = gridRef.offsetTop;
   }, 150);
 
-  // ─── Debounced search input ─────────────────────────────────────────
-  const _applySearchDebounced = debounce((val) => {
-    _debouncedQuery = val;
-  }, 200);
-
+  // ─── Search input — UI only, filtering will be server-side ──────────
   function handleSearchInput(e) {
-    const val = e.currentTarget.value;
-    searchQuery = val; // instant UI feedback (input value)
-    _applySearchDebounced(val.trim().toLowerCase());
+    searchQuery = e.currentTarget.value;
+    // TODO: will send search query to server when API is ready
   }
 
   function clearSearch() {
     searchQuery = "";
-    _debouncedQuery = "";
   }
 
   // ─── Theme toggle ──────────────────────────────────────────────────
@@ -332,16 +302,14 @@
   function toggleLikeItem(placeNum, btnElement) {
     const isLiked = likedSet.has(placeNum);
 
-    // Mutate liked set in-place
+    // Mutate liked set in-place — Svelte 5 $state proxy tracks .add/.delete
     if (isLiked) {
       likedSet.delete(placeNum);
     } else {
       likedSet.add(placeNum);
     }
-    // Trigger reactivity by reassigning
-    likedSet = new Set(likedSet);
 
-    // O(1) item lookup + targeted mutation
+    // O(1) item lookup + in-place mutation — no cloning needed
     const item = itemsMap.get(placeNum);
     if (item) {
       const updatedItem = {
@@ -349,7 +317,6 @@
         likes: Math.max(0, (item.likes || 0) + (isLiked ? -1 : 1)),
       };
       itemsMap.set(placeNum, updatedItem);
-      itemsMap = new Map(itemsMap); // trigger reactivity
       itemsVersion++;
     }
 
@@ -363,12 +330,12 @@
 
   // ─── Message expand/collapse ────────────────────────────────────────
   function toggleMsgExpand(placeNum, expand) {
+    // Mutate in-place — Svelte 5 $state proxy tracks .add/.delete
     if (expand) {
       expandedMessages.add(placeNum);
     } else {
       expandedMessages.delete(placeNum);
     }
-    expandedMessages = new Set(expandedMessages);
   }
 
   // ─── Toast ──────────────────────────────────────────────────────────
@@ -556,8 +523,8 @@
     };
 
     const enriched = enrichItem(entry);
+    // Mutate in-place — Svelte 5 $state proxy tracks .set()
     itemsMap.set(place, enriched);
-    itemsMap = new Map(itemsMap);
     itemsVersion++;
 
     // Debounced persist
@@ -573,10 +540,11 @@
 
   // ─── Lifecycle ─────────────────────────────────────────────────────
   onMount(() => {
-    // Restore liked set
+    // Restore liked set — populate in-place to preserve $state proxy
     try {
       const savedLiked = JSON.parse(localStorage.getItem("top15000_liked") || "[]");
-      likedSet = new Set(savedLiked);
+      likedSet.clear();
+      for (const id of savedLiked) likedSet.add(id);
     } catch {}
 
     // Restore theme
@@ -830,7 +798,7 @@
     </div>
 
     <!-- High-Performance Virtual Grid -->
-    {#if filteredData.length === 0}
+    {#if itemsList.length === 0}
       <div class="lb-empty" id="lb-empty" style="display: block;">
         <div class="lb-empty-icon">🔍</div>
         <div class="lb-empty-text">No results found</div>
@@ -987,11 +955,13 @@
       © 2026 web100k.com · All Rights Reserved · The Permanent Digital Grid
     </p>
   </footer>
+</div>
 
+  <!-- GLOBAL MINI PLAYER MUST BE OUTSIDE OF ANY TRANSFORMED CONTAINERS -->
   <!-- GLOBAL MINI PLAYER -->
   <div
     id="lb-global-mini-player"
-    class="lbmp-floating"
+    class=""
     style="opacity: 0; pointer-events: none;"
   >
     <div class="lbmp-bar">
@@ -1121,4 +1091,3 @@
       </form>
     </div>
   </div>
-</div>

@@ -14,6 +14,12 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
+}
+
 :root {
   /* Whitish Light Mix Color Palette */
   --bg-main: #f8fafc;
@@ -2095,7 +2101,6 @@ body>* {
   }
 }
 
-/* ── Card Component ── */
 .lb-card {
   background: var(--surface-solid, #ffffff) !important;
   border: 2.5px solid var(--pop-border, #4338ca) !important;
@@ -2106,6 +2111,7 @@ body>* {
   flex-direction: column !important;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent; /* Remove blue flash on mobile tap */
 }
 
 :root[data-theme="dark"] .lb-card {
@@ -2114,9 +2120,12 @@ body>* {
   box-shadow: 6px 8px 0px rgba(0, 0, 0, 0.6) !important;
 }
 
-.lb-card:hover {
-  transform: none !important;
-  box-shadow: 8px 10px 0px var(--pop-shadow, rgba(67, 56, 202, 0.35)) !important;
+/* Only apply hover effects on devices with actual cursors to avoid sticky taps on mobile */
+@media (hover: hover) and (pointer: fine) {
+  .lb-card:hover {
+    transform: none !important;
+    box-shadow: 8px 10px 0px var(--pop-shadow, rgba(67, 56, 202, 0.35)) !important;
+  }
 }
 
 
@@ -2125,6 +2134,7 @@ body>* {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
+  flex-shrink: 0;
   background: #000;
   border-bottom: 2.5px solid var(--pop-border, #4338ca);
   overflow: hidden;
@@ -2223,7 +2233,7 @@ body>* {
   cursor: pointer;
 }
 
-.lbmp-bar-title {
+.lbmp-title {
   color: #ffffff;
   font-family: 'Outfit', sans-serif;
   font-size: 0.84rem;
@@ -2477,6 +2487,9 @@ body>* {
   font-weight: 700;
   color: #334155;
   line-height: 1.5;
+  /* Control message box height independently so card doesn't over-expand */
+  max-height: 110px;
+  overflow-y: auto;
 }
 
 :root[data-theme="dark"] .lb-card-message {
@@ -2520,9 +2533,12 @@ body>* {
   color: #ffffff;
 }
 
-.lb-card-like-btn:hover {
-  transform: translate(2px, 2px);
-  box-shadow: 1px 1px 0px var(--pop-shadow);
+/* Only apply hover effects on devices with cursors */
+@media (hover: hover) and (pointer: fine) {
+  .lb-card-like-btn:hover {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0px var(--pop-shadow);
+  }
 }
 
 .lb-card-like-btn.liked {
@@ -2642,4 +2658,16 @@ body>* {
     opacity: 0;
     transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(1.3) rotate(45deg);
   }
+}
+
+/* --- NATIVE VIEW TRANSITIONS (SPA-LIKE) --- */
+@view-transition { navigation: auto; }
+
+/* --- SMOOTH PAGE ENTRANCE --- */
+.main-wrap {
+  animation: appEntrance 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes appEntrance {
+  0% { opacity: 0; transform: translateY(20px); filter: blur(4px); }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
