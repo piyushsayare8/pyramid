@@ -579,6 +579,7 @@
 
   // ─── Lifecycle ─────────────────────────────────────────────────────
   let pollInterval;
+  let leaderboardPollInterval;
 
   async function loadPaymentData() {
     try {
@@ -638,6 +639,7 @@
     loadPaymentData();
     loadLeaderboard();
     pollInterval = setInterval(loadPaymentData, 3000);
+    leaderboardPollInterval = setInterval(loadLeaderboard, 60000);
 
     // Restore liked set — populate in-place to preserve $state proxy
     try {
@@ -700,6 +702,7 @@
     clearTimeout(_persistTimer);
     if (_videoObserver) _videoObserver.disconnect();
     clearInterval(pollInterval);
+    clearInterval(leaderboardPollInterval);
   });
 </script>
 
