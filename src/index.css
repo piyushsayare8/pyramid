@@ -2476,6 +2476,63 @@ body>* {
   color: #f472b6;
 }
 
+/* ── Social Link Icons ── */
+.lb-card-social-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.lb-social-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1.5px solid var(--pop-border, #4338ca);
+  background: rgba(99, 102, 241, 0.06);
+  color: #64748b;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  text-decoration: none;
+}
+
+.lb-social-icon:hover {
+  transform: translateY(-2px) scale(1.1);
+  box-shadow: 2px 2px 0px var(--pop-shadow, rgba(67, 56, 202, 0.25));
+}
+
+.lb-social-yt:hover {
+  background: rgba(255, 0, 0, 0.1);
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.lb-social-ig:hover {
+  background: rgba(225, 48, 108, 0.1);
+  border-color: #e1306c;
+  color: #e1306c;
+}
+
+:root[data-theme="dark"] .lb-social-icon {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(244, 114, 182, 0.4);
+  color: #94a3b8;
+}
+
+:root[data-theme="dark"] .lb-social-yt:hover {
+  background: rgba(255, 0, 0, 0.15);
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+}
+
+:root[data-theme="dark"] .lb-social-ig:hover {
+  background: rgba(225, 48, 108, 0.15);
+  color: #f472b6;
+  border-color: #f472b6;
+}
+
 .lb-card-message {
   background: #ffffff;
   border: 2px solid var(--pop-border, #4338ca);

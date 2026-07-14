@@ -1,69 +1,11 @@
 // ==========================================
-// TOP50000.COM — PURE LIVING MONUMENT JS v3.0
+// CREATOR'S PYRAMID — PROFILE PAGE JS v4.0
+// Decoupled CDN Architecture + Supabase RPC
 // ==========================================
 
-const SAMPLE_BUYERS = [
-  {
-    place: 1, name: 'Arjun Mehta',
-    profilePicture: 'https://ui-avatars.com/api/?name=Arjun+Mehta&background=7c3aed&color=fff&size=200',
-    message: 'First is first. No one can take this from me. History is written by those who act first! 🚀',
-    likes: 142, color: '#7c3aed'
-  },
-  {
-    place: 2, name: 'Priya Sharma',
-    profilePicture: 'https://ui-avatars.com/api/?name=Priya+Sharma&background=e91e8c&color=fff&size=200',
-    message: 'Dreamer, builder, believer. Proud to hold Place #2 on the most exclusive internet list ever made.',
-    likes: 98, color: '#e91e8c'
-  },
-  {
-    place: 3, name: 'Rohan Das',
-    profilePicture: 'https://ui-avatars.com/api/?name=Rohan+Das&background=0d9488&color=fff&size=200',
-    message: 'Top 3 baby! Invested ₹3 and got a piece of internet history. Future generations will know this name. 🔥',
-    likes: 77, color: '#0d9488'
-  },
-  {
-    place: 4, name: 'Sneha Patel',
-    profilePicture: 'https://ui-avatars.com/api/?name=Sneha+Patel&background=f59e0b&color=fff&size=200',
-    message: 'Small price, big legacy. Every great journey begins with a single step — or in this case, ₹4.',
-    likes: 61, color: '#f59e0b'
-  },
-  {
-    place: 5, name: 'Vikram Nair',
-    profilePicture: 'https://ui-avatars.com/api/?name=Vikram+Nair&background=2563eb&color=fff&size=200',
-    message: 'Place #5! I\'m part of the elite Top 10 forever. No amount of money can change history. 🌟',
-    likes: 54, color: '#2563eb'
-  },
-  {
-    place: 6, name: 'Kavya Reddy',
-    profilePicture: 'https://ui-avatars.com/api/?name=Kavya+Reddy&background=dc2626&color=fff&size=200',
-    message: 'Six is my lucky number and this is my lucky place. Seize every opportunity that comes your way!',
-    likes: 43, color: '#dc2626'
-  },
-  {
-    place: 7, name: 'Amit Kumar',
-    profilePicture: 'https://ui-avatars.com/api/?name=Amit+Kumar&background=16a34a&color=fff&size=200',
-    message: 'Lucky number 7. When I saw this site I knew I had to grab a spot. Best ₹7 I ever spent. Seriously.',
-    likes: 39, color: '#16a34a'
-  },
-  {
-    place: 8, name: 'Divya Singh',
-    profilePicture: 'https://ui-avatars.com/api/?name=Divya+Singh&background=9333ea&color=fff&size=200',
-    message: 'Eternal optimist. Permanent dreamer. Place #8 on the internet — forever. This is my digital legacy. ✨',
-    likes: 35, color: '#9333ea'
-  },
-  {
-    place: 9, name: 'Rajan Iyer',
-    profilePicture: 'https://ui-avatars.com/api/?name=Rajan+Iyer&background=ea580c&color=fff&size=200',
-    message: 'Nine lives, one permanent digital spot. The internet never forgets, and I am now part of it forever.',
-    likes: 28, color: '#ea580c'
-  },
-  {
-    place: 10, name: 'Meena Gupta',
-    profilePicture: 'https://ui-avatars.com/api/?name=Meena+Gupta&background=0891b2&color=fff&size=200',
-    message: 'Double digits! Proud to be in the Top 10. In a world of 8 billion people, only 10 got here first. 💎',
-    likes: 22, color: '#0891b2'
-  }
-];
+const CDN_BASE = 'https://data.creatorspyramid.com';
+const SUPABASE_URL = 'https://conecotzzmloenikxefo.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvbmVjb3R6em1sb2VuaWt4ZWZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2OTg5NzksImV4cCI6MjA5ODI3NDk3OX0.M5llBovp2kS6s83ZOIxETYKoRl6dFcF-96Fkc53XHQM';
 
 const PALETTES = ['#6366f1', '#ec4899', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#14b8a6'];
 
@@ -77,36 +19,109 @@ function formatPrice(num) {
   return Number.isInteger(num) ? num.toString() : num.toFixed(2);
 }
 
+// ── Device fingerprint for like tracking ──────────────────
+function getOrCreateDeviceId() {
+  let deviceId = localStorage.getItem('device_fingerprint');
+  if (!deviceId) {
+    deviceId = crypto.randomUUID();
+    localStorage.setItem('device_fingerprint', deviceId);
+  }
+  return deviceId;
+}
+
+// ── Liked set persistence ──────────────────────────────
+function getLikedSet() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('top15000_liked') || '[]'));
+  } catch { return new Set(); }
+}
+
+function saveLikedSet(set) {
+  try {
+    localStorage.setItem('top15000_liked', JSON.stringify([...set]));
+  } catch { }
+}
+
+// ── Sent likes persistence (permanent record) ──────────
+function getSentLikesSet() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('top15000_sent_likes') || '[]'));
+  } catch { return new Set(); }
+}
+
+function saveSentLikesSet(set) {
+  try {
+    localStorage.setItem('top15000_sent_likes', JSON.stringify([...set]));
+  } catch { }
+}
+
+// ── Supabase RPC call ──────────────────────────────────
+async function supabaseRpc(fnName, params) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fnName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify(params)
+    });
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error(`Supabase RPC error (${res.status}):`, errBody);
+    }
+  } catch (err) {
+    console.error('Error calling Supabase RPC:', err);
+  }
+}
+
+// ── Initialize ─────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   const savedTheme = localStorage.getItem('top15000_theme') || 'light';
   updateThemeIcon(savedTheme);
   initProfile();
 });
 
-function initProfile() {
+async function initProfile() {
   const urlParams = new URLSearchParams(window.location.search);
+  const userId = urlParams.get('id');
   const placeNum = parseInt(urlParams.get('place'), 10) || 1;
 
-  let data = [];
-  try {
-    const stored = localStorage.getItem('top15000_data_v1');
-    if (stored) data = JSON.parse(stored);
-    else data = SAMPLE_BUYERS;
-  } catch {
-    data = SAMPLE_BUYERS;
+  if (userId) {
+    try {
+      const res = await fetch(`${CDN_BASE}/users/${userId}.json`);
+      if (res.ok) {
+        const userData = await res.json();
+        const color = PALETTES[placeNum % PALETTES.length];
+        currentUser = {
+          place: placeNum,
+          id: userData.id || userId,
+          name: userData.name_on_card || `Creator #${placeNum}`,
+          profilePicture: userData.profile_image_upload || `${CDN_BASE}/image/${userData.id || userId}.jpg`,
+          message: userData.message_on_card || '',
+          youtubeUrl: userData.youtube_url || '',
+          instagramUrl: userData.instagram_social_url || '',
+          likes: userData.total_like_count || 0,
+          color: color
+        };
+      }
+    } catch (e) {
+      console.error('Error fetching user data:', e);
+    }
   }
-
-  currentUser = data.find(d => d.place === placeNum);
 
   if (!currentUser) {
     const color = PALETTES[placeNum % PALETTES.length];
     currentUser = {
       place: placeNum,
       id: placeNum,
-      name: `Citizen #${placeNum}`,
-      profilePicture: `https://ui-avatars.com/api/?name=Citizen+${placeNum}&background=${color.replace('#', '')}&color=fff&size=200`,
-      message: `Proud verified citizen of Place #${placeNum} on web100k.com! My permanent mark on the internet grid.`,
-      likes: Math.floor(Math.random() * 45) + 12,
+      name: 'Not Claimed',
+      profilePicture: `https://ui-avatars.com/api/?name=Empty&background=${color.replace('#', '')}&color=fff&size=200`,
+      message: 'This place has not been claimed yet, or the data is still syncing.',
+      youtubeUrl: '',
+      instagramUrl: '',
+      likes: 0,
       color: color
     };
   }
@@ -151,7 +166,7 @@ function renderUserProfile() {
   if (priceEl) priceEl.textContent = `Claimed for ₹${formatPrice(getPriceForPlace(p))}`;
 
   const msgEl = document.getElementById('profile-message');
-  if (msgEl) msgEl.textContent = `“${currentUser.message || 'No inscription provided.'}”`;
+  if (msgEl) msgEl.textContent = `"${currentUser.message || 'No inscription provided.'}"`;
 
   // Render YouTube thumbnail
   const ytId = getYoutubeVidId(currentUser.youtubeUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk') || 'jfKfPfyJRdk';
@@ -164,12 +179,31 @@ function renderUserProfile() {
     };
   }
 
+  // Render social links
+  const socialLinksEl = document.getElementById('profile-social-links');
+  if (socialLinksEl) {
+    let socialHTML = '';
+    if (currentUser.youtubeUrl) {
+      socialHTML += `<a href="${currentUser.youtubeUrl}" target="_blank" rel="noopener noreferrer" class="profile-social-link profile-social-yt" title="YouTube">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+        <span>YouTube</span>
+      </a>`;
+    }
+    if (currentUser.instagramUrl) {
+      socialHTML += `<a href="${currentUser.instagramUrl}" target="_blank" rel="noopener noreferrer" class="profile-social-link profile-social-ig" title="Instagram">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
+        <span>Instagram</span>
+      </a>`;
+    }
+    socialLinksEl.innerHTML = socialHTML;
+  }
+
   updateLikesUI();
 }
 
 function updateLikesUI() {
   const likedSet = getLikedSet();
-  const id = currentUser.id || currentUser.place;
+  const id = currentUser.id;
   const liked = likedSet.has(id);
 
   const countEl = document.getElementById('profile-like-count');
@@ -184,27 +218,25 @@ function updateLikesUI() {
 
 function likeProfile() {
   if (!currentUser) return;
-  const id = currentUser.id || currentUser.place;
-  const likedSet = getLikedSet();
 
-  if (likedSet.has(id)) {
+  const id = currentUser.id;
+  const likedSet = getLikedSet();
+  const sentLikes = getSentLikesSet();
+  const isCurrentlyLiked = likedSet.has(id);
+
+  if (isCurrentlyLiked) {
+    // Unlike — UI only, never touches Supabase
     currentUser.likes = Math.max(0, (currentUser.likes || 0) - 1);
     likedSet.delete(id);
-  } else {
-    currentUser.likes = (currentUser.likes || 0) + 1;
-    likedSet.add(id);
+    saveLikedSet(likedSet);
+    updateLikesUI();
+    return;
   }
 
+  // Like — increment UI immediately
+  currentUser.likes = (currentUser.likes || 0) + 1;
+  likedSet.add(id);
   saveLikedSet(likedSet);
-
-  try {
-    let stored = JSON.parse(localStorage.getItem('top15000_data_v1') || '[]');
-    const idx = stored.findIndex(d => d.place === currentUser.place);
-    if (idx !== -1) {
-      stored[idx].likes = currentUser.likes;
-      localStorage.setItem('top15000_data_v1', JSON.stringify(stored));
-    }
-  } catch { }
 
   updateLikesUI();
 
@@ -212,31 +244,27 @@ function likeProfile() {
   if (btn) {
     btn.classList.add('like-pop');
     setTimeout(() => btn.classList.remove('like-pop'), 400);
+    throwHearts(btn);
   }
 
-  const isNowLiked = likedSet.has(id);
-  if (isNowLiked) {
-    const card = document.getElementById('profile-card');
-    if (card) {
-      card.classList.add('card-shake');
-      card.addEventListener('animationend', () => {
-        card.classList.remove('card-shake');
-      }, { once: true });
-    }
-    if (btn) throwHearts(btn);
+  const card = document.getElementById('profile-card');
+  if (card) {
+    card.classList.add('card-shake');
+    card.addEventListener('animationend', () => {
+      card.classList.remove('card-shake');
+    }, { once: true });
   }
-}
 
-function getLikedSet() {
-  try {
-    return new Set(JSON.parse(localStorage.getItem('top15000_liked') || '[]'));
-  } catch { return new Set(); }
-}
+  // Only send to Supabase if we haven't sent for this ID before
+  if (!sentLikes.has(id)) {
+    sentLikes.add(id);
+    saveSentLikesSet(sentLikes);
 
-function saveLikedSet(set) {
-  try {
-    localStorage.setItem('top15000_liked', JSON.stringify([...set]));
-  } catch { }
+    supabaseRpc('process_card_like', {
+      target_id: id,
+      client_device_id: getOrCreateDeviceId()
+    });
+  }
 }
 
 function shareProfile() {
@@ -259,7 +287,6 @@ function showToast(msg) {
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3000);
 }
-
 
 // ── Theme Toggle ──────────────────────────
 function toggleTheme() {

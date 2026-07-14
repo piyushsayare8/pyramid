@@ -20,6 +20,7 @@
     "health": "curl -s https://pyramid-single-file.piyushsayare8.workers.dev/health | jq"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.5",
     "dotenv": "^17.2.4",
     "hono": "^4.6.0",
     "pixi.js": "^8.16.0",

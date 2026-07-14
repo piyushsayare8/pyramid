@@ -1,23 +1,19 @@
 <script>
   import { onMount, onDestroy } from "svelte";
+  import { createClient } from "@supabase/supabase-js";
+
+  // ─── Supabase Client ────────────────────────────────────────────────
+  const SUPABASE_URL = "https://conecotzzmloenikxefo.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvbmVjb3R6em1sb2VuaWt4ZWZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2OTg5NzksImV4cCI6MjA5ODI3NDk3OX0.M5llBovp2kS6s83ZOIxETYKoRl6dFcF-96Fkc53XHQM";
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ─── CDN Base URL ───────────────────────────────────────────────────
+  const CDN_BASE = "https://data.creatorspyramid.com";
 
   // ─── Constants ───────────────────────────────────────────────────────
   export const TOTAL_PLACES = 100000;
 
-  const SAMPLE_BUYERS = [
-    { place: 1, name: "Arjun Mehta", profilePicture: "https://ui-avatars.com/api/?name=Arjun+Mehta&background=7c3aed&color=fff&size=200", youtubeUrl: "https://www.youtube.com/watch?v=jfKfPfyJRdk", message: "First is first. No one can take this from me. History is written by those who act first! 🚀", likes: 142 },
-    { place: 2, name: "Priya Sharma", profilePicture: "https://ui-avatars.com/api/?name=Priya+Sharma&background=e91e8c&color=fff&size=200", youtubeUrl: "https://www.youtube.com/watch?v=5qap5aO4i9A", message: "Dreamer, builder, believer. Proud to hold Place #2 on the most exclusive internet list ever made.", likes: 98 },
-    { place: 3, name: "Rohan Das", profilePicture: "https://ui-avatars.com/api/?name=Rohan+Das&background=0d9488&color=fff&size=200", youtubeUrl: "https://www.youtube.com/watch?v=DWcJFNfaw9c", message: "Top 3 baby! Invested ₹3 and got a piece of internet history. Future generations will know this name. 🔥", likes: 77 },
-    { place: 4, name: "Sneha Patel", profilePicture: "https://ui-avatars.com/api/?name=Sneha+Patel&background=f59e0b&color=fff&size=200", youtubeUrl: "https://www.youtube.com/watch?v=lTRiuFIWV54", message: "Small price, big legacy. Every great journey begins with a single step — or in this case, ₹4.", likes: 61 },
-    { place: 5, name: "Vikram Nair", profilePicture: "https://ui-avatars.com/api/?name=Vikram+Nair&background=2563eb&color=fff&size=200", youtubeUrl: "https://www.youtube.com/watch?v=7NOSDKb0HlU", message: "Place #5! I'm part of the elite Top 10 forever. No amount of money can change history. 🌟", likes: 54 },
-    { place: 6, name: "Kavya Reddy", profilePicture: "https://ui-avatars.com/api/?name=Kavya+Reddy&background=dc2626&color=fff&size=200", youtubeUrl: "https://www.youtube.com/watch?v=M5QY2_8704o", message: "Six is my lucky number and this is my lucky place. Seize every opportunity that comes your way!", likes: 43 },
-    { place: 7, name: "Amit Kumar", profilePicture: "https://ui-avatars.com/api/?name=Amit+Kumar&background=16a34a&color=fff&size=200", youtubeUrl: "https://www.youtube.com/watch?v=-FlxM_0S2lA", message: "Lucky number 7. When I saw this site I knew I had to grab a spot. Best ₹7 I ever spent. Seriously.", likes: 39 },
-    { place: 8, name: "Divya Singh", profilePicture: "https://ui-avatars.com/api/?name=Divya+Singh&background=9333ea&color=fff&size=200", youtubeUrl: "https://www.youtube.com/watch?v=8Xg7E9shq0c", message: "Eternal optimist. Permanent dreamer. Place #8 on the internet — forever. This is my digital legacy. ✨", likes: 35 },
-    { place: 9, name: "Rajan Iyer", profilePicture: "https://ui-avatars.com/api/?name=Rajan+Iyer&background=ea580c&color=fff&size=200", youtubeUrl: "https://www.youtube.com/watch?v=n61ULEU7CO0", message: "Nine lives, one permanent digital spot. The internet never forgets, and I am now part of it forever.", likes: 28 },
-    { place: 10, name: "Meena Gupta", profilePicture: "https://ui-avatars.com/api/?name=Meena+Gupta&background=0891b2&color=fff&size=200", youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", message: "Double digits! Proud to be in the Top 10. In a world of 8 billion people, only 10 got here first. 💎", likes: 22 },
-  ];
 
-  // ─── Pure utility functions (zero allocation hot-paths) ──────────────
   const YT_REGEX = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
   const YT_DEFAULT_ID = "jfKfPfyJRdk";
 
@@ -34,7 +30,11 @@
 
   // Price computation — pure, cacheable
   function getPriceForPlace(place) {
-    return +(place * 0.05).toFixed(2);
+    return +(1 + (place - 1) * 0.03).toFixed(2);
+  }
+
+  function getPlaceForPrice(price) {
+    return Math.round((price - 1) / 0.03) + 1;
   }
 
   // Price formatting with memoization for hot-path cards
@@ -61,26 +61,44 @@
   // Pre-compute all derived display properties on an item — called ONCE per item
   function enrichItem(raw) {
     const place = raw.place;
-    const name = raw.name || "Anonymous";
-    const ytId = getYoutubeVidId(raw.youtubeUrl);
+    const id = raw.id || place;
+    const name = raw.name_on_card || raw.name || "Anonymous";
+    const message = raw.message_on_card || raw.message || "—";
+    const youtubeUrl = raw.youtube_url || raw.youtubeUrl || "";
+    const instagramUrl = raw.instagram_social_url || raw.instagramUrl || "";
+    const profilePicture = raw.profile_image_upload || raw.profilePicture || "";
+    const likes = raw.total_like_count ?? raw.likes ?? 0;
+    const ytId = getYoutubeVidId(youtubeUrl);
     const price = getPriceForPlace(place);
     const encodedName = encodeURIComponent(name);
+
+    // Image fallback chain: profile_image_upload -> CDN /image/{id}.jpg -> ui-avatars
+    const cdnImageFallback = `${CDN_BASE}/image/${id}.jpg`;
+    const uiAvatarPrimary = `https://ui-avatars.com/api/?name=${encodedName}&background=7c3aed&color=fff&size=200`;
+    const uiAvatarFallback = `https://ui-avatars.com/api/?name=${encodedName}&background=333&color=fff&size=200`;
+
     return {
       ...raw,
-      id: raw.id || place,
+      id,
       place,
       name,
+      message,
+      youtubeUrl,
+      instagramUrl,
+      profilePicture,
+      likes,
       _ytId: ytId,
       _thumbUrl: `https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`,
       _thumbFallback: `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`,
-      _avatarSrc: raw.profilePicture || `https://ui-avatars.com/api/?name=${encodedName}&background=7c3aed&color=fff&size=200`,
-      _avatarFallback: `https://ui-avatars.com/api/?name=${encodedName}&background=333&color=fff&size=200`,
+      _avatarSrc: profilePicture || cdnImageFallback,
+      _avatarFallback1: profilePicture ? cdnImageFallback : uiAvatarPrimary,
+      _avatarFallback2: uiAvatarFallback,
       _price: price,
       _formattedPrice: formatPrice(price),
       _placeFormatted: place.toLocaleString("en-IN"),
-      _rawMsg: raw.message || "—",
-      _isShortMsg: (raw.message || "—").length <= 85,
-      _msgPreview: (raw.message || "—").length > 85 ? (raw.message || "—").slice(0, 85).trim() + "..." : null,
+      _rawMsg: message,
+      _isShortMsg: message.length <= 85,
+      _msgPreview: message.length > 85 ? message.slice(0, 85).trim() + "..." : null,
     };
   }
 
@@ -157,16 +175,23 @@
   let itemsMap = $state(new Map());
   let itemsVersion = $state(0); // bump on any mutation
 
-  // Sort UI state — kept for future server integration (no local sorting)
-  let currentSort = $state("price");
+  // Sort UI state — "newest" = price.json, "top_liked" = like.json
+  let currentSort = $state("newest");
   // Search UI state — kept for future server integration (no local filtering)
   let searchQuery = $state("");
   let likedSet = $state(new Set());
+  // Tracks IDs whose like has been sent to Supabase (permanent, never toggle)
+  let sentLikesSet = $state(new Set());
   let expandedMessages = $state(new Set());
   let theme = $state("light");
   let buyModalOpen = $state(false);
   let activeVideoPlace = $state(null);
   let activeVideoId = $state(null);
+
+  let paymentData = $state({
+    paymentLink: "https://rzp.io/l/web100k_payment",
+    amount: 99
+  });
 
   // Form Signals
   let formName = $state("");
@@ -202,9 +227,6 @@
     }
     itemsVersion++;
   }
-
-  // Initialize with sample data
-  setItemsFromArray(SAMPLE_BUYERS);
 
   // ─── Items list — display in server/insertion order (no local sort) ──
   let itemsList = $derived.by(() => {
@@ -283,7 +305,21 @@
   }
 
   function setSortOption(sortBy) {
+    if (currentSort === sortBy) return;
     currentSort = sortBy;
+    loadLeaderboard(); // Refetch when sort changes
+  }
+
+  // ─── Fetch individual user data from CDN ────────────────────────────
+  async function fetchUserData(id) {
+    try {
+      const res = await fetch(`${CDN_BASE}/users/${id}.json`);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (err) {
+      console.error(`Error fetching user ${id}:`, err);
+      return null;
+    }
   }
 
   // ─── Debounced persistence ──────────────────────────────────────────
@@ -294,38 +330,70 @@
         const arr = Array.from(itemsMap.values());
         localStorage.setItem("top15000_data_v1", JSON.stringify(arr));
         localStorage.setItem("top15000_liked", JSON.stringify([...likedSet]));
+        localStorage.setItem("top15000_sent_likes", JSON.stringify([...sentLikesSet]));
       } catch {}
     }, 1000);
   }
 
-  // ─── Like toggle — O(1) Map mutation, no array cloning ─────────────
-  function toggleLikeItem(placeNum, btnElement) {
-    const isLiked = likedSet.has(placeNum);
-
-    // Mutate liked set in-place — Svelte 5 $state proxy tracks .add/.delete
-    if (isLiked) {
-      likedSet.delete(placeNum);
-    } else {
-      likedSet.add(placeNum);
+  // Helper to get or create device fingerprint
+  function getDeviceId() {
+    let deviceId = localStorage.getItem("device_fingerprint");
+    if (!deviceId) {
+      deviceId = crypto.randomUUID();
+      localStorage.setItem("device_fingerprint", deviceId);
     }
+    return deviceId;
+  }
 
-    // O(1) item lookup + in-place mutation — no cloning needed
+  // ─── Like toggle — allows like/unlike in UI, but Supabase RPC fires only once ever ──
+  function toggleLikeItem(placeNum, btnElement) {
     const item = itemsMap.get(placeNum);
-    if (item) {
+    if (!item) return;
+
+    const idToLike = item.id || placeNum;
+    const isCurrentlyLiked = likedSet.has(idToLike);
+
+    if (isCurrentlyLiked) {
+      // Unlike — UI only, never touches Supabase
+      likedSet.delete(idToLike);
       const updatedItem = {
         ...item,
-        likes: Math.max(0, (item.likes || 0) + (isLiked ? -1 : 1)),
+        likes: Math.max(0, (item.likes || 0) - 1),
       };
       itemsMap.set(placeNum, updatedItem);
       itemsVersion++;
+    } else {
+      // Like — increment UI count
+      likedSet.add(idToLike);
+      const updatedItem = {
+        ...item,
+        likes: (item.likes || 0) + 1,
+      };
+      itemsMap.set(placeNum, updatedItem);
+      itemsVersion++;
+
+      if (btnElement) {
+        throwHearts(btnElement);
+      }
+
+      // Only send to Supabase if we haven't sent for this ID before
+      if (!sentLikesSet.has(idToLike)) {
+        sentLikesSet.add(idToLike);
+
+        supabase
+          .rpc("process_card_like", {
+            target_id: idToLike,
+            client_device_id: getDeviceId(),
+          })
+          .then(({ error }) => {
+            if (error) console.error("Error sending like to Supabase:", error.message);
+          })
+          .catch((err) => console.error("Error sending like to Supabase:", err));
+      }
     }
 
-    // Debounced persistence — no blocking the main thread
+    // Debounced persistence
     schedulePersist();
-
-    if (btnElement && !isLiked) {
-      throwHearts(btnElement);
-    }
   }
 
   // ─── Message expand/collapse ────────────────────────────────────────
@@ -486,13 +554,12 @@
   let remainingCount = $derived(TOTAL_PLACES - soldCount);
   let progressPct = $derived(Math.max((soldCount / TOTAL_PLACES) * 100, 0.2));
 
-  let nextPlace = $derived(itemsMap.size + 1);
-  let currentPrice = $derived(getPriceForPlace(nextPlace));
-  let formattedPrice = $derived(formatPrice(currentPrice));
+  let displayPrice = $derived(paymentData.amount !== null ? paymentData.amount : getPriceForPlace(itemsMap.size + 1));
+  let nextPlace = $derived(getPlaceForPrice(displayPrice));
+  let displayPriceFormatted = $derived(formatPrice(displayPrice));
   let nextAfterPlace = $derived(nextPlace + 1);
   let nextAfterPrice = $derived(formatPrice(getPriceForPlace(nextAfterPlace)));
   let isSoldOut = $derived(nextPlace > TOTAL_PLACES);
-  let charRemaining = $derived(300 - formMsg.length);
 
   // Pre-formatted values for buy section (avoid repeated toLocaleString)
   let nextPlaceFormatted = $derived(nextPlace.toLocaleString("en-IN"));
@@ -500,51 +567,90 @@
 
   // ─── Buy form submit ───────────────────────────────────────────────
   function handleBuySubmit(e) {
-    e.preventDefault();
-    if (!formName.trim()) {
-      showToast("Please enter your name");
+    if (e) e.preventDefault();
+
+    if (paymentData.paymentLink) {
+      window.location.href = paymentData.paymentLink;
       return;
     }
-    const place = nextPlace;
-    if (place > TOTAL_PLACES) {
-      showToast("All places are sold out!");
-      return;
-    }
-
-    const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(formName.trim())}&background=7c3aed&color=fff&size=200`;
-    const entry = {
-      id: place,
-      place: place,
-      name: formName.trim(),
-      profilePicture: formProfile.trim() || fallback,
-      youtubeUrl: formYoutube.trim() || "https://www.youtube.com/watch?v=jfKfPfyJRdk",
-      message: formMsg.trim() || "I claimed my permanent place on the internet!",
-      likes: 0,
-    };
-
-    const enriched = enrichItem(entry);
-    // Mutate in-place — Svelte 5 $state proxy tracks .set()
-    itemsMap.set(place, enriched);
-    itemsVersion++;
-
-    // Debounced persist
-    schedulePersist();
-
-    formName = "";
-    formProfile = "";
-    formYoutube = "";
-    formMsg = "";
-    buyModalOpen = false;
-    showToast(`🎉 Congrats! You now own Place #${place} forever!`);
+    
+    showToast("Payment link is not available right now. Please try again later.");
   }
 
   // ─── Lifecycle ─────────────────────────────────────────────────────
+  let pollInterval;
+
+  async function loadPaymentData() {
+    try {
+      const response = await fetch("https://data.creatorspyramid.com/active-link.json");
+      if (response.ok) {
+        const data = await response.json();
+        const link = data.paymentLink || data.payment_link || "";
+        const amt = data.amount !== undefined ? data.amount : (data.price !== undefined ? data.price : null);
+        if (paymentData.paymentLink !== link || paymentData.amount !== amt) {
+          paymentData.paymentLink = link;
+          paymentData.amount = amt;
+        }
+      }
+    } catch (err) {
+      console.error("Error loading payment data from active-link.json:", err);
+    }
+  }
+
+  async function loadLeaderboard() {
+    try {
+      // Phase 1: Fetch the ID index from CDN
+      const indexFile = currentSort === "top_liked" ? "like.json" : "price.json";
+      const indexUrl = `${CDN_BASE}/${indexFile}`;
+      const response = await fetch(indexUrl);
+      if (!response.ok) {
+        console.error(`Failed to fetch ${indexFile}: ${response.status}`);
+        return;
+      }
+      const ids = await response.json(); // e.g. [6, 5, 3, 1]
+
+      // Phase 2: Fetch each user's data in parallel
+      const userPromises = ids.map((id) => fetchUserData(id));
+      const users = await Promise.all(userPromises);
+
+      // Build the items array preserving the order from the index
+      const arr = [];
+      for (let i = 0; i < ids.length; i++) {
+        const userData = users[i];
+        if (!userData) continue; // Skip failed fetches
+
+        const id = userData.id ?? ids[i];
+        const place = i + 1; // Position in the sorted list
+        arr.push({
+          ...userData,
+          id,
+          place,
+        });
+      }
+
+      setItemsFromArray(arr);
+    } catch (err) {
+      console.error("Error loading leaderboard:", err);
+    }
+  }
+
   onMount(() => {
+    loadPaymentData();
+    loadLeaderboard();
+    pollInterval = setInterval(loadPaymentData, 3000);
+
     // Restore liked set — populate in-place to preserve $state proxy
     try {
       const savedLiked = JSON.parse(localStorage.getItem("top15000_liked") || "[]");
       likedSet.clear();
       for (const id of savedLiked) likedSet.add(id);
+    } catch {}
+
+    // Restore sent likes set (permanent record of Supabase-sent likes)
+    try {
+      const savedSent = JSON.parse(localStorage.getItem("top15000_sent_likes") || "[]");
+      sentLikesSet.clear();
+      for (const id of savedSent) sentLikesSet.add(id);
     } catch {}
 
     // Restore theme
@@ -560,21 +666,7 @@
       bgEl.style.background = `radial-gradient(circle at 50% 50%, #ffffff 0%, ${randomColor} 70%)`;
     }
 
-    // Restore saved items
-    try {
-      const stored = localStorage.getItem("top15000_data_v1");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const arr = parsed.map((item, idx) => ({
-          ...item,
-          id: item.id || item.place || idx + 1,
-          place: item.place || idx + 1,
-        }));
-        setItemsFromArray(arr);
-      }
-    } catch {}
-
-    // Initial sizing
+    // Ambient background
     viewportHeight = window.innerHeight;
     const w = window.innerWidth;
     if (w <= 640) columns = 1;
@@ -607,6 +699,7 @@
     if (rafId) cancelAnimationFrame(rafId);
     clearTimeout(_persistTimer);
     if (_videoObserver) _videoObserver.disconnect();
+    clearInterval(pollInterval);
   });
 </script>
 
@@ -686,7 +779,7 @@
         <div class="buy-price-display">
           <span class="buy-currency">₹</span>
           <span class="buy-price-amount" id="current-price"
-            >{formattedPrice}</span
+            >{displayPriceFormatted}</span
           >
         </div>
         <p class="buy-description">
@@ -712,7 +805,7 @@
         <button
           class="buy-btn"
           id="buy-btn"
-          onclick={() => !isSoldOut && (buyModalOpen = true)}
+          onclick={() => !isSoldOut && handleBuySubmit()}
           disabled={isSoldOut}
           style={isSoldOut ? "opacity: 0.6; cursor: default;" : ""}
         >
@@ -724,7 +817,7 @@
               Claim Place #<span id="buy-btn-place"
                 >{nextPlaceFormatted}</span
               >
-              for ₹<span id="buy-btn-price">{formattedPrice}</span>
+              for ₹<span id="buy-btn-price">{displayPriceFormatted}</span>
             </span>
             <span class="buy-btn-arrow">→</span>
           {/if}
@@ -753,22 +846,16 @@
         <div class="lb-sort-group">
           <span class="lb-sort-label">Sort by</span>
           <button
-            class="lb-sort-btn {currentSort === 'price' ? 'active' : ''}"
-            onclick={() => setSortOption("price")}
+            class="lb-sort-btn {currentSort === 'newest' ? 'active' : ''}"
+            onclick={() => setSortOption("newest")}
           >
-            💰 Price
+            🆕 Newest
           </button>
           <button
-            class="lb-sort-btn {currentSort === 'likes' ? 'active' : ''}"
-            onclick={() => setSortOption("likes")}
+            class="lb-sort-btn {currentSort === 'top_liked' ? 'active' : ''}"
+            onclick={() => setSortOption("top_liked")}
           >
-            ❤️ Likes
-          </button>
-          <button
-            class="lb-sort-btn {currentSort === 'random' ? 'active' : ''}"
-            onclick={() => setSortOption("random")}
-          >
-            🔀 Random
+            🔥 Top Liked
           </button>
         </div>
         <div class="lb-search-wrap">
@@ -822,12 +909,12 @@
                 class="lb-card {liked ? 'liked-card liked-row' : ''}"
                 id="row-{place}"
                 onclick={() =>
-                  (window.location.href = `profile.html?place=${place}`)}
+                  (window.location.href = `profile.html?id=${item.id}&place=${place}`)}
                 role="button"
                 tabindex="0"
                 onkeydown={(e) =>
                   e.key === "Enter" &&
-                  (window.location.href = `profile.html?place=${place}`)}
+                  (window.location.href = `profile.html?id=${item.id}&place=${place}`)}
               >
                 <div class="lb-card-video-wrap" id="video-wrap-{place}">
                   <div
@@ -863,7 +950,14 @@
                       width="200"
                       height="200"
                       onerror={(e) => {
-                        e.currentTarget.src = item._avatarFallback;
+                        const lvl = parseInt(e.currentTarget.dataset.fallback || "0");
+                        if (lvl === 0) {
+                          e.currentTarget.dataset.fallback = "1";
+                          e.currentTarget.src = item._avatarFallback1;
+                        } else {
+                          e.currentTarget.dataset.fallback = "2";
+                          e.currentTarget.src = item._avatarFallback2;
+                        }
                       }}
                     />
                     <div class="lb-card-user-info">
@@ -873,8 +967,34 @@
                         </div>
                         <span class="lb-card-place-pill">#{place}</span>
                       </div>
+                      <div class="lb-card-social-links">
+                        {#if item.youtubeUrl}
+                          <a
+                            href={item.youtubeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="lb-social-icon lb-social-yt"
+                            onclick={(e) => e.stopPropagation()}
+                            title="YouTube"
+                          >
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                          </a>
+                        {/if}
+                        {#if item.instagramUrl}
+                          <a
+                            href={item.instagramUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="lb-social-icon lb-social-ig"
+                            onclick={(e) => e.stopPropagation()}
+                            title="Instagram"
+                          >
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
+                          </a>
+                        {/if}
+                      </div>
                       <a
-                        href="profile.html?place={place}"
+                        href="profile.html?id={item.id}&place={place}"
                         class="lb-card-visit"
                         onclick={(e) => e.stopPropagation()}
                       >
@@ -984,110 +1104,4 @@
     <div class="lbmp-screen" id="lbmp-screen"></div>
   </div>
 
-  <!-- BUY MODAL -->
-  <div
-    id="buy-modal"
-    class="modal-overlay {buyModalOpen ? 'show' : ''}"
-    onclick={(e) => {
-      if (e.target === e.currentTarget) buyModalOpen = false;
-    }}
-    role="presentation"
-  >
-    <div
-      class="modal-box"
-      onclick={(e) => e.stopPropagation()}
-      role="presentation"
-    >
-      <div class="modal-glow"></div>
-      <button class="modal-close-btn" onclick={() => (buyModalOpen = false)}
-        >✕</button
-      >
-      <div class="modal-header">
-        <div class="modal-place-badge">
-          Place #{nextPlaceFormatted} — Permanent Grid
-        </div>
-        <h2 class="modal-title">Claim Your Permanent Place</h2>
-      </div>
-      <form id="buy-form" onsubmit={handleBuySubmit}>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="form-name">Your Name *</label>
-            <input
-              type="text"
-              id="form-name"
-              placeholder="Enter your name"
-              required
-              maxlength="80"
-              bind:value={formName}
-            />
-          </div>
-          <div class="form-group">
-            <label for="form-profile">Profile Picture URL</label>
-            <input
-              type="url"
-              id="form-profile"
-              placeholder="https://example.com/photo.jpg"
-              bind:value={formProfile}
-            />
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="form-youtube">
-            YouTube Video / Reel URL <span class="form-label-hint"
-              >(Optional)</span
-            >
-          </label>
-          <input
-            type="url"
-            id="form-youtube"
-            placeholder="https://www.youtube.com/watch?v=... or Reel link"
-            bind:value={formYoutube}
-          />
-        </div>
-        <div class="form-group">
-          <label for="form-message">
-            Your Message <span class="form-label-hint">(up to 300 chars)</span>
-          </label>
-          <textarea
-            id="form-message"
-            placeholder="Write something memorable — it stays here forever…"
-            maxlength="300"
-            rows="3"
-            bind:value={formMsg}
-          ></textarea>
-          <div
-            class="form-char-count"
-            style="color: {charRemaining < 30
-              ? '#ef4444'
-              : charRemaining < 80
-                ? '#f5c842'
-                : ''};"
-          >
-            <span id="form-char-remaining">{charRemaining}</span> characters remaining
-          </div>
-        </div>
-        <div class="form-price-summary">
-          <div class="fps-label">Total to pay</div>
-          <div class="fps-price">
-            ₹<span id="fps-amount">{currentPrice}</span>
-          </div>
-          <div class="fps-note">
-            for Place #{nextPlaceFormatted} · permanently yours
-          </div>
-        </div>
-        <div class="form-actions">
-          <button
-            type="button"
-            class="form-btn-cancel"
-            onclick={() => (buyModalOpen = false)}>Cancel</button
-          >
-          <button type="submit" class="form-btn-pay" id="form-btn-pay">
-            <span
-              >Pay ₹<span id="form-pay-amount">{currentPrice}</span> &amp; Claim</span
-            >
-            <span class="pay-arrow">→</span>
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
+  <!-- BUY MODAL IS NOW BYPASSED, REDIRECT HAPPENS DIRECTLY -->

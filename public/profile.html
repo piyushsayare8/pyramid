@@ -251,6 +251,67 @@
         width: 100%;
       }
     }
+
+    /* ── Profile Social Links ── */
+    .profile-social-links-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .profile-social-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: 10px;
+      border: 2px solid var(--border-dark);
+      background: #ffffff;
+      color: #475569;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: 2px 2px 0px rgba(67, 56, 202, 0.2);
+      transition: all 0.15s ease;
+    }
+
+    .profile-social-link:hover {
+      transform: translate(1px, 1px);
+      box-shadow: 1px 1px 0px rgba(67, 56, 202, 0.2);
+    }
+
+    .profile-social-yt:hover {
+      border-color: #ef4444;
+      color: #ef4444;
+      background: #fef2f2;
+    }
+
+    .profile-social-ig:hover {
+      border-color: #e1306c;
+      color: #e1306c;
+      background: #fdf2f8;
+    }
+
+    :root[data-theme="dark"] .profile-social-link {
+      background: #1f1f23;
+      color: #e2e8f0;
+      border-color: #f472b6;
+      box-shadow: 2px 2px 0px #f472b6;
+    }
+
+    :root[data-theme="dark"] .profile-social-yt:hover {
+      background: rgba(255, 0, 0, 0.12);
+      color: #ff6b6b;
+      border-color: #ff6b6b;
+    }
+
+    :root[data-theme="dark"] .profile-social-ig:hover {
+      background: rgba(225, 48, 108, 0.12);
+      color: #f472b6;
+      border-color: #f472b6;
+    }
   </style>
 </head>
 
@@ -301,6 +362,9 @@
           </div>
 
           <div class="lb-card-message" id="profile-message"></div>
+
+          <!-- Social Links -->
+          <div class="profile-social-links-wrap" id="profile-social-links"></div>
 
           <div class="lb-card-foot">
             <button id="profile-like-btn" class="lb-card-like-btn" onclick="likeProfile()">
