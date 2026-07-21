@@ -11,8 +11,8 @@ const PALETTES = ['#6366f1', '#ec4899', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf
 
 let currentUser = null;
 
-function getPriceForPlace(place) {
-  return +(place * 0.05).toFixed(2);
+function getPriceForId(id) {
+  return +(1 + (id - 1) * 0.03).toFixed(2);
 }
 
 function formatPrice(num) {
@@ -90,19 +90,34 @@ async function initProfile() {
 
   if (userId) {
     try {
-      const res = await fetch(`${CDN_BASE}/users/${userId}.json`);
-      if (res.ok) {
-        const userData = await res.json();
+      // Fetch user data and like.json in parallel
+      const [userRes, likeRes] = await Promise.all([
+        fetch(`${CDN_BASE}/users/${userId}.json`, { cache: "no-cache" }),
+        fetch(`${CDN_BASE}/like.json`, { cache: "no-cache" })
+      ]);
+
+      let likeCount = 0;
+      if (likeRes.ok) {
+        const likeData = await likeRes.json();
+        const idsArr = likeData.ids || [];
+        const likesArr = likeData.likes || [];
+        const idx = idsArr.indexOf(Number(userId));
+        if (idx !== -1) likeCount = likesArr[idx] || 0;
+      }
+
+      if (userRes.ok) {
+        const userData = await userRes.json();
         const color = PALETTES[placeNum % PALETTES.length];
+        const paymentId = userData.payment_id || userData.id || userId;
         currentUser = {
           place: placeNum,
           id: userData.id || userId,
           name: userData.name_on_card || `Creator #${placeNum}`,
-          profilePicture: userData.profile_image_upload || `${CDN_BASE}/image/${userData.id || userId}.jpg`,
+          profilePicture: userData.profile_image_upload || userData.profile_image || `${CDN_BASE}/profiles/${paymentId}.jpeg`,
           message: userData.message_on_card || '',
           youtubeUrl: userData.youtube_url || '',
           instagramUrl: userData.instagram_social_url || '',
-          likes: userData.total_like_count || 0,
+          likes: likeCount,
           color: color
         };
       }
@@ -163,10 +178,21 @@ function renderUserProfile() {
   if (nameEl) nameEl.textContent = currentUser.name || `Citizen #${p}`;
 
   const priceEl = document.getElementById('profile-price');
-  if (priceEl) priceEl.textContent = `Claimed for ₹${formatPrice(getPriceForPlace(p))}`;
+  if (priceEl) priceEl.textContent = `Claimed for ₹${formatPrice(getPriceForId(parseInt(currentUser.id, 10) || 1))}`;
 
   const msgEl = document.getElementById('profile-message');
-  if (msgEl) msgEl.textContent = `"${currentUser.message || 'No inscription provided.'}"`;
+  if (msgEl) {
+    const rawMsg = currentUser.message || 'No inscription provided.';
+    // Convert newlines to spaces for character count checking if needed, or just check length
+    if (rawMsg.length > 90) {
+      msgEl.innerHTML = `
+        <div class="lb-card-message-text" id="profile-msg-text">"${rawMsg}"</div>
+        <button class="lb-message-more-btn" id="profile-msg-more-btn" onclick="toggleMessageExpand()">more</button>
+      `;
+    } else {
+      msgEl.innerHTML = `<div class="lb-card-message-text" id="profile-msg-text" style="display: block; -webkit-line-clamp: unset; max-height: none;">"${rawMsg}"</div>`;
+    }
+  }
 
   // Render YouTube thumbnail
   const ytId = getYoutubeVidId(currentUser.youtubeUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk') || 'jfKfPfyJRdk';
@@ -199,6 +225,26 @@ function renderUserProfile() {
   }
 
   updateLikesUI();
+
+  // Completely remove skeleton loader from DOM and show profile card + action buttons
+  const skeletonEl = document.getElementById('profile-skeleton');
+  if (skeletonEl) {
+    skeletonEl.style.setProperty('display', 'none', 'important');
+    skeletonEl.remove();
+  }
+
+  const cardEl = document.getElementById('profile-card');
+  if (cardEl) {
+    cardEl.classList.remove('hidden-card');
+    cardEl.style.setProperty('display', 'flex', 'important');
+  }
+
+  const actionsEl = document.getElementById('profile-actions');
+  if (actionsEl) {
+    actionsEl.style.opacity = '1';
+    actionsEl.style.pointerEvents = 'auto';
+    actionsEl.style.animation = 'profileActionsReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards';
+  }
 }
 
 function updateLikesUI() {
@@ -264,6 +310,20 @@ function likeProfile() {
       target_id: id,
       client_device_id: getOrCreateDeviceId()
     });
+  }
+}
+
+function toggleMessageExpand() {
+  const textEl = document.getElementById('profile-msg-text');
+  const btnEl = document.getElementById('profile-msg-more-btn');
+  if (!textEl || !btnEl) return;
+  
+  if (textEl.classList.contains('expanded')) {
+    textEl.classList.remove('expanded');
+    btnEl.textContent = 'more';
+  } else {
+    textEl.classList.add('expanded');
+    btnEl.textContent = 'less';
   }
 }
 
@@ -378,20 +438,41 @@ function printCard() {
   }, 300);
 }
 
-// ── Heart Confetti Effect ──────────────────
+// ── Heart Confetti Effect (pooled — no DOM leaks) ────────
+const HEART_POOL_SIZE = 20;
+let _heartPool = [];
+let _heartPoolReady = false;
+
+function initProfileHeartPool() {
+  if (_heartPoolReady) return;
+  for (let i = 0; i < HEART_POOL_SIZE; i++) {
+    const heart = document.createElement('div');
+    heart.className = 'floating-heart';
+    heart.style.display = 'none';
+    heart.style.willChange = 'transform, opacity';
+    document.body.appendChild(heart);
+    _heartPool.push(heart);
+  }
+  _heartPoolReady = true;
+}
+
 function throwHearts(element) {
+  if (!element) return;
+  initProfileHeartPool();
   const rect = element.getBoundingClientRect();
   const centerX = rect.left + rect.width / 2 + window.scrollX;
   const centerY = rect.top + rect.height / 2 + window.scrollY;
 
-  for (let i = 0; i < 10; i++) {
-    const heart = document.createElement('div');
-    heart.className = 'floating-heart';
+  const heartsToUse = Math.min(10, _heartPool.length);
+  for (let i = 0; i < heartsToUse; i++) {
+    const heart = _heartPool[i];
+    if (!heart) continue;
+
     heart.textContent = Math.random() > 0.5 ? '❤️' : '💖';
     heart.style.left = `${centerX}px`;
     heart.style.top = `${centerY}px`;
+    heart.style.display = 'block';
 
-    // Random spread (30 to 150 degrees)
     const angle = (Math.random() * 120 + 30) * Math.PI / 180;
     const velocity = 60 + Math.random() * 80;
     const tx = Math.cos(angle) * velocity;
@@ -401,10 +482,13 @@ function throwHearts(element) {
     heart.style.setProperty('--ty', `${ty}px`);
     heart.style.fontSize = `${14 + Math.random() * 14}px`;
 
-    document.body.appendChild(heart);
+    heart.classList.remove('floating-heart');
+    void heart.offsetWidth; // force reflow for animation restart
+    heart.classList.add('floating-heart');
 
-    heart.addEventListener('animationend', () => {
-      heart.remove();
-    });
+    const hideTimer = setTimeout(() => {
+      heart.style.display = 'none';
+      clearTimeout(hideTimer);
+    }, 1200);
   }
 }

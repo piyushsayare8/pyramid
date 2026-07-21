@@ -118,7 +118,8 @@
       flex-direction: column;
       gap: 22px;
       align-items: center;
-      animation: slickCardEntrance 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards, cardFloatLiving 6s ease-in-out infinite alternate 0.8s;
+      animation: slickCardEntrance 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      will-change: transform, opacity;
       box-sizing: border-box;
       z-index: 5;
     }
@@ -147,19 +148,7 @@
       }
     }
 
-    @keyframes cardFloatLiving {
-      0% {
-        transform: translateY(0px) rotate(0deg);
-      }
 
-      50% {
-        transform: translateY(-7px) rotate(0.4deg);
-      }
-
-      100% {
-        transform: translateY(0px) rotate(0deg);
-      }
-    }
 
     .profile-actions-under {
       display: flex;
@@ -322,7 +311,7 @@
   </div>
 
   <!-- NAVIGATION -->
-  <nav class="profile-nav">
+  <nav class="profile-nav" style="opacity: 0; animation: profileFadeSlideDown 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;">
     <a href="index.html" class="nav-back-btn">
       <span>←</span>
       <span>Leaderboard</span>
@@ -338,8 +327,33 @@
   <!-- CARD CONTAINER -->
   <main class="profile-main">
     <div class="profile-card-wrapper">
-      <!-- STANDALONE LEADERBOARD CARD -->
-      <div class="lb-card" id="profile-card">
+
+      <!-- LOADING SKELETON (shown while fetching) -->
+      <div class="lb-card profile-skeleton" id="profile-skeleton">
+        <div class="lb-card-video-wrap">
+          <div class="profile-skeleton-block" style="width: 100%; height: 100%; border-radius: 0;"></div>
+        </div>
+        <div class="lb-card-content">
+          <div class="lb-card-user">
+            <div class="profile-skeleton-block profile-skeleton-circle"></div>
+            <div class="lb-card-user-info" style="flex: 1;">
+              <div class="profile-skeleton-block" style="height: 20px; width: 65%; border-radius: 10px; margin-bottom: 10px;"></div>
+              <div class="profile-skeleton-block" style="height: 14px; width: 35%; border-radius: 8px;"></div>
+            </div>
+          </div>
+          <div style="margin-top: 4px;">
+            <div class="profile-skeleton-block" style="height: 14px; width: 90%; border-radius: 8px; margin-bottom: 8px;"></div>
+            <div class="profile-skeleton-block" style="height: 14px; width: 60%; border-radius: 8px;"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+            <div class="profile-skeleton-block" style="height: 36px; width: 80px; border-radius: 12px;"></div>
+            <div class="profile-skeleton-block" style="height: 36px; width: 100px; border-radius: 12px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTUAL CARD (hidden until data loads) -->
+      <div class="lb-card profile-card-reveal hidden-card" id="profile-card">
 
         <!-- SECTION 1: YouTube Video -->
         <div class="lb-card-video-wrap" id="video-wrap-profile">
@@ -352,21 +366,21 @@
         <!-- SECTION 2: Profile Picture, Hashtag Badge, Message, Likes -->
         <div class="lb-card-content">
           <div class="lb-card-user">
-            <img id="profile-avatar" class="lb-card-avatar" src="" alt="">
+            <img id="profile-avatar" class="lb-card-avatar profile-reveal-item" src="" alt="" referrerpolicy="no-referrer">
             <div class="lb-card-user-info">
               <div class="lb-card-user-top">
-                <div id="profile-name" class="lb-card-name"></div>
-                <span id="place-pill" class="lb-card-place-pill"></span>
+                <div id="profile-name" class="lb-card-name profile-reveal-item"></div>
+                <span id="place-pill" class="lb-card-place-pill profile-reveal-item"></span>
               </div>
             </div>
           </div>
 
-          <div class="lb-card-message" id="profile-message"></div>
+          <div class="lb-card-message profile-reveal-item" id="profile-message"></div>
 
           <!-- Social Links -->
-          <div class="profile-social-links-wrap" id="profile-social-links"></div>
+          <div class="profile-social-links-wrap profile-reveal-item" id="profile-social-links"></div>
 
-          <div class="lb-card-foot">
+          <div class="lb-card-foot profile-reveal-item">
             <button id="profile-like-btn" class="lb-card-like-btn" onclick="likeProfile()">
               <span id="profile-heart">🤍</span>
               <span id="profile-like-count">0</span>
@@ -378,7 +392,7 @@
       </div>
 
       <!-- ACTION BUTTONS BELOW CARD -->
-      <div class="profile-actions-under">
+      <div class="profile-actions-under" id="profile-actions" style="opacity: 0; pointer-events: none;">
         <button class="slick-btn" onclick="shareProfile()">
           ⚡ Share Card
         </button>
@@ -395,6 +409,117 @@
 
   <!-- TOAST -->
   <div id="toast" class="toast-popup" style="z-index: 3000;"></div>
+
+  <style>
+    /* ── Profile Loading Skeleton ── */
+    .profile-skeleton-block {
+      background: var(--skeleton-bg, #e2e8f0);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .profile-skeleton-block::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.45) 50%, transparent 100%);
+      animation: profileShimmer 1.8s ease-in-out infinite;
+    }
+
+    :root[data-theme="dark"] .profile-skeleton-block {
+      background: #2d3748;
+    }
+
+    :root[data-theme="dark"] .profile-skeleton-block::after {
+      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%);
+    }
+
+    .profile-skeleton-circle {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    @keyframes profileShimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    .profile-skeleton {
+      animation: skeletonPulse 2s ease-in-out infinite alternate;
+    }
+
+    @keyframes skeletonPulse {
+      0% { opacity: 0.7; }
+      100% { opacity: 1; }
+    }
+
+    /* ── Profile Card Reveal ── */
+    .profile-card-reveal {
+      animation: profileCardReveal 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes profileCardReveal {
+      0% {
+        opacity: 0;
+        transform: translateY(30px) scale(0.96);
+        filter: blur(6px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+      }
+    }
+
+    /* ── Staggered item reveal ── */
+    .profile-reveal-item {
+      opacity: 0;
+      transform: translateY(12px);
+      animation: profileItemReveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes profileItemReveal {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Stagger delays applied by JS */
+
+    /* ── Nav entrance ── */
+    @keyframes profileFadeSlideDown {
+      0% {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ── Action buttons entrance ── */
+    @keyframes profileActionsReveal {
+      0% {
+        opacity: 0;
+        transform: translateY(16px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .hidden-card {
+      display: none !important;
+    }
+  </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="profile.js"></script>

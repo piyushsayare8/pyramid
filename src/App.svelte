@@ -4,7 +4,8 @@
 
   // ─── Supabase Client ────────────────────────────────────────────────
   const SUPABASE_URL = "https://conecotzzmloenikxefo.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvbmVjb3R6em1sb2VuaWt4ZWZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2OTg5NzksImV4cCI6MjA5ODI3NDk3OX0.M5llBovp2kS6s83ZOIxETYKoRl6dFcF-96Fkc53XHQM";
+  const SUPABASE_ANON_KEY =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvbmVjb3R6em1sb2VuaWt4ZWZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2OTg5NzksImV4cCI6MjA5ODI3NDk3OX0.M5llBovp2kS6s83ZOIxETYKoRl6dFcF-96Fkc53XHQM";
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // ─── CDN Base URL ───────────────────────────────────────────────────
@@ -13,8 +14,8 @@
   // ─── Constants ───────────────────────────────────────────────────────
   export const TOTAL_PLACES = 100000;
 
-
-  const YT_REGEX = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
+  const YT_REGEX =
+    /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
   const YT_DEFAULT_ID = "jfKfPfyJRdk";
 
   // Memoized YouTube ID extraction — O(1) cache hit
@@ -29,11 +30,11 @@
   }
 
   // Price computation — pure, cacheable
-  function getPriceForPlace(place) {
-    return +(1 + (place - 1) * 0.03).toFixed(2);
+  function getPriceForId(id) {
+    return +(1 + (id - 1) * 0.03).toFixed(2);
   }
 
-  function getPlaceForPrice(price) {
+  function getIdForPrice(price) {
     return Math.round((price - 1) / 0.03) + 1;
   }
 
@@ -66,14 +67,16 @@
     const message = raw.message_on_card || raw.message || "—";
     const youtubeUrl = raw.youtube_url || raw.youtubeUrl || "";
     const instagramUrl = raw.instagram_social_url || raw.instagramUrl || "";
-    const profilePicture = raw.profile_image_upload || raw.profilePicture || "";
-    const likes = raw.total_like_count ?? raw.likes ?? 0;
+    const paymentId = raw.payment_id || id;
+    const profilePicture =
+      raw.profile_image_upload || raw.profile_image || raw.profilePicture || "";
+    const likes = raw._likeCount ?? raw.total_like_count ?? raw.likes ?? 0;
     const ytId = getYoutubeVidId(youtubeUrl);
-    const price = getPriceForPlace(place);
+    const price = getPriceForId(parseInt(id, 10) || 1);
     const encodedName = encodeURIComponent(name);
 
-    // Image fallback chain: profile_image_upload -> CDN /image/{id}.jpg -> ui-avatars
-    const cdnImageFallback = `${CDN_BASE}/image/${id}.jpg`;
+    // Image fallback chain: profile_image_upload -> CDN /profiles/{payment_id}.jpeg -> ui-avatars
+    const cdnImageFallback = `${CDN_BASE}/profiles/${paymentId}.jpeg`;
     const uiAvatarPrimary = `https://ui-avatars.com/api/?name=${encodedName}&background=7c3aed&color=fff&size=200`;
     const uiAvatarFallback = `https://ui-avatars.com/api/?name=${encodedName}&background=333&color=fff&size=200`;
 
@@ -98,7 +101,8 @@
       _placeFormatted: place.toLocaleString("en-IN"),
       _rawMsg: message,
       _isShortMsg: message.length <= 85,
-      _msgPreview: message.length > 85 ? message.slice(0, 85).trim() + "..." : null,
+      _msgPreview:
+        message.length > 85 ? message.slice(0, 85).trim() + "..." : null,
     };
   }
 
@@ -171,12 +175,20 @@
 
   // ─── Svelte 5 Runes State ───────────────────────────────────────────
 
-  // Core data: Map<placeNumber, enrichedItem> for O(1) lookups
-  let itemsMap = $state(new Map());
-  let itemsVersion = $state(0); // bump on any mutation
+  // ─── Cached Index Data (fetched once, polled every 60s) ─────────────
+  let cachedPriceIds = []; // [id, id, ...] from price.json
+  let cachedLikeIds = []; // [id, id, ...] from like.json (sorted by likes)
+  let likesMap = new Map(); // Map<id, likeCount> from like.json
+  let shuffledIds = []; // Fisher-Yates shuffled copy for random tab
+  let indexesLoaded = $state(false);
 
-  // Sort UI state — "newest" = price.json, "top_liked" = like.json
+  // Core data: Map<placeNumber, enrichedItem> — only holds the current window
+  let itemsMap = $state(new Map());
+  let itemsVersion = $state(0);
+
+  // Sort UI state — "newest" = price.json, "top_liked" = like.json, "random" = shuffled
   let currentSort = $state("newest");
+
   // Search UI state — kept for future server integration (no local filtering)
   let searchQuery = $state("");
   let likedSet = $state(new Set());
@@ -190,7 +202,7 @@
 
   let paymentData = $state({
     paymentLink: "https://rzp.io/l/web100k_payment",
-    amount: 99
+    amount: 99,
   });
 
   // Form Signals
@@ -217,55 +229,128 @@
   // Persistence debounce
   let _persistTimer = null;
 
-  // ─── Helper: set items from array ────────────────────────────────────
-  function setItemsFromArray(arr) {
-    // Clear + re-populate in-place to preserve the $state reactive proxy
-    itemsMap.clear();
-    for (let i = 0; i < arr.length; i++) {
-      const item = enrichItem(arr[i]);
-      itemsMap.set(item.place, item);
-    }
-    itemsVersion++;
+  // ─── Sliding Window Constants ──────────────────────────────────────
+  const WINDOW_SIZE = 40; // max user cards fetched at a time
+  const FETCH_AHEAD = 10; // fetch this many beyond visible range
+  const USER_CACHE_MAX = 100; // max entries in userCache before eviction
+  let userCache = new Map(); // Map<id, userData> — LRU-ish cache
+  let _windowFetchTimer = null; // debounce for scroll-driven fetching
+  let _currentFetchAbort = null; // abort previous window fetch
+
+  // ─── Active IDs — derived from current tab ─────────────────────────
+  function getActiveIds() {
+    if (currentSort === "top_liked") return cachedLikeIds;
+    if (currentSort === "random") return shuffledIds;
+    return cachedPriceIds; // "newest"
   }
 
-  // ─── Items list — display in server/insertion order (no local sort) ──
-  let itemsList = $derived.by(() => {
-    void itemsVersion; // track mutations
-    return Array.from(itemsMap.values());
-  });
-
-  // Chunk items into rows
-  let rows = $derived.by(() => {
-    const cols = columns;
-    const data = itemsList;
-    const len = data.length;
-    const result = new Array(Math.ceil(len / cols));
-    for (let i = 0, r = 0; i < len; i += cols, r++) {
-      result[r] = data.slice(i, i + cols);
-    }
-    return result;
+  // Total items count for the current tab (drives virtual scroll height)
+  let totalItemCount = $derived.by(() => {
+    void itemsVersion; // re-derive when data changes
+    return getActiveIds().length;
   });
 
   // ─── Virtual Scroll Engine ──────────────────────────────────────────
   let ROW_HEIGHT = $derived(columns === 1 ? 540 : 480);
   const OVERSCAN = 3;
-  let totalGridHeight = $derived(rows.length * ROW_HEIGHT);
+
+  let measuredHeights = $state({}); // rIdx -> actual pixel height
+
+  let totalRows = $derived(Math.ceil(totalItemCount / columns));
+
+  // Compute a prefix-sum array of row Y positions ONCE when heights change
+  // This makes getRowY O(1) and prevents O(n) loops on every scroll frame
+  let rowYPrefixSum = $derived.by(() => {
+    const arr = new Float64Array(totalRows + 1);
+    let sum = 0;
+    for (let i = 0; i < totalRows; i++) {
+      arr[i] = sum;
+      sum += measuredHeights[i] || ROW_HEIGHT;
+    }
+    arr[totalRows] = sum;
+    return arr;
+  });
+
+  let totalGridHeight = $derived(rowYPrefixSum[totalRows] || 0);
   let relativeScrollTop = $derived(Math.max(0, scrollTop - gridTopOffset));
 
-  let startRowIndex = $derived(
-    Math.max(0, Math.floor(relativeScrollTop / ROW_HEIGHT) - OVERSCAN),
-  );
-  let endRowIndex = $derived(
-    Math.min(
-      rows.length,
-      Math.ceil((relativeScrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN,
-    ),
-  );
-  let visibleRows = $derived(rows.slice(startRowIndex, endRowIndex));
-  let gridOffsetY = $derived(startRowIndex * ROW_HEIGHT);
+  let startRowIndex = $derived.by(() => {
+    let r = 0;
+    while (r < totalRows && rowYPrefixSum[r + 1] < relativeScrollTop) {
+      r++;
+    }
+    return Math.max(0, r - OVERSCAN);
+  });
+
+  let endRowIndex = $derived.by(() => {
+    let r = startRowIndex;
+    const targetY = relativeScrollTop + viewportHeight;
+    while (r < totalRows && rowYPrefixSum[r] < targetY) {
+      r++;
+    }
+    return Math.min(totalRows, r + OVERSCAN);
+  });
+
+  // O(1) lookup
+  function getRowY(rowIndex) {
+    if (rowIndex < 0) return 0;
+    if (rowIndex >= totalRows) return rowYPrefixSum[totalRows];
+    return rowYPrefixSum[rowIndex];
+  }
+
+  // ─── Build visible rows from activeIds + itemsMap ──────────────────
+  let visibleRows = $derived.by(() => {
+    void itemsVersion;
+    const ids = getActiveIds();
+    const cols = columns;
+    const startItem = startRowIndex * cols;
+    const endItem = endRowIndex * cols;
+    const rows = [];
+    for (let i = startItem; i < endItem && i < ids.length; i += cols) {
+      const row = [];
+      for (let c = 0; c < cols && i + c < ids.length; c++) {
+        const globalIdx = i + c;
+        const place = globalIdx + 1;
+        const item = itemsMap.get(place);
+        if (item) {
+          row.push(item);
+        } else {
+          // Skeleton placeholder — not yet fetched
+          const id = ids[globalIdx];
+          row.push({
+            id: id,
+            place: place,
+            name: "Loading...",
+            message: "",
+            likes: likesMap.get(id) ?? 0,
+            profilePicture: "",
+            youtubeUrl: "",
+            instagramUrl: "",
+            _skeleton: true,
+            _ytId: YT_DEFAULT_ID,
+            _thumbUrl: "",
+            _thumbFallback: "",
+            _avatarSrc: "",
+            _avatarFallback1: "",
+            _avatarFallback2: "",
+            _price: getPriceForId(parseInt(id, 10) || 1),
+            _formattedPrice: formatPrice(getPriceForId(parseInt(id, 10) || 1)),
+            _placeFormatted: place.toLocaleString("en-IN"),
+            _rawMsg: "",
+            _isShortMsg: true,
+            _msgPreview: null,
+          });
+        }
+      }
+      if (row.length > 0) rows.push(row);
+    }
+    return rows;
+  });
 
   // ─── Computed gap string (avoid template interpolation) ─────────────
-  let gridGap = $derived(columns === 1 ? "20px" : columns === 2 ? "22px" : "28px");
+  let gridGap = $derived(
+    columns === 1 ? "20px" : columns === 2 ? "22px" : "28px",
+  );
 
   // ─── RAF-batched scroll handler ─────────────────────────────────────
   function handleScroll() {
@@ -274,6 +359,8 @@
     requestAnimationFrame(() => {
       scrollTop = window.scrollY || document.documentElement.scrollTop;
       _scrollRafPending = false;
+      // Trigger windowed fetch for newly visible range
+      loadWindowForScroll();
     });
   }
 
@@ -307,30 +394,50 @@
   function setSortOption(sortBy) {
     if (currentSort === sortBy) return;
     currentSort = sortBy;
-    loadLeaderboard(); // Refetch when sort changes
+    if (sortBy === "random") {
+      // Shuffle from cached price IDs
+      const src = cachedPriceIds.length > 0 ? cachedPriceIds : cachedLikeIds;
+      shuffledIds = [...src];
+      for (let i = shuffledIds.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledIds[i], shuffledIds[j]] = [shuffledIds[j], shuffledIds[i]];
+      }
+    }
+    // Clear current items and re-load window for the new tab
+    // Cancel any in-flight fetches from the previous tab
+    if (_currentFetchAbort) _currentFetchAbort.abort();
+    itemsMap.clear();
+    expandedMessages = new Set(); // reset expansions on tab switch
+    itemsVersion++;
+    loadWindowForScroll();
   }
 
   // ─── Fetch individual user data from CDN ────────────────────────────
-  async function fetchUserData(id) {
+  async function fetchUserData(id, signal) {
     try {
-      const res = await fetch(`${CDN_BASE}/users/${id}.json`);
+      const res = await fetch(`${CDN_BASE}/users/${id}.json`, {
+        cache: "no-cache",
+        signal,
+      });
       if (!res.ok) return null;
       return await res.json();
     } catch (err) {
+      if (err.name === "AbortError") return null; // expected on tab switch
       console.error(`Error fetching user ${id}:`, err);
       return null;
     }
   }
 
-  // ─── Debounced persistence ──────────────────────────────────────────
+  // ─── Debounced persistence (lightweight — only likes + sent likes) ─
   function schedulePersist() {
     clearTimeout(_persistTimer);
     _persistTimer = setTimeout(() => {
       try {
-        const arr = Array.from(itemsMap.values());
-        localStorage.setItem("top15000_data_v1", JSON.stringify(arr));
         localStorage.setItem("top15000_liked", JSON.stringify([...likedSet]));
-        localStorage.setItem("top15000_sent_likes", JSON.stringify([...sentLikesSet]));
+        localStorage.setItem(
+          "top15000_sent_likes",
+          JSON.stringify([...sentLikesSet]),
+        );
       } catch {}
     }, 1000);
   }
@@ -386,9 +493,12 @@
             client_device_id: getDeviceId(),
           })
           .then(({ error }) => {
-            if (error) console.error("Error sending like to Supabase:", error.message);
+            if (error)
+              console.error("Error sending like to Supabase:", error.message);
           })
-          .catch((err) => console.error("Error sending like to Supabase:", err));
+          .catch((err) =>
+            console.error("Error sending like to Supabase:", err),
+          );
       }
     }
 
@@ -397,13 +507,16 @@
   }
 
   // ─── Message expand/collapse ────────────────────────────────────────
-  function toggleMsgExpand(placeNum, expand) {
-    // Mutate in-place — Svelte 5 $state proxy tracks .add/.delete
-    if (expand) {
-      expandedMessages.add(placeNum);
-    } else {
-      expandedMessages.delete(placeNum);
+  function toggleMsgExpand(rowItems, expand) {
+    // Expand/collapse ALL cards in the row so all messages show together
+    for (const item of rowItems) {
+      if (expand) {
+        expandedMessages.add(item.place);
+      } else {
+        expandedMessages.delete(item.place);
+      }
     }
+    expandedMessages = new Set(expandedMessages); // force Svelte 5 reactivity
   }
 
   // ─── Toast ──────────────────────────────────────────────────────────
@@ -500,6 +613,9 @@
     rafId = requestAnimationFrame(tick);
   }
 
+  // Track previous video position state to avoid infinite RAF
+  let _lastVideoState = null;
+
   function playVideo(event, placeNum, vidId) {
     if (event) event.stopPropagation();
     activeVideoPlace = placeNum;
@@ -522,6 +638,7 @@
 
     isOnCard = false;
     if (rafId) cancelAnimationFrame(rafId);
+    _lastVideoState = null;
     rafId = requestAnimationFrame(tick);
   }
 
@@ -550,20 +667,25 @@
   }
 
   // ─── Derived stats ─────────────────────────────────────────────────
-  let soldCount = $derived(itemsMap.size);
+  let displayPrice = $derived(
+    paymentData.amount !== null
+      ? paymentData.amount
+      : getPriceForId((cachedPriceIds.length || itemsMap.size) + 1),
+  );
+  let nextId = $derived(getIdForPrice(displayPrice));
+  
+  let soldCount = $derived(Math.max(0, nextId - 1));
   let remainingCount = $derived(TOTAL_PLACES - soldCount);
   let progressPct = $derived(Math.max((soldCount / TOTAL_PLACES) * 100, 0.2));
 
-  let displayPrice = $derived(paymentData.amount !== null ? paymentData.amount : getPriceForPlace(itemsMap.size + 1));
-  let nextPlace = $derived(getPlaceForPrice(displayPrice));
   let displayPriceFormatted = $derived(formatPrice(displayPrice));
-  let nextAfterPlace = $derived(nextPlace + 1);
-  let nextAfterPrice = $derived(formatPrice(getPriceForPlace(nextAfterPlace)));
-  let isSoldOut = $derived(nextPlace > TOTAL_PLACES);
+  let nextAfterId = $derived(nextId + 1);
+  let nextAfterPrice = $derived(formatPrice(getPriceForId(nextAfterId)));
+  let isSoldOut = $derived(nextId > TOTAL_PLACES);
 
   // Pre-formatted values for buy section (avoid repeated toLocaleString)
-  let nextPlaceFormatted = $derived(nextPlace.toLocaleString("en-IN"));
-  let nextAfterPlaceFormatted = $derived(nextAfterPlace.toLocaleString("en-IN"));
+  let nextPlaceFormatted = $derived(nextId.toLocaleString("en-IN"));
+  let nextAfterPlaceFormatted = $derived(nextAfterId.toLocaleString("en-IN"));
 
   // ─── Buy form submit ───────────────────────────────────────────────
   function handleBuySubmit(e) {
@@ -573,21 +695,31 @@
       window.location.href = paymentData.paymentLink;
       return;
     }
-    
-    showToast("Payment link is not available right now. Please try again later.");
+
+    showToast(
+      "Payment link is not available right now. Please try again later.",
+    );
   }
 
   // ─── Lifecycle ─────────────────────────────────────────────────────
   let pollInterval;
-  let leaderboardPollInterval;
+  let indexPollInterval;
 
   async function loadPaymentData() {
     try {
-      const response = await fetch("https://data.creatorspyramid.com/active-link.json");
+      const response = await fetch(
+        "https://data.creatorspyramid.com/active-link.json",
+        { cache: "no-cache" },
+      );
       if (response.ok) {
         const data = await response.json();
         const link = data.paymentLink || data.payment_link || "";
-        const amt = data.amount !== undefined ? data.amount : (data.price !== undefined ? data.price : null);
+        const amt =
+          data.amount !== undefined
+            ? data.amount
+            : data.price !== undefined
+              ? data.price
+              : null;
         if (paymentData.paymentLink !== link || paymentData.amount !== amt) {
           paymentData.paymentLink = link;
           paymentData.amount = amt;
@@ -598,59 +730,169 @@
     }
   }
 
-  async function loadLeaderboard() {
+  // ─── Fetch & Cache Both Indexes ────────────────────────────────────
+  async function fetchIndexes() {
     try {
-      // Phase 1: Fetch the ID index from CDN
-      const indexFile = currentSort === "top_liked" ? "like.json" : "price.json";
-      const indexUrl = `${CDN_BASE}/${indexFile}`;
-      const response = await fetch(indexUrl);
-      if (!response.ok) {
-        console.error(`Failed to fetch ${indexFile}: ${response.status}`);
-        return;
-      }
-      const ids = await response.json(); // e.g. [6, 5, 3, 1]
+      const [priceRes, likeRes] = await Promise.all([
+        fetch(`${CDN_BASE}/price.json`, { cache: "no-cache" }),
+        fetch(`${CDN_BASE}/like.json`, { cache: "no-cache" }),
+      ]);
 
-      // Phase 2: Fetch each user's data in parallel
-      const userPromises = ids.map((id) => fetchUserData(id));
-      const users = await Promise.all(userPromises);
-
-      // Build the items array preserving the order from the index
-      const arr = [];
-      for (let i = 0; i < ids.length; i++) {
-        const userData = users[i];
-        if (!userData) continue; // Skip failed fetches
-
-        const id = userData.id ?? ids[i];
-        const place = i + 1; // Position in the sorted list
-        arr.push({
-          ...userData,
-          id,
-          place,
-        });
+      if (priceRes.ok) {
+        cachedPriceIds = await priceRes.json(); // [id, id, ...]
       }
 
-      setItemsFromArray(arr);
+      if (likeRes.ok) {
+        const likeData = await likeRes.json(); // { ids: [...], likes: [...] }
+        const idsArr = likeData.ids || [];
+        const likesArr = likeData.likes || [];
+        cachedLikeIds = idsArr;
+        for (let i = 0; i < idsArr.length; i++) {
+          likesMap.set(idsArr[i], likesArr[i] || 0);
+        }
+      }
+
+      indexesLoaded = true;
+
+      // Update items that are already loaded with fresh like counts
+      for (const [place, item] of itemsMap) {
+        const freshLikes = likesMap.get(item.id) ?? item.likes;
+        if (freshLikes !== item.likes) {
+          itemsMap.set(place, { ...item, likes: freshLikes });
+        }
+      }
+      itemsVersion++;
+
+      // Trigger initial window load
+      loadWindowForScroll();
     } catch (err) {
-      console.error("Error loading leaderboard:", err);
+      console.error("Error fetching indexes:", err);
+    }
+  }
+
+  // ─── Sliding Window: fetch user cards for the visible range ────────
+  function loadWindowForScroll() {
+    clearTimeout(_windowFetchTimer);
+    _windowFetchTimer = setTimeout(() => _loadWindow(), 80);
+  }
+
+  async function _loadWindow() {
+    const ids = getActiveIds();
+    if (ids.length === 0) return;
+
+    const cols = columns;
+    const startItem = Math.max(0, startRowIndex * cols - FETCH_AHEAD);
+    const endItem = Math.min(ids.length, endRowIndex * cols + FETCH_AHEAD);
+
+    // Collect IDs that need fetching (not in itemsMap for their place)
+    const toFetch = [];
+    for (let i = startItem; i < endItem; i++) {
+      const place = i + 1;
+      if (!itemsMap.has(place)) {
+        const id = ids[i];
+        if (userCache.has(id)) {
+          // Serve from cache instantly
+          const cached = userCache.get(id);
+          const enriched = enrichItem({
+            ...cached,
+            id: cached.id ?? id,
+            place,
+            _likeCount: likesMap.get(cached.id ?? id) ?? 0,
+          });
+          itemsMap.set(place, enriched);
+        } else {
+          toFetch.push({ idx: i, id: ids[i], place: i + 1 });
+        }
+      }
+    }
+
+    // If all served from cache, just bump version
+    if (toFetch.length === 0) {
+      evictOutOfWindow(startItem, endItem);
+      itemsVersion++;
+      return;
+    }
+
+    // Abort any previous in-flight fetch batch
+    if (_currentFetchAbort) _currentFetchAbort.abort();
+    const controller = new AbortController();
+    _currentFetchAbort = controller;
+
+    // Batch fetch missing user cards in parallel
+    const results = await Promise.all(
+      toFetch.map((entry) => fetchUserData(entry.id, controller.signal)),
+    );
+
+    // If this batch was aborted (tab switched), bail out
+    if (controller.signal.aborted) return;
+
+    for (let i = 0; i < toFetch.length; i++) {
+      const userData = results[i];
+      if (!userData) continue;
+
+      const entry = toFetch[i];
+      const id = userData.id ?? entry.id;
+
+      // Store in userCache
+      userCache.set(id, userData);
+
+      // Enrich and put in itemsMap
+      const enriched = enrichItem({
+        ...userData,
+        id,
+        place: entry.place,
+        _likeCount: likesMap.get(id) ?? 0,
+      });
+      itemsMap.set(entry.place, enriched);
+    }
+
+    // Evict items far outside the window to keep memory flat
+    evictOutOfWindow(startItem, endItem);
+
+    // Evict userCache if it's too large
+    if (userCache.size > USER_CACHE_MAX) {
+      const keys = Array.from(userCache.keys());
+      const toRemove = keys.length - USER_CACHE_MAX;
+      for (let i = 0; i < toRemove; i++) {
+        userCache.delete(keys[i]);
+      }
+    }
+
+    itemsVersion++;
+  }
+
+  // Evict items from itemsMap that are far outside the visible window
+  function evictOutOfWindow(startItem, endItem) {
+    const buffer = WINDOW_SIZE; // keep a buffer around the window
+    const keepStart = Math.max(1, startItem + 1 - buffer);
+    const keepEnd = endItem + buffer;
+    for (const [place] of itemsMap) {
+      if (place < keepStart || place > keepEnd) {
+        itemsMap.delete(place);
+      }
     }
   }
 
   onMount(() => {
     loadPaymentData();
-    loadLeaderboard();
-    pollInterval = setInterval(loadPaymentData, 3000);
-    leaderboardPollInterval = setInterval(loadLeaderboard, 60000);
+    fetchIndexes(); // Fetch both price.json + like.json on mount
+    pollInterval = setInterval(loadPaymentData, 30000);
+    indexPollInterval = setInterval(fetchIndexes, 60000);
 
     // Restore liked set — populate in-place to preserve $state proxy
     try {
-      const savedLiked = JSON.parse(localStorage.getItem("top15000_liked") || "[]");
+      const savedLiked = JSON.parse(
+        localStorage.getItem("top15000_liked") || "[]",
+      );
       likedSet.clear();
       for (const id of savedLiked) likedSet.add(id);
     } catch {}
 
     // Restore sent likes set (permanent record of Supabase-sent likes)
     try {
-      const savedSent = JSON.parse(localStorage.getItem("top15000_sent_likes") || "[]");
+      const savedSent = JSON.parse(
+        localStorage.getItem("top15000_sent_likes") || "[]",
+      );
       sentLikesSet.clear();
       for (const id of savedSent) sentLikesSet.add(id);
     } catch {}
@@ -663,12 +905,21 @@
     // Ambient background
     const bgEl = document.getElementById("user-ambient-bg");
     if (bgEl) {
-      const colors = ["#7c3aed", "#e91e8c", "#0d9488", "#f59e0b", "#2563eb", "#dc2626", "#16a34a", "#9333ea"];
+      const colors = [
+        "#7c3aed",
+        "#e91e8c",
+        "#0d9488",
+        "#f59e0b",
+        "#2563eb",
+        "#dc2626",
+        "#16a34a",
+        "#9333ea",
+      ];
       const randomColor = colors[Math.floor(Math.random() * colors.length)];
       bgEl.style.background = `radial-gradient(circle at 50% 50%, #ffffff 0%, ${randomColor} 70%)`;
     }
 
-    // Ambient background
+    // Viewport setup
     viewportHeight = window.innerHeight;
     const w = window.innerWidth;
     if (w <= 640) columns = 1;
@@ -680,29 +931,35 @@
     requestAnimationFrame(() => {
       if (gridRef) gridTopOffset = gridRef.offsetTop;
     });
+  });
 
-    // Animate remaining places counter smoothly
-    const diff = remainingCount - displayRemaining;
+  // Animate remaining places counter smoothly whenever remainingCount updates
+  $effect(() => {
+    const target = remainingCount;
+    const diff = target - displayRemaining;
     if (diff !== 0) {
       const start = displayRemaining;
       const duration = 800;
       const startTime = performance.now();
+      let _animRafId;
       function step(now) {
         const p = Math.min((now - startTime) / duration, 1);
         const eased = 1 - Math.pow(1 - p, 3);
         displayRemaining = Math.round(start + diff * eased);
-        if (p < 1) requestAnimationFrame(step);
+        if (p < 1) _animRafId = requestAnimationFrame(step);
       }
-      requestAnimationFrame(step);
+      _animRafId = requestAnimationFrame(step);
+      return () => cancelAnimationFrame(_animRafId);
     }
   });
 
   onDestroy(() => {
     if (rafId) cancelAnimationFrame(rafId);
     clearTimeout(_persistTimer);
+    clearTimeout(_windowFetchTimer);
     if (_videoObserver) _videoObserver.disconnect();
     clearInterval(pollInterval);
-    clearInterval(leaderboardPollInterval);
+    clearInterval(indexPollInterval);
   });
 </script>
 
@@ -773,9 +1030,7 @@
         <div class="buy-card-glow"></div>
         <div class="buy-place-badge">
           <span class="buy-place-number">
-            Place #<span id="current-place-number"
-              >{nextPlaceFormatted}</span
-            >
+            Place #<span id="current-place-number">{nextPlaceFormatted}</span>
           </span>
           <span class="buy-exclusive-tag">⚡ Available Now</span>
         </div>
@@ -787,8 +1042,7 @@
         </div>
         <p class="buy-description">
           Secure <strong
-            >Place #<span id="buy-place-desc"
-              >{nextPlaceFormatted}</span
+            >Place #<span id="buy-place-desc">{nextPlaceFormatted}</span
             ></strong
           >
           forever on web100k.com.<br />
@@ -817,9 +1071,7 @@
           {:else}
             <span class="buy-btn-icon">⚡</span>
             <span>
-              Claim Place #<span id="buy-btn-place"
-                >{nextPlaceFormatted}</span
-              >
+              Claim Place #<span id="buy-btn-place">{nextPlaceFormatted}</span>
               for ₹<span id="buy-btn-price">{displayPriceFormatted}</span>
             </span>
             <span class="buy-btn-arrow">→</span>
@@ -860,6 +1112,12 @@
           >
             🔥 Top Liked
           </button>
+          <button
+            class="lb-sort-btn {currentSort === 'random' ? 'active' : ''}"
+            onclick={() => setSortOption("random")}
+          >
+            🎲 Random
+          </button>
         </div>
         <div class="lb-search-wrap">
           <span class="lb-search-icon">🔍</span>
@@ -888,7 +1146,7 @@
     </div>
 
     <!-- High-Performance Virtual Grid -->
-    {#if itemsList.length === 0}
+    {#if totalItemCount === 0}
       <div class="lb-empty" id="lb-empty" style="display: block;">
         <div class="lb-empty-icon">🔍</div>
         <div class="lb-empty-text">No results found</div>
@@ -900,167 +1158,231 @@
         style="position: relative; width: 100%; height: {totalGridHeight}px; display: block; margin: 0 auto;"
       >
         {#each visibleRows as rowItems, rowIndex (startRowIndex + rowIndex)}
+          {@const rIdx = startRowIndex + rowIndex}
           <div
-            style="position: absolute; top: 0; left: 0; width: 100%; transform: translateY({gridOffsetY + rowIndex * ROW_HEIGHT}px); display: grid; grid-template-columns: repeat({columns}, minmax(0, 1fr)); gap: {gridGap}; padding-bottom: 28px;"
+            bind:clientHeight={measuredHeights[rIdx]}
+            style="position: absolute; top: 0; left: 0; width: 100%; transform: translateY({getRowY(
+              rIdx,
+            )}px); transition: transform 0.4s ease; display: grid; grid-template-columns: repeat({columns}, minmax(0, 1fr)); align-items: start; gap: {gridGap}; padding-bottom: 28px;"
           >
-            {#each rowItems as item (item.id)}
+            {#each rowItems as item (item.place)}
               {@const place = item.place}
               {@const liked = likedSet.has(item.id || place)}
               {@const isExpanded = expandedMessages.has(place)}
 
-              <div
-                class="lb-card {liked ? 'liked-card liked-row' : ''}"
-                id="row-{place}"
-                onclick={() =>
-                  (window.location.href = `profile.html?id=${item.id}&place=${place}`)}
-                role="button"
-                tabindex="0"
-                onkeydown={(e) =>
-                  e.key === "Enter" &&
-                  (window.location.href = `profile.html?id=${item.id}&place=${place}`)}
-              >
-                <div class="lb-card-video-wrap" id="video-wrap-{place}">
-                  <div
-                    class="lb-card-video"
-                    id="card-video-{place}"
-                    onclick={(e) => playVideo(e, place, item._ytId)}
-                    onkeydown={(e) =>
-                      e.key === "Enter" && playVideo(e, place, item._ytId)}
-                    role="button"
-                    tabindex="0"
-                    title="Click to play YouTube Video"
-                  >
-                    <img
-                      src={item._thumbUrl}
-                      alt="YouTube Thumbnail"
-                      loading="lazy"
-                      width="480"
-                      height="360"
-                      onerror={(e) => {
-                        e.currentTarget.src = item._thumbFallback;
-                      }}
-                    />
+              {#if item._skeleton}
+                <div class="lb-card lb-card-skeleton" id="row-{place}">
+                  <div class="lb-card-video-wrap">
+                    <div
+                      class="lb-card-video skeleton-shimmer"
+                      style="background: var(--skeleton-bg, #e2e8f0); border-radius: 23.5px 23.5px 0 0; height: 200px;"
+                    ></div>
+                  </div>
+                  <div class="lb-card-content" style="padding: 16px;">
+                    <div class="lb-card-user">
+                      <div
+                        class="lb-card-avatar skeleton-shimmer"
+                        style="background: var(--skeleton-bg, #e2e8f0); width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;"
+                      ></div>
+                      <div class="lb-card-user-info" style="flex: 1;">
+                        <div
+                          class="skeleton-shimmer"
+                          style="background: var(--skeleton-bg, #e2e8f0); height: 18px; width: 70%; border-radius: 8px; margin-bottom: 8px;"
+                        ></div>
+                        <div
+                          class="skeleton-shimmer"
+                          style="background: var(--skeleton-bg, #e2e8f0); height: 14px; width: 40%; border-radius: 8px;"
+                        ></div>
+                      </div>
+                    </div>
+                    <div class="lb-card-message" style="margin-top: 12px;">
+                      <div
+                        class="skeleton-shimmer"
+                        style="background: var(--skeleton-bg, #e2e8f0); height: 14px; width: 90%; border-radius: 8px; margin-bottom: 6px;"
+                      ></div>
+                      <div
+                        class="skeleton-shimmer"
+                        style="background: var(--skeleton-bg, #e2e8f0); height: 14px; width: 60%; border-radius: 8px;"
+                      ></div>
+                    </div>
+                    <div
+                      class="lb-card-foot"
+                      style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;"
+                    >
+                      <div
+                        class="skeleton-shimmer"
+                        style="background: var(--skeleton-bg, #e2e8f0); height: 32px; width: 60px; border-radius: 12px;"
+                      ></div>
+                      <span class="lb-card-price-chip"
+                        >₹{item._formattedPrice}</span
+                      >
+                    </div>
                   </div>
                 </div>
-
-                <div class="lb-card-content">
-                  <div class="lb-card-user">
-                    <img
-                      class="lb-card-avatar"
-                      src={item._avatarSrc}
-                      alt={item.name}
-                      loading="lazy"
-                      width="200"
-                      height="200"
-                      onerror={(e) => {
-                        const lvl = parseInt(e.currentTarget.dataset.fallback || "0");
-                        if (lvl === 0) {
-                          e.currentTarget.dataset.fallback = "1";
-                          e.currentTarget.src = item._avatarFallback1;
-                        } else {
-                          e.currentTarget.dataset.fallback = "2";
-                          e.currentTarget.src = item._avatarFallback2;
-                        }
-                      }}
-                    />
-                    <div class="lb-card-user-info">
-                      <div class="lb-card-user-top">
-                        <div class="lb-card-name">
-                          {item.name}
-                        </div>
-                        <span class="lb-card-place-pill">#{place}</span>
-                      </div>
-                      <div class="lb-card-social-links">
-                        {#if item.youtubeUrl}
-                          <a
-                            href={item.youtubeUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="lb-social-icon lb-social-yt"
-                            onclick={(e) => e.stopPropagation()}
-                            title="YouTube"
-                          >
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                          </a>
-                        {/if}
-                        {#if item.instagramUrl}
-                          <a
-                            href={item.instagramUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="lb-social-icon lb-social-ig"
-                            onclick={(e) => e.stopPropagation()}
-                            title="Instagram"
-                          >
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
-                          </a>
-                        {/if}
-                      </div>
-                      <a
-                        href="profile.html?id={item.id}&place={place}"
-                        class="lb-card-visit"
-                        onclick={(e) => e.stopPropagation()}
-                      >
-                        Visit Profile ↗
-                      </a>
+              {:else}
+                <div
+                  class="lb-card {liked ? 'liked-card liked-row' : ''}"
+                  id="row-{place}"
+                  onclick={() =>
+                    (window.location.href = `profile.html?id=${item.id}&place=${place}`)}
+                  role="button"
+                  tabindex="0"
+                  onkeydown={(e) =>
+                    e.key === "Enter" &&
+                    (window.location.href = `profile.html?id=${item.id}&place=${place}`)}
+                >
+                  <div class="lb-card-video-wrap" id="video-wrap-{place}">
+                    <div
+                      class="lb-card-video"
+                      id="card-video-{place}"
+                      onclick={(e) => playVideo(e, place, item._ytId)}
+                      onkeydown={(e) =>
+                        e.key === "Enter" && playVideo(e, place, item._ytId)}
+                      role="button"
+                      tabindex="0"
+                      title="Click to play YouTube Video"
+                    >
+                      <img
+                        src={item._thumbUrl}
+                        alt="YouTube Thumbnail"
+                        loading="lazy"
+                        width="480"
+                        height="360"
+                        onerror={(e) => {
+                          e.currentTarget.src = item._thumbFallback;
+                        }}
+                      />
                     </div>
                   </div>
 
-                  <div class="lb-card-message">
-                    {#if item._isShortMsg}
-                      "{item._rawMsg}"
-                    {:else if !isExpanded}
-                      <span class="msg-short" id="msg-short-{place}">
-                        "{item._msgPreview}{" "}
-                        <button
-                          class="lb-msg-more"
-                          onclick={(e) => {
-                            e.stopPropagation();
-                            toggleMsgExpand(place, true);
-                          }}
-                        >
-                          more
-                        </button>
-                        "
-                      </span>
-                    {:else}
-                      <span class="msg-full" id="msg-full-{place}">
-                        "{item._rawMsg}{" "}
-                        <button
-                          class="lb-msg-less"
-                          onclick={(e) => {
-                            e.stopPropagation();
-                            toggleMsgExpand(place, false);
-                          }}
-                        >
-                          less
-                        </button>
-                        "
-                      </span>
-                    {/if}
-                  </div>
+                  <div class="lb-card-content">
+                    <div class="lb-card-user">
+                      <img
+                        class="lb-card-avatar"
+                        src={item._avatarSrc}
+                        alt={item.name}
+                        loading="lazy"
+                        width="200"
+                        height="200"
+                        onerror={(e) => {
+                          const lvl = parseInt(
+                            e.currentTarget.dataset.fallback || "0",
+                          );
+                          if (lvl === 0) {
+                            e.currentTarget.dataset.fallback = "1";
+                            e.currentTarget.src = item._avatarFallback1;
+                          } else {
+                            e.currentTarget.dataset.fallback = "2";
+                            e.currentTarget.src = item._avatarFallback2;
+                          }
+                        }}
+                      />
+                      <div class="lb-card-user-info">
+                        <div class="lb-card-user-top">
+                          <div class="lb-card-name">
+                            {item.name}
+                          </div>
+                          <span class="lb-card-place-pill">#{place}</span>
+                        </div>
+                        <div class="lb-card-social-links">
+                          {#if item.youtubeUrl}
+                            <a
+                              href={item.youtubeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="lb-social-icon lb-social-yt"
+                              onclick={(e) => e.stopPropagation()}
+                              title="YouTube"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                width="16"
+                                height="16"
+                                fill="currentColor"
+                                ><path
+                                  d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
+                                /></svg
+                              >
+                            </a>
+                          {/if}
+                          {#if item.instagramUrl}
+                            <a
+                              href={item.instagramUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="lb-social-icon lb-social-ig"
+                              onclick={(e) => e.stopPropagation()}
+                              title="Instagram"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                width="16"
+                                height="16"
+                                fill="currentColor"
+                                ><path
+                                  d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"
+                                /></svg
+                              >
+                            </a>
+                          {/if}
+                        </div>
+                      </div>
+                    </div>
 
-                  <div class="lb-card-foot">
-                    <button
-                      class="lb-card-like-btn {liked ? 'liked' : ''}"
-                      id="like-btn-{place}"
-                      onclick={(e) => {
-                        e.stopPropagation();
-                        toggleLikeItem(place, e.currentTarget);
-                      }}
-                      aria-label="Like {item.name}"
-                    >
-                      <span class="like-heart">{liked ? "❤️" : "🤍"}</span>
-                      <span class="lb-like-count" id="like-count-{place}">
-                        {formatLikes(item.likes || 0)}
+                    <div class="lb-card-message">
+                      {#if item._isShortMsg && !isExpanded}
+                        <div
+                          class="lb-card-message-text"
+                          style="display: block; -webkit-line-clamp: unset; max-height: none;"
+                        >
+                          "{item._rawMsg}"
+                        </div>
+                      {:else if item._isShortMsg && isExpanded}
+                        <div class="lb-card-message-text expanded">
+                          "{item._rawMsg}"
+                        </div>
+                      {:else}
+                        <div
+                          class="lb-card-message-text {isExpanded
+                            ? 'expanded'
+                            : ''}"
+                        >
+                          "{item._rawMsg}"
+                        </div>
+                        <button
+                          class="lb-message-more-btn"
+                          onclick={(e) => {
+                            e.stopPropagation();
+                            toggleMsgExpand(rowItems, !isExpanded);
+                          }}
+                        >
+                          {isExpanded ? "less" : "more"}
+                        </button>
+                      {/if}
+                    </div>
+
+                    <div class="lb-card-foot">
+                      <button
+                        class="lb-card-like-btn {liked ? 'liked' : ''}"
+                        id="like-btn-{place}"
+                        onclick={(e) => {
+                          e.stopPropagation();
+                          toggleLikeItem(place, e.currentTarget);
+                        }}
+                        aria-label="Like {item.name}"
+                      >
+                        <span class="like-heart">{liked ? "❤️" : "🤍"}</span>
+                        <span class="lb-like-count" id="like-count-{place}">
+                          {formatLikes(item.likes || 0)}
+                        </span>
+                      </button>
+                      <span class="lb-card-price-chip">
+                        ₹{item._formattedPrice}
                       </span>
-                    </button>
-                    <span class="lb-card-price-chip">
-                      ₹{item._formattedPrice}
-                    </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              {/if}
             {/each}
           </div>
         {/each}
@@ -1080,31 +1402,31 @@
   </footer>
 </div>
 
-  <!-- GLOBAL MINI PLAYER MUST BE OUTSIDE OF ANY TRANSFORMED CONTAINERS -->
-  <!-- GLOBAL MINI PLAYER -->
-  <div
-    id="lb-global-mini-player"
-    class=""
-    style="opacity: 0; pointer-events: none;"
-  >
-    <div class="lbmp-bar">
-      <span class="lbmp-title" id="lbmp-title">▶ Playing Video</span>
-      <div class="lbmp-bar-actions">
-        <button
-          class="lbmp-expand-btn"
-          id="lbmp-expand-btn"
-          onclick={scrollToActiveCard}
-          title="Go to video">⤢</button
-        >
-        <button
-          class="lbmp-close-btn"
-          id="lbmp-close-btn"
-          onclick={closePlayer}
-          title="Close player">✕</button
-        >
-      </div>
+<!-- GLOBAL MINI PLAYER MUST BE OUTSIDE OF ANY TRANSFORMED CONTAINERS -->
+<!-- GLOBAL MINI PLAYER -->
+<div
+  id="lb-global-mini-player"
+  class=""
+  style="opacity: 0; pointer-events: none;"
+>
+  <div class="lbmp-bar">
+    <span class="lbmp-title" id="lbmp-title">▶ Playing Video</span>
+    <div class="lbmp-bar-actions">
+      <button
+        class="lbmp-expand-btn"
+        id="lbmp-expand-btn"
+        onclick={scrollToActiveCard}
+        title="Go to video">⤢</button
+      >
+      <button
+        class="lbmp-close-btn"
+        id="lbmp-close-btn"
+        onclick={closePlayer}
+        title="Close player">✕</button
+      >
     </div>
-    <div class="lbmp-screen" id="lbmp-screen"></div>
   </div>
+  <div class="lbmp-screen" id="lbmp-screen"></div>
+</div>
 
-  <!-- BUY MODAL IS NOW BYPASSED, REDIRECT HAPPENS DIRECTLY -->
+<!-- BUY MODAL IS NOW BYPASSED, REDIRECT HAPPENS DIRECTLY -->
