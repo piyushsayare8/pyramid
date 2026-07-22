@@ -19,6 +19,11 @@ function formatPrice(num) {
   return Number.isInteger(num) ? num.toString() : num.toFixed(2);
 }
 
+function formatLikes(n) {
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  return String(n || 0);
+}
+
 // ── Device fingerprint for like tracking ──────────────────
 function getOrCreateDeviceId() {
   let deviceId = localStorage.getItem('device_fingerprint');
@@ -39,6 +44,19 @@ function getLikedSet() {
 function saveLikedSet(set) {
   try {
     localStorage.setItem('top15000_liked', JSON.stringify([...set]));
+  } catch { }
+}
+
+// ── Optimistic Max Likes ───────────────────────────────
+function getLocalMaxLikes() {
+  try {
+    return JSON.parse(localStorage.getItem('top15000_max_likes') || '{}');
+  } catch { return {}; }
+}
+
+function saveLocalMaxLikes(map) {
+  try {
+    localStorage.setItem('top15000_max_likes', JSON.stringify(map));
   } catch { }
 }
 
@@ -90,19 +108,61 @@ async function initProfile() {
 
   if (userId) {
     try {
-      // Fetch user data and like.json in parallel
-      const [userRes, likeRes] = await Promise.all([
-        fetch(`${CDN_BASE}/users/${userId}.json`, { cache: "no-cache" }),
-        fetch(`${CDN_BASE}/like.json`, { cache: "no-cache" })
-      ]);
-
+      // ── Step 1: Try to get like count from localStorage (cached by main page SWR) ──
       let likeCount = 0;
-      if (likeRes.ok) {
-        const likeData = await likeRes.json();
-        const idsArr = likeData.ids || [];
-        const likesArr = likeData.likes || [];
-        const idx = idsArr.indexOf(Number(userId));
-        if (idx !== -1) likeCount = likesArr[idx] || 0;
+      let needsLikeFetch = true;
+
+      try {
+        const cached = JSON.parse(localStorage.getItem('master_data') || 'null');
+        if (cached && cached.ids && cached.likes) {
+          const idx = cached.ids.indexOf(Number(userId));
+          if (idx !== -1) {
+            likeCount = cached.likes[idx] || 0;
+            needsLikeFetch = false; // We have fresh-enough data, skip the heavy fetch
+          }
+        }
+      } catch {}
+
+      // Apply optimistic max likes on top of cached data
+      const maxMap = getLocalMaxLikes();
+      if (maxMap[userId] && maxMap[userId] > likeCount) {
+        likeCount = maxMap[userId];
+      }
+
+      // ── Step 2: Fetch user.json (tiny ~200 bytes) — always needed ──
+      // If we don't have cached likes, also fetch like.json in parallel (direct link open)
+      let userRes;
+      if (needsLikeFetch) {
+        // No cached master_data — user opened profile directly, need both
+        const [uRes, likeRes] = await Promise.all([
+          fetch(`${CDN_BASE}/users/${userId}.json`, { cache: "no-cache" }),
+          fetch(`${CDN_BASE}/like.json`, { cache: "no-cache" })
+        ]);
+        userRes = uRes;
+
+        if (likeRes.ok) {
+          const likeData = await likeRes.json();
+          const idsArr = likeData.ids || [];
+          const likesArr = likeData.likes || [];
+          const idx = idsArr.indexOf(Number(userId));
+          if (idx !== -1) {
+            const serverLikes = likesArr[idx] || 0;
+            if (maxMap[userId] && maxMap[userId] > serverLikes) {
+              likeCount = maxMap[userId];
+            } else {
+              likeCount = serverLikes;
+              maxMap[userId] = serverLikes;
+              saveLocalMaxLikes(maxMap);
+            }
+          }
+          // Cache this for future use (same format as main page)
+          try {
+            localStorage.setItem('master_data', JSON.stringify(likeData));
+          } catch {}
+        }
+      } else {
+        // We already have cached likes — only fetch the tiny user JSON
+        userRes = await fetch(`${CDN_BASE}/users/${userId}.json`, { cache: "no-cache" });
       }
 
       if (userRes.ok) {
@@ -121,6 +181,7 @@ async function initProfile() {
           color: color
         };
       }
+
     } catch (e) {
       console.error('Error fetching user data:', e);
     }
@@ -166,13 +227,29 @@ function renderUserProfile() {
 
   const avatarSrc = currentUser.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=6366f1&color=fff&size=200`;
   const bgEl = document.getElementById('user-ambient-bg');
-  if (bgEl) bgEl.style.backgroundImage = `url('${avatarSrc}')`;
+  if (bgEl) {
+    const colors = [
+      "#7c3aed",
+      "#e91e8c",
+      "#0d9488",
+      "#f59e0b",
+      "#2563eb",
+      "#dc2626",
+      "#16a34a",
+      "#9333ea",
+    ];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    bgEl.style.backgroundImage = 'none';
+    bgEl.style.background = `radial-gradient(circle at 50% 50%, #ffffff 0%, ${randomColor} 70%)`;
+  }
 
   const placeBadgeEl = document.getElementById('place-pill');
   if (placeBadgeEl) placeBadgeEl.textContent = `#${p}`;
 
   const avatarEl = document.getElementById('profile-avatar');
-  if (avatarEl) avatarEl.src = avatarSrc;
+  if (avatarEl) {
+    avatarEl.src = avatarSrc;
+  }
 
   const nameEl = document.getElementById('profile-name');
   if (nameEl) nameEl.textContent = currentUser.name || `Citizen #${p}`;
@@ -243,7 +320,7 @@ function renderUserProfile() {
   if (actionsEl) {
     actionsEl.style.opacity = '1';
     actionsEl.style.pointerEvents = 'auto';
-    actionsEl.style.animation = 'profileActionsReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards';
+    actionsEl.style.animation = 'profileActionsReveal 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards';
   }
 }
 
@@ -275,6 +352,12 @@ function likeProfile() {
     currentUser.likes = Math.max(0, (currentUser.likes || 0) - 1);
     likedSet.delete(id);
     saveLikedSet(likedSet);
+    
+    // Update local max so it doesn't stubbornly hold onto the +1 if we unliked
+    const maxMap = getLocalMaxLikes();
+    maxMap[id] = currentUser.likes;
+    saveLocalMaxLikes(maxMap);
+
     updateLikesUI();
     return;
   }
@@ -283,6 +366,11 @@ function likeProfile() {
   currentUser.likes = (currentUser.likes || 0) + 1;
   likedSet.add(id);
   saveLikedSet(likedSet);
+
+  // Store new optimistic high-water mark
+  const maxMap = getLocalMaxLikes();
+  maxMap[id] = currentUser.likes;
+  saveLocalMaxLikes(maxMap);
 
   updateLikesUI();
 
@@ -377,66 +465,7 @@ function playCardVideo() {
   container.innerHTML = `<iframe src="https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;display:block;"></iframe>`;
 }
 
-// ── Snapshot / Printing Feature ────────────
-function printCard() {
-  const card = document.getElementById('profile-card');
-  if (!card) return;
 
-  const btn = document.querySelector('.print-btn');
-  const originalText = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = `<span>⏳ Saving...</span>`;
-
-  showToast('📸 Capturing your beautiful digital card...');
-
-  // If video is currently playing, temporarily restore the thumbnail image for a clean canvas capture
-  const container = document.getElementById('card-video-profile');
-  const iframe = container ? container.querySelector('iframe') : null;
-  let restoredThumbnail = false;
-
-  if (iframe) {
-    const ytId = getYoutubeVidId(currentUser.youtubeUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk') || 'jfKfPfyJRdk';
-    const thumbUrl = `https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`;
-    container.innerHTML = `<img id="profile-video-thumb" src="${thumbUrl}" alt="YouTube Thumbnail">`;
-    restoredThumbnail = true;
-  }
-
-  // Small delay to allow DOM to settle
-  setTimeout(() => {
-    html2canvas(card, {
-      scale: 3, // 3x scale for crystal-clear snapshot resolution
-      useCORS: true,
-      backgroundColor: null,
-      logging: false,
-      allowTaint: true
-    }).then(canvas => {
-      const link = document.createElement('a');
-      link.download = `web100k_Place_${currentUser.place}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-
-      btn.disabled = false;
-      btn.innerHTML = originalText;
-      showToast('✨ Card snapshot downloaded successfully!');
-
-      // Restore iframe if it was playing
-      if (restoredThumbnail && container) {
-        const ytId = getYoutubeVidId(currentUser.youtubeUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk') || 'jfKfPfyJRdk';
-        container.innerHTML = `<iframe src="https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;display:block;"></iframe>`;
-      }
-    }).catch(err => {
-      console.error('Error generating card snapshot:', err);
-      btn.disabled = false;
-      btn.innerHTML = originalText;
-      showToast('❌ Error saving card. Please try again!');
-
-      if (restoredThumbnail && container) {
-        const ytId = getYoutubeVidId(currentUser.youtubeUrl || 'https://www.youtube.com/watch?v=jfKfPfyJRdk') || 'jfKfPfyJRdk';
-        container.innerHTML = `<iframe src="https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;display:block;"></iframe>`;
-      }
-    });
-  }, 300);
-}
 
 // ── Heart Confetti Effect (pooled — no DOM leaks) ────────
 const HEART_POOL_SIZE = 20;

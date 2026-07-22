@@ -118,7 +118,7 @@
       flex-direction: column;
       gap: 22px;
       align-items: center;
-      animation: slickCardEntrance 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      animation: slickCardEntrance 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       will-change: transform, opacity;
       box-sizing: border-box;
       z-index: 5;
@@ -139,12 +139,12 @@
     @keyframes slickCardEntrance {
       0% {
         opacity: 0;
-        transform: translateY(35px) scale(0.95) rotate(-1.5deg);
+        transform: translateY(16px) scale(0.98);
       }
 
       100% {
         opacity: 1;
-        transform: translateY(0) scale(1) rotate(0deg);
+        transform: translateY(0) scale(1);
       }
     }
 
@@ -311,17 +311,18 @@
   </div>
 
   <!-- NAVIGATION -->
-  <nav class="profile-nav" style="opacity: 0; animation: profileFadeSlideDown 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;">
+  <nav class="profile-nav" style="opacity: 0; animation: profileFadeSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;">
     <a href="index.html" class="nav-back-btn">
       <span>←</span>
       <span>Leaderboard</span>
     </a>
-    <div style="display: flex; gap: 10px;">
+      <button class="nav-back-btn" onclick="shareProfile()" title="Share Card" aria-label="Share">
+        <span>⚡ Share</span>
+      </button>
       <button class="nav-back-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Switch Dark / Light Mode"
         aria-label="Toggle Theme" style="padding: 8px 14px;">
         <span class="theme-icon">🌙</span>
       </button>
-    </div>
   </nav>
 
   <!-- CARD CONTAINER -->
@@ -366,7 +367,7 @@
         <!-- SECTION 2: Profile Picture, Hashtag Badge, Message, Likes -->
         <div class="lb-card-content">
           <div class="lb-card-user">
-            <img id="profile-avatar" class="lb-card-avatar profile-reveal-item" src="" alt="" referrerpolicy="no-referrer">
+            <img id="profile-avatar" class="lb-card-avatar profile-reveal-item" src="" alt="">
             <div class="lb-card-user-info">
               <div class="lb-card-user-top">
                 <div id="profile-name" class="lb-card-name profile-reveal-item"></div>
@@ -391,14 +392,6 @@
 
       </div>
 
-      <!-- ACTION BUTTONS BELOW CARD -->
-      <div class="profile-actions-under" id="profile-actions" style="opacity: 0; pointer-events: none;">
-        <button class="slick-btn" onclick="shareProfile()">
-          ⚡ Share Card
-        </button>
-        <button class="slick-btn print-btn" onclick="printCard()">
-          📸 Save Card Snapshot
-        </button>
       </div>
     </div>
   </main>
@@ -460,37 +453,25 @@
 
     /* ── Profile Card Reveal ── */
     .profile-card-reveal {
-      animation: profileCardReveal 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      animation: profileCardReveal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
     @keyframes profileCardReveal {
       0% {
         opacity: 0;
-        transform: translateY(30px) scale(0.96);
-        filter: blur(6px);
+        transform: translateY(12px) scale(0.98);
       }
       100% {
         opacity: 1;
         transform: translateY(0) scale(1);
-        filter: blur(0);
       }
     }
 
-    /* ── Staggered item reveal ── */
+    /* ── Profile items show instantly (no staggered delay) ── */
     .profile-reveal-item {
-      opacity: 0;
-      transform: translateY(12px);
-      animation: profileItemReveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      opacity: 1;
+      transform: none;
     }
-
-    @keyframes profileItemReveal {
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    /* Stagger delays applied by JS */
 
     /* ── Nav entrance ── */
     @keyframes profileFadeSlideDown {
@@ -508,7 +489,7 @@
     @keyframes profileActionsReveal {
       0% {
         opacity: 0;
-        transform: translateY(16px);
+        transform: translateY(8px);
       }
       100% {
         opacity: 1;
@@ -521,7 +502,6 @@
     }
   </style>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="profile.js"></script>
 </body>
 

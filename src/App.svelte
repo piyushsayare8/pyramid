@@ -175,23 +175,33 @@
 
   // ─── Svelte 5 Runes State ───────────────────────────────────────────
 
-  // ─── Cached Index Data (fetched once, polled every 60s) ─────────────
-  let cachedPriceIds = []; // [id, id, ...] from price.json
-  let cachedLikeIds = []; // [id, id, ...] from like.json (sorted by likes)
-  let likesMap = new Map(); // Map<id, likeCount> from like.json
+  // ─── Master Data (single like.json — ids sorted by newest/price) ────
+  let masterIds = $state([]); // [id, id, ...] from like.json — already sorted by newest
+  let masterLikes = $state([]); // [likeCount, ...] — same index as masterIds
+  let likesMap = new Map(); // Map<id, likeCount> — fast lookup
+  let _masterETag = ''; // ETag for SWR revalidation
   let shuffledIds = []; // Fisher-Yates shuffled copy for random tab
   let indexesLoaded = $state(false);
+
+  // $derived: sorted-by-likes view (only computed when masterIds/masterLikes change)
+  let sortedByLikes = $derived.by(() => {
+    if (masterIds.length === 0) return [];
+    const indices = Array.from({ length: masterIds.length }, (_, i) => i);
+    indices.sort((a, b) => (masterLikes[b] || 0) - (masterLikes[a] || 0));
+    return indices.map(i => masterIds[i]);
+  });
 
   // Core data: Map<placeNumber, enrichedItem> — only holds the current window
   let itemsMap = $state(new Map());
   let itemsVersion = $state(0);
 
-  // Sort UI state — "newest" = price.json, "top_liked" = like.json, "random" = shuffled
+  // Sort UI state — "newest" = masterIds, "top_liked" = sortedByLikes, "random" = shuffled
   let currentSort = $state("newest");
 
   // Search UI state — kept for future server integration (no local filtering)
   let searchQuery = $state("");
   let likedSet = $state(new Set());
+  let maxLikesMap = {}; // Maps id -> max known likes
   // Tracks IDs whose like has been sent to Supabase (permanent, never toggle)
   let sentLikesSet = $state(new Set());
   let expandedMessages = $state(new Set());
@@ -239,9 +249,9 @@
 
   // ─── Active IDs — derived from current tab ─────────────────────────
   function getActiveIds() {
-    if (currentSort === "top_liked") return cachedLikeIds;
+    if (currentSort === "top_liked") return sortedByLikes;
     if (currentSort === "random") return shuffledIds;
-    return cachedPriceIds; // "newest"
+    return masterIds; // "newest" — already sorted by descending ID
   }
 
   // Total items count for the current tab (drives virtual scroll height)
@@ -250,52 +260,42 @@
     return getActiveIds().length;
   });
 
-  // ─── Virtual Scroll Engine ──────────────────────────────────────────
-  let ROW_HEIGHT = $derived(columns === 1 ? 540 : 480);
+  // ─── Virtual Scroll Engine (Pure O(1) Math — no bind:clientHeight) ──
+  let ROW_HEIGHT = $derived(columns === 1 ? 620 : 540);
   const OVERSCAN = 3;
+  const EXPANDED_EXTRA = 300; // extra px when a row has expanded messages
 
-  let measuredHeights = $state({}); // rIdx -> actual pixel height
+  // Track which GRID ROWS contain expanded cards (derived from expandedMessages)
+  let expandedRows = $derived.by(() => {
+    const s = new Set();
+    for (const place of expandedMessages) {
+      s.add(Math.floor((place - 1) / columns));
+    }
+    return s;
+  });
 
   let totalRows = $derived(Math.ceil(totalItemCount / columns));
-
-  // Compute a prefix-sum array of row Y positions ONCE when heights change
-  // This makes getRowY O(1) and prevents O(n) loops on every scroll frame
-  let rowYPrefixSum = $derived.by(() => {
-    const arr = new Float64Array(totalRows + 1);
-    let sum = 0;
-    for (let i = 0; i < totalRows; i++) {
-      arr[i] = sum;
-      sum += measuredHeights[i] || ROW_HEIGHT;
-    }
-    arr[totalRows] = sum;
-    return arr;
-  });
-
-  let totalGridHeight = $derived(rowYPrefixSum[totalRows] || 0);
+  let totalGridHeight = $derived(totalRows * ROW_HEIGHT + expandedRows.size * EXPANDED_EXTRA);
   let relativeScrollTop = $derived(Math.max(0, scrollTop - gridTopOffset));
 
-  let startRowIndex = $derived.by(() => {
-    let r = 0;
-    while (r < totalRows && rowYPrefixSum[r + 1] < relativeScrollTop) {
-      r++;
-    }
-    return Math.max(0, r - OVERSCAN);
-  });
+  // O(1) start/end row calculation
+  let startRowIndex = $derived(
+    Math.max(0, Math.floor(relativeScrollTop / ROW_HEIGHT) - OVERSCAN),
+  );
+  let endRowIndex = $derived(
+    Math.min(
+      totalRows,
+      Math.ceil((relativeScrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN,
+    ),
+  );
 
-  let endRowIndex = $derived.by(() => {
-    let r = startRowIndex;
-    const targetY = relativeScrollTop + viewportHeight;
-    while (r < totalRows && rowYPrefixSum[r] < targetY) {
-      r++;
-    }
-    return Math.min(totalRows, r + OVERSCAN);
-  });
-
-  // O(1) lookup
+  // O(expandedRows.size) — typically 0-3 items, never O(100k)
   function getRowY(rowIndex) {
-    if (rowIndex < 0) return 0;
-    if (rowIndex >= totalRows) return rowYPrefixSum[totalRows];
-    return rowYPrefixSum[rowIndex];
+    let y = rowIndex * ROW_HEIGHT;
+    for (const r of expandedRows) {
+      if (r < rowIndex) y += EXPANDED_EXTRA;
+    }
+    return y;
   }
 
   // ─── Build visible rows from activeIds + itemsMap ──────────────────
@@ -395,9 +395,8 @@
     if (currentSort === sortBy) return;
     currentSort = sortBy;
     if (sortBy === "random") {
-      // Shuffle from cached price IDs
-      const src = cachedPriceIds.length > 0 ? cachedPriceIds : cachedLikeIds;
-      shuffledIds = [...src];
+      // Shuffle from master IDs
+      shuffledIds = [...masterIds];
       for (let i = shuffledIds.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffledIds[i], shuffledIds[j]] = [shuffledIds[j], shuffledIds[i]];
@@ -438,6 +437,7 @@
           "top15000_sent_likes",
           JSON.stringify([...sentLikesSet]),
         );
+        localStorage.setItem("top15000_max_likes", JSON.stringify(maxLikesMap));
       } catch {}
     }, 1000);
   }
@@ -468,6 +468,8 @@
         likes: Math.max(0, (item.likes || 0) - 1),
       };
       itemsMap.set(placeNum, updatedItem);
+      likesMap.set(idToLike, updatedItem.likes);
+      maxLikesMap[idToLike] = updatedItem.likes;
       itemsVersion++;
     } else {
       // Like — increment UI count
@@ -477,6 +479,8 @@
         likes: (item.likes || 0) + 1,
       };
       itemsMap.set(placeNum, updatedItem);
+      likesMap.set(idToLike, updatedItem.likes);
+      maxLikesMap[idToLike] = updatedItem.likes;
       itemsVersion++;
 
       if (btnElement) {
@@ -670,7 +674,7 @@
   let displayPrice = $derived(
     paymentData.amount !== null
       ? paymentData.amount
-      : getPriceForId((cachedPriceIds.length || itemsMap.size) + 1),
+      : getPriceForId((masterIds.length || itemsMap.size) + 1),
   );
   let nextId = $derived(getIdForPrice(displayPrice));
   
@@ -730,44 +734,76 @@
     }
   }
 
-  // ─── Fetch & Cache Both Indexes ────────────────────────────────────
-  async function fetchIndexes() {
+  // ─── SWR Fetch: Single Master JSON (like.json) with ETag ───────────
+  async function fetchMasterData() {
     try {
-      const [priceRes, likeRes] = await Promise.all([
-        fetch(`${CDN_BASE}/price.json`, { cache: "no-cache" }),
-        fetch(`${CDN_BASE}/like.json`, { cache: "no-cache" }),
-      ]);
-
-      if (priceRes.ok) {
-        cachedPriceIds = await priceRes.json(); // [id, id, ...]
+      // 1. SWR: Instant load from localStorage (serve stale)
+      if (masterIds.length === 0) {
+        try {
+          const cached = JSON.parse(localStorage.getItem('master_data') || 'null');
+          if (cached && cached.ids && cached.likes) {
+            applyMasterData(cached.ids, cached.likes);
+          }
+        } catch {}
       }
 
-      if (likeRes.ok) {
-        const likeData = await likeRes.json(); // { ids: [...], likes: [...] }
-        const idsArr = likeData.ids || [];
-        const likesArr = likeData.likes || [];
-        cachedLikeIds = idsArr;
-        for (let i = 0; i < idsArr.length; i++) {
-          likesMap.set(idsArr[i], likesArr[i] || 0);
-        }
-      }
+      // 2. Background revalidate with ETag
+      const headers = {};
+      if (_masterETag) headers['If-None-Match'] = _masterETag;
 
-      indexesLoaded = true;
+      const res = await fetch(`${CDN_BASE}/like.json`, { headers, cache: 'no-store' });
 
-      // Update items that are already loaded with fresh like counts
-      for (const [place, item] of itemsMap) {
-        const freshLikes = likesMap.get(item.id) ?? item.likes;
-        if (freshLikes !== item.likes) {
-          itemsMap.set(place, { ...item, likes: freshLikes });
-        }
-      }
-      itemsVersion++;
+      if (res.status === 304) return; // Not modified — stale data is still fresh
+      if (!res.ok) return;
 
-      // Trigger initial window load
-      loadWindowForScroll();
+      const etag = res.headers.get('etag');
+      if (etag) _masterETag = etag;
+
+      const data = await res.json();
+      applyMasterData(data.ids || [], data.likes || []);
+
+      // Persist to localStorage for next SWR cycle
+      try {
+        localStorage.setItem('master_data', JSON.stringify(data));
+        if (etag) localStorage.setItem('master_etag', etag);
+      } catch {}
+
     } catch (err) {
-      console.error("Error fetching indexes:", err);
+      console.error('Error fetching master data:', err);
     }
+  }
+
+  // Apply master JSON data to all state
+  function applyMasterData(ids, likes) {
+    masterIds = ids;
+    masterLikes = likes;
+    likesMap.clear();
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      const serverLikes = likes[i] || 0;
+      // Optimistic max likes — never drop below user's local high-water mark
+      if (maxLikesMap[id] !== undefined && maxLikesMap[id] > serverLikes) {
+        likesMap.set(id, maxLikesMap[id]);
+      } else {
+        likesMap.set(id, serverLikes);
+        maxLikesMap[id] = serverLikes;
+      }
+    }
+    schedulePersist();
+
+    indexesLoaded = true;
+
+    // Update items that are already loaded with fresh like counts
+    for (const [place, item] of itemsMap) {
+      const freshLikes = likesMap.get(item.id) ?? item.likes;
+      if (freshLikes !== item.likes) {
+        itemsMap.set(place, { ...item, likes: freshLikes });
+      }
+    }
+    itemsVersion++;
+
+    // Trigger initial window load
+    loadWindowForScroll();
   }
 
   // ─── Sliding Window: fetch user cards for the visible range ────────
@@ -875,9 +911,11 @@
 
   onMount(() => {
     loadPaymentData();
-    fetchIndexes(); // Fetch both price.json + like.json on mount
+    // Restore ETag from localStorage for SWR
+    _masterETag = localStorage.getItem('master_etag') || '';
+    fetchMasterData(); // Single master JSON with SWR
     pollInterval = setInterval(loadPaymentData, 30000);
-    indexPollInterval = setInterval(fetchIndexes, 60000);
+    indexPollInterval = setInterval(fetchMasterData, 60000);
 
     // Restore liked set — populate in-place to preserve $state proxy
     try {
@@ -886,6 +924,13 @@
       );
       likedSet.clear();
       for (const id of savedLiked) likedSet.add(id);
+    } catch {}
+
+    // Restore max likes map
+    try {
+      maxLikesMap = JSON.parse(
+        localStorage.getItem("top15000_max_likes") || "{}",
+      );
     } catch {}
 
     // Restore sent likes set (permanent record of Supabase-sent likes)
@@ -1160,7 +1205,6 @@
         {#each visibleRows as rowItems, rowIndex (startRowIndex + rowIndex)}
           {@const rIdx = startRowIndex + rowIndex}
           <div
-            bind:clientHeight={measuredHeights[rIdx]}
             style="position: absolute; top: 0; left: 0; width: 100%; transform: translateY({getRowY(
               rIdx,
             )}px); transition: transform 0.4s ease; display: grid; grid-template-columns: repeat({columns}, minmax(0, 1fr)); align-items: start; gap: {gridGap}; padding-bottom: 28px;"
