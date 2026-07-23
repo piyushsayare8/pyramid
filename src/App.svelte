@@ -227,7 +227,7 @@
   // Virtual Scrolling State
   let scrollTop = $state(0);
   let viewportHeight = $state(800);
-  let columns = $state(3);
+  let columns = $state(4);
   let gridTopOffset = $state(0);
   let gridRef = $state(null);
   let rafId = null;
@@ -260,97 +260,62 @@
     return getActiveIds().length;
   });
 
-  // ─── Virtual Scroll Engine (Pure O(1) Math — no bind:clientHeight) ──
-  let ROW_HEIGHT = $derived(columns === 1 ? 620 : 540);
-  const OVERSCAN = 3;
-  const EXPANDED_EXTRA = 300; // extra px when a row has expanded messages
-
-  // Track which GRID ROWS contain expanded cards (derived from expandedMessages)
-  let expandedRows = $derived.by(() => {
-    const s = new Set();
-    for (const place of expandedMessages) {
-      s.add(Math.floor((place - 1) / columns));
-    }
-    return s;
-  });
+  // ─── Virtual Scroll Engine (Spacer Method) ──────────────────────
+  let ESTIMATED_ROW_HEIGHT = $derived(columns === 1 ? 600 : 524);
+  const OVERSCAN_ROWS = 3;
 
   let totalRows = $derived(Math.ceil(totalItemCount / columns));
-  let totalGridHeight = $derived(totalRows * ROW_HEIGHT + expandedRows.size * EXPANDED_EXTRA);
   let relativeScrollTop = $derived(Math.max(0, scrollTop - gridTopOffset));
 
-  // O(1) start/end row calculation
-  let startRowIndex = $derived(
-    Math.max(0, Math.floor(relativeScrollTop / ROW_HEIGHT) - OVERSCAN),
-  );
-  let endRowIndex = $derived(
-    Math.min(
-      totalRows,
-      Math.ceil((relativeScrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN,
-    ),
-  );
+  let startRow = $derived(Math.max(0, Math.floor(relativeScrollTop / ESTIMATED_ROW_HEIGHT) - OVERSCAN_ROWS));
+  let endRow = $derived(Math.min(totalRows, Math.ceil((relativeScrollTop + viewportHeight) / ESTIMATED_ROW_HEIGHT) + OVERSCAN_ROWS));
 
-  // O(expandedRows.size) — typically 0-3 items, never O(100k)
-  function getRowY(rowIndex) {
-    let y = rowIndex * ROW_HEIGHT;
-    for (const r of expandedRows) {
-      if (r < rowIndex) y += EXPANDED_EXTRA;
-    }
-    return y;
-  }
+  let startIndex = $derived(startRow * columns);
+  let endIndex = $derived(endRow * columns);
 
-  // ─── Build visible rows from activeIds + itemsMap ──────────────────
-  let visibleRows = $derived.by(() => {
+  let paddingTop = $derived(startRow * ESTIMATED_ROW_HEIGHT);
+  let paddingBottom = $derived(Math.max(0, (totalRows - endRow) * ESTIMATED_ROW_HEIGHT));
+
+  // ─── Build visible cards from activeIds + itemsMap ──────────────────
+  let visibleCards = $derived.by(() => {
     void itemsVersion;
     const ids = getActiveIds();
-    const cols = columns;
-    const startItem = startRowIndex * cols;
-    const endItem = endRowIndex * cols;
-    const rows = [];
-    for (let i = startItem; i < endItem && i < ids.length; i += cols) {
-      const row = [];
-      for (let c = 0; c < cols && i + c < ids.length; c++) {
-        const globalIdx = i + c;
-        const place = globalIdx + 1;
-        const item = itemsMap.get(place);
-        if (item) {
-          row.push(item);
-        } else {
-          // Skeleton placeholder — not yet fetched
-          const id = ids[globalIdx];
-          row.push({
-            id: id,
-            place: place,
-            name: "Loading...",
-            message: "",
-            likes: likesMap.get(id) ?? 0,
-            profilePicture: "",
-            youtubeUrl: "",
-            instagramUrl: "",
-            _skeleton: true,
-            _ytId: YT_DEFAULT_ID,
-            _thumbUrl: "",
-            _thumbFallback: "",
-            _avatarSrc: "",
-            _avatarFallback1: "",
-            _avatarFallback2: "",
-            _price: getPriceForId(parseInt(id, 10) || 1),
-            _formattedPrice: formatPrice(getPriceForId(parseInt(id, 10) || 1)),
-            _placeFormatted: place.toLocaleString("en-IN"),
-            _rawMsg: "",
-            _isShortMsg: true,
-            _msgPreview: null,
-          });
-        }
+    const cards = [];
+    for (let i = Math.max(0, startIndex); i < endIndex && i < ids.length; i++) {
+      const place = i + 1;
+      const id = ids[i];
+      const item = itemsMap.get(place);
+      if (item) {
+        cards.push(item);
+      } else {
+        // Skeleton placeholder — not yet fetched
+        cards.push({
+          id: id,
+          place: place,
+          name: "Loading...",
+          message: "",
+          likes: likesMap.get(id) ?? 0,
+          profilePicture: "",
+          youtubeUrl: "",
+          instagramUrl: "",
+          _skeleton: true,
+          _ytId: YT_DEFAULT_ID,
+          _thumbUrl: "",
+          _thumbFallback: "",
+          _avatarSrc: "",
+          _avatarFallback1: "",
+          _avatarFallback2: "",
+          _price: getPriceForId(parseInt(id, 10) || 1),
+          _formattedPrice: formatPrice(getPriceForId(parseInt(id, 10) || 1)),
+          _placeFormatted: place.toLocaleString("en-IN"),
+          _rawMsg: "",
+          _isShortMsg: true,
+          _msgPreview: null,
+        });
       }
-      if (row.length > 0) rows.push(row);
     }
-    return rows;
+    return cards;
   });
-
-  // ─── Computed gap string (avoid template interpolation) ─────────────
-  let gridGap = $derived(
-    columns === 1 ? "20px" : columns === 2 ? "22px" : "28px",
-  );
 
   // ─── RAF-batched scroll handler ─────────────────────────────────────
   function handleScroll() {
@@ -370,7 +335,8 @@
     const w = window.innerWidth;
     if (w <= 640) columns = 1;
     else if (w <= 1024) columns = 2;
-    else columns = 3;
+    else if (w <= 1280) columns = 3;
+    else columns = 4;
     if (gridRef) gridTopOffset = gridRef.offsetTop;
   }, 150);
 
@@ -511,14 +477,11 @@
   }
 
   // ─── Message expand/collapse ────────────────────────────────────────
-  function toggleMsgExpand(rowItems, expand) {
-    // Expand/collapse ALL cards in the row so all messages show together
-    for (const item of rowItems) {
-      if (expand) {
-        expandedMessages.add(item.place);
-      } else {
-        expandedMessages.delete(item.place);
-      }
+  function toggleMsgExpand(item, expand) {
+    if (expand) {
+      expandedMessages.add(item.place);
+    } else {
+      expandedMessages.delete(item.place);
     }
     expandedMessages = new Set(expandedMessages); // force Svelte 5 reactivity
   }
@@ -817,8 +780,8 @@
     if (ids.length === 0) return;
 
     const cols = columns;
-    const startItem = Math.max(0, startRowIndex * cols - FETCH_AHEAD);
-    const endItem = Math.min(ids.length, endRowIndex * cols + FETCH_AHEAD);
+    const startItem = Math.max(0, startRow * cols - FETCH_AHEAD);
+    const endItem = Math.min(ids.length, endRow * cols + FETCH_AHEAD);
 
     // Collect IDs that need fetching (not in itemsMap for their place)
     const toFetch = [];
@@ -1199,17 +1162,10 @@
     {:else}
       <div
         bind:this={gridRef}
-        class="lb-table-body"
-        style="position: relative; width: 100%; height: {totalGridHeight}px; display: block; margin: 0 auto;"
+        style="width: 100%; max-width: 1320px; display: block; margin: 0 auto; padding-top: {paddingTop}px; padding-bottom: {paddingBottom}px;"
       >
-        {#each visibleRows as rowItems, rowIndex (startRowIndex + rowIndex)}
-          {@const rIdx = startRowIndex + rowIndex}
-          <div
-            style="position: absolute; top: 0; left: 0; width: 100%; transform: translateY({getRowY(
-              rIdx,
-            )}px); transition: transform 0.4s ease; display: grid; grid-template-columns: repeat({columns}, minmax(0, 1fr)); align-items: start; gap: {gridGap}; padding-bottom: 28px;"
-          >
-            {#each rowItems as item (item.place)}
+        <div class="lb-table-body">
+          {#each visibleCards as item (item.place)}
               {@const place = item.place}
               {@const liked = likedSet.has(item.id || place)}
               {@const isExpanded = expandedMessages.has(place)}
@@ -1397,7 +1353,7 @@
                           class="lb-message-more-btn"
                           onclick={(e) => {
                             e.stopPropagation();
-                            toggleMsgExpand(rowItems, !isExpanded);
+                            toggleMsgExpand(item, !isExpanded);
                           }}
                         >
                           {isExpanded ? "less" : "more"}
@@ -1427,9 +1383,8 @@
                   </div>
                 </div>
               {/if}
-            {/each}
-          </div>
-        {/each}
+          {/each}
+        </div>
       </div>
     {/if}
   </section>
