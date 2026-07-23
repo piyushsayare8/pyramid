@@ -211,7 +211,7 @@
   let brokenAvatars = new Set(); // Track failed images to prevent fallback cascade
   let theme = $state("light");
   let buyModalOpen = $state(false);
-  let activeVideoPlace = $state(null);
+  let activeCardId = $state(null);
   let activeVideoId = $state(null);
 
   let paymentData = $state({
@@ -604,10 +604,10 @@
   }
 
   function videoRafLoop() {
-    if (activeVideoPlace === null) return;
+    if (activeCardId === null) return;
     
     const player = document.getElementById("lb-global-mini-player");
-    const wrap = document.getElementById(`video-wrap-${activeVideoPlace}`);
+    const wrap = document.getElementById(`video-wrap-${activeCardId}`);
     
     if (player && wrap) {
       const rect = wrap.getBoundingClientRect();
@@ -687,9 +687,9 @@
 
   // Remove unused _lastVideoState since we use _lastVideoStateStr now
 
-  function playVideo(event, placeNum, vidId) {
+  function playVideo(event, cardId, placeNum, vidId) {
     if (event) event.stopPropagation();
-    activeVideoPlace = placeNum;
+    activeCardId = cardId;
     activeVideoId = vidId;
 
     const screen = document.getElementById("lbmp-screen");
@@ -729,14 +729,14 @@
       player.style.transform = "translateY(20px) scale(0.92)";
       player.style.pointerEvents = "none";
     }
-    activeVideoPlace = null;
+    activeCardId = null;
     activeVideoId = null;
     isOnCard = false;
   }
 
   function scrollToActiveCard() {
-    if (activeVideoPlace === null) return;
-    const row = document.getElementById(`row-${activeVideoPlace}`);
+    if (activeCardId === null) return;
+    const row = document.getElementById(`row-${activeCardId}`);
     if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
@@ -1327,8 +1327,8 @@
               {@const isExpanded = expandedMessages.has(place)}
 
               {#if item._skeleton}
-                <div class="lb-card lb-card-skeleton" id="row-{place}">
-                  <div class="lb-card-video-wrap">
+                <div class="lb-card lb-card-skeleton" id="row-{item.id}">
+                  <div class="lb-card-video-wrap" id="video-wrap-{item.id}">
                     <div
                       class="lb-card-video skeleton-shimmer"
                       style="background: var(--skeleton-bg, #e2e8f0); border-radius: 23.5px 23.5px 0 0; height: 200px;"
@@ -1378,7 +1378,7 @@
               {:else}
                 <div
                   class="lb-card {liked ? 'liked-card liked-row' : ''}"
-                  id="row-{place}"
+                  id="row-{item.id}"
                   onclick={() =>
                     (window.location.href = `profile.html?id=${item.id}&place=${place}`)}
                   role="button"
@@ -1387,13 +1387,13 @@
                     e.key === "Enter" &&
                     (window.location.href = `profile.html?id=${item.id}&place=${place}`)}
                 >
-                  <div class="lb-card-video-wrap" id="video-wrap-{place}">
+                  <div class="lb-card-video-wrap" id="video-wrap-{item.id}">
                     <div
                       class="lb-card-video"
-                      id="card-video-{place}"
-                      onclick={(e) => playVideo(e, place, item._ytId)}
+                      id="card-video-{item.id}"
+                      onclick={(e) => playVideo(e, item.id, place, item._ytId)}
                       onkeydown={(e) =>
-                        e.key === "Enter" && playVideo(e, place, item._ytId)}
+                        e.key === "Enter" && playVideo(e, item.id, place, item._ytId)}
                       role="button"
                       tabindex="0"
                       title="Click to play YouTube Video"
@@ -1516,7 +1516,7 @@
                     <div class="lb-card-foot">
                       <button
                         class="lb-card-like-btn {liked ? 'liked' : ''}"
-                        id="like-btn-{place}"
+                        id="like-btn-{item.id}"
                         onclick={(e) => {
                           e.stopPropagation();
                           toggleLikeItem(place, e.currentTarget);
@@ -1524,7 +1524,7 @@
                         aria-label="Like {item.name}"
                       >
                         <span class="like-heart">{liked ? "❤️" : "🤍"}</span>
-                        <span class="lb-like-count" id="like-count-{place}">
+                        <span class="lb-like-count" id="like-count-{item.id}">
                           {formatLikes(item.likes || 0)}
                         </span>
                       </button>
