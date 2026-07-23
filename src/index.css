@@ -154,7 +154,6 @@ body {
   font-family: 'Inter', 'Plus Jakarta Sans', sans-serif;
   background: var(--bg-main);
   color: var(--text-main);
-  min-height: 100vh;
   position: relative;
   line-height: 1.6;
 }
@@ -351,7 +350,7 @@ body>* {
   }
 
   .hero-grid-container .counter-number {
-    font-size: clamp(3.8rem, 5.5vw, 5.2rem);
+    font-size: clamp(2.8rem, 10vw, 5.2rem);
   }
 }
 
@@ -403,10 +402,10 @@ body>* {
 
 .counter-number {
   font-family: 'Outfit', sans-serif;
-  font-size: clamp(4.2rem, 14vw, 7rem);
+  font-size: clamp(3rem, 8vw, 7.5rem);
   font-weight: 900;
-  line-height: 0.95;
-  letter-spacing: -0.04em;
+  line-height: 1;
+  letter-spacing: -0.03em;
   color: var(--text-main);
   transition: var(--transition);
 }
@@ -616,9 +615,9 @@ body>* {
 
 .buy-price-amount {
   font-family: 'Outfit', sans-serif;
-  font-size: clamp(4.8rem, 16vw, 7.5rem);
+  font-size: clamp(2.2rem, 10vw, 4.2rem);
   font-weight: 900;
-  line-height: 0.95;
+  line-height: 1;
   letter-spacing: -0.04em;
   background: var(--grad-text);
   -webkit-background-clip: text;
@@ -2873,6 +2872,8 @@ body>* {
 /* --- SMOOTH PAGE ENTRANCE --- */
 .main-wrap {
   animation: appEntrance 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  overflow-x: clip;
+  width: 100%;
 }
 
 @keyframes appEntrance {
