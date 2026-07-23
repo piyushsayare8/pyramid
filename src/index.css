@@ -18,6 +18,24 @@ html,
 body {
   margin: 0;
   padding: 0;
+  touch-action: pan-y; /* Fixes Chrome Mobile swipe/zoom delay */
+}
+
+/* Lenis Recommended Boilerplate */
+html.lenis, html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
 }
 
 :root {
@@ -423,7 +441,6 @@ body>* {
   flex-direction: column;
   gap: 10px;
   background: var(--surface-card);
-  backdrop-filter: blur(12px);
   padding: 16px 20px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
@@ -525,8 +542,6 @@ body>* {
 .buy-card {
   position: relative;
   background: var(--surface-card);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   padding: 44px 38px 38px;
@@ -816,7 +831,6 @@ body>* {
   gap: 10px;
   justify-content: space-between;
   background: var(--surface-card);
-  backdrop-filter: blur(16px);
   padding: 10px 16px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-light);
@@ -1000,7 +1014,6 @@ body>* {
   display: flex;
   flex-direction: column;
   background: var(--surface-card);
-  backdrop-filter: blur(16px);
   border: 1px solid var(--border-light);
   border-top: none;
   border-radius: 0 0 var(--radius-md) var(--radius-md);
@@ -1164,8 +1177,6 @@ body>* {
 
 .lb-msg-premium-card {
   background: var(--surface-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1.5px solid rgba(99, 102, 241, 0.45);
   border-radius: 18px;
   padding: 13px 20px;
@@ -1449,8 +1460,6 @@ body>* {
   inset: 0;
   z-index: 1000;
   background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   display: none;
   align-items: center;
   justify-content: center;
@@ -2180,6 +2189,7 @@ body>* {
   -webkit-tap-highlight-color: transparent;
   will-change: transform;
   align-self: start;
+  -webkit-mask-image: -webkit-radial-gradient(white, black); /* Fixes Chrome Mobile CPU masking fallback */
 }
 
 :root[data-theme="dark"] .lb-card {
@@ -2384,7 +2394,6 @@ body>* {
   gap: 12px;
   z-index: 10;
   cursor: pointer;
-  backdrop-filter: blur(2px);
 }
 
 .lbmp-card-label {
@@ -2790,30 +2799,8 @@ body>* {
 .user-ambient-bg {
   width: 100%;
   height: 100%;
-  background-size: cover;
-  background-position: center;
-  filter: blur(100px) saturate(2.4);
   opacity: 0.45;
-  transform: scale(1.15);
-  transition: background-image 1s ease-in-out;
-  animation: ambientPulse 12s ease-in-out infinite alternate;
-}
-
-@keyframes ambientPulse {
-  0% {
-    transform: scale(1.15) translate(0, 0);
-    opacity: 0.4;
-  }
-
-  50% {
-    transform: scale(1.25) translate(3%, -3%);
-    opacity: 0.5;
-  }
-
-  100% {
-    transform: scale(1.15) translate(-3%, 3%);
-    opacity: 0.42;
-  }
+  transition: background 1.5s ease-in-out;
 }
 
 /* ── Card Shake & Floating Heart Animations ── */
@@ -2942,3 +2929,66 @@ body>* {
   box-sizing: border-box;
 }
 
+/* ── Search Dropdown Styles ── */
+.lb-header, .lb-controls {
+  position: relative;
+  z-index: 50;
+}
+
+.lb-search-wrap {
+  position: relative;
+  z-index: 60;
+}
+
+.lb-search-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  background: var(--surface-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+.lb-search-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-light);
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: left;
+  font-family: "Outfit", sans-serif;
+  color: var(--text-main);
+}
+
+.lb-search-item:last-child {
+  border-bottom: none;
+}
+
+.lb-search-item:hover, .lb-search-item:focus {
+  background: var(--surface-hover);
+  outline: none;
+}
+
+.lb-search-item-place {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.lb-search-item-price {
+  font-weight: 800;
+  color: var(--accent-primary);
+  font-size: 1rem;
+  background: var(--surface-subtle);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+}

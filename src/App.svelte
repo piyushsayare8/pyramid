@@ -258,6 +258,96 @@
     return masterIds; // "newest" — already sorted by descending ID
   }
 
+  // ─── Search Results for Dropdown ──────────────────────────────────
+  let searchDropdownResults = $derived.by(() => {
+    if (!searchQuery) return [];
+    
+    const q = searchQuery.toLowerCase().trim();
+    const cleanQ = q.replace(/[^0-9.]/g, ''); // Extract numeric part
+    if (!cleanQ) return [];
+    
+    const isPrice = q.startsWith('rs') || q.startsWith('₹') || q.includes('price');
+    const isPlace = q.startsWith('#') || q.includes('place') || q.includes('id');
+    
+    let matches = [];
+    
+    for (let i = 0; i < masterIds.length; i++) {
+        const id = masterIds[i];
+        let matchPlace = false;
+        let matchPrice = false;
+        
+        if (!isPrice) {
+            matchPlace = String(id).startsWith(cleanQ);
+        }
+        
+        if (!isPlace) {
+            const priceStr = String(formatPrice(getPriceForId(id)));
+            const cleanPriceStr = priceStr.replace(/,/g, '');
+            matchPrice = cleanPriceStr.startsWith(cleanQ);
+        }
+        
+        if (matchPlace || matchPrice) {
+            matches.push(id);
+            if (matches.length >= 10) break; // Limit to 10 results
+        }
+    }
+    
+    return matches;
+  });
+
+  // ─── Navigate to Card from Search ─────────────────────────────────
+  function goToSearchCard(matchId) {
+     const activeIds = getActiveIds();
+     const idx = activeIds.indexOf(matchId);
+     if (idx === -1) return;
+     
+     // Calculate the rough row index and position
+     const rowIdx = Math.floor(idx / columns);
+     const targetScroll = gridTopOffset + (rowIdx * ESTIMATED_ROW_HEIGHT);
+     const viewportHeight = window.innerHeight;
+     const roughScroll = targetScroll - (viewportHeight / 2) + (ESTIMATED_ROW_HEIGHT / 2);
+     
+     // Clear search query so dropdown closes
+     searchQuery = "";
+     
+     // Scroll the window to trigger virtual scroll rendering
+     window.scrollTo({
+       top: Math.max(0, roughScroll),
+       behavior: 'smooth'
+     });
+     
+     // Keep checking for the element to mount in the DOM
+     let attempts = 0;
+     const highlightInterval = setInterval(() => {
+         attempts++;
+         const el = document.getElementById(`row-${matchId}`);
+         if (el) {
+             clearInterval(highlightInterval);
+             
+             // Guarantee perfectly centered exact visibility using native browser API
+             setTimeout(() => {
+                 if (el.scrollIntoView) {
+                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                 }
+             }, 250);
+             
+             // Simple grey background highlight without any pop animation
+             const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+             const greyColor = isDark ? '#4b5563' : '#d1d5db'; // highly visible grey
+             
+             el.style.transition = 'background-color 0.4s ease';
+             el.style.setProperty('background-color', greyColor, 'important');
+             
+             setTimeout(() => { 
+                 el.style.removeProperty('background-color'); 
+                 setTimeout(() => { el.style.transition = ''; }, 400);
+             }, 3500); // Hold highlight for 3.5 seconds
+         } else if (attempts > 40) { // Give up after 4 seconds
+             clearInterval(highlightInterval);
+         }
+     }, 100);
+  }
+
   // Total items count for the current tab (drives virtual scroll height)
   let totalItemCount = $derived.by(() => {
     void itemsVersion; // re-derive when data changes
@@ -502,36 +592,57 @@
     _toastTimer = setTimeout(() => t.classList.remove("show"), 3000);
   }
 
-  // ─── Video Player — IntersectionObserver + RAF only when transitioning
+  // ─── Video Player — RAF synced positioning for perfect tracking
   let _videoObserver = null;
   let _videoInView = false;
 
-  function setupVideoObserver() {
-    if (_videoObserver) _videoObserver.disconnect();
-    
-    _videoObserver = new IntersectionObserver((entries) => {
-      const entry = entries[0];
-      const player = document.getElementById("lb-global-mini-player");
-      if (!player) return;
+  let _lastVideoStateStr = "";
 
-      if (entry.isIntersecting) {
-        const rect = entry.boundingClientRect;
-        player.style.cssText = `
-          position: fixed;
-          top: ${Math.max(0, rect.top)}px;
-          left: ${rect.left}px;
-          width: ${rect.width}px;
-          height: ${rect.height}px;
-          bottom: auto;
-          right: auto;
-          border-radius: 23.5px 23.5px 0 0;
-          border: none;
-          box-shadow: none;
-          opacity: 1;
-          transform: none;
-          transition: none;
-          pointer-events: all;
-        `;
+  function setupVideoObserver() {
+    if (rafId) cancelAnimationFrame(rafId);
+    videoRafLoop();
+  }
+
+  function videoRafLoop() {
+    if (activeVideoPlace === null) return;
+    
+    const player = document.getElementById("lb-global-mini-player");
+    const wrap = document.getElementById(`video-wrap-${activeVideoPlace}`);
+    
+    if (player && wrap) {
+      const rect = wrap.getBoundingClientRect();
+      const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+      
+      if (isVisible) {
+        // Calculate the absolute document position and round to eliminate sub-pixel jitter
+        const absoluteTop = Math.round(window.scrollY + rect.top);
+        const absoluteLeft = Math.round(window.scrollX + rect.left);
+        const w = Math.round(rect.width);
+        const h = Math.round(rect.height);
+        
+        // State Cache: Only write to the DOM if the values actually changed!
+        const stateKey = `card_${absoluteTop}_${absoluteLeft}_${w}_${h}`;
+        
+        if (_lastVideoStateStr !== stateKey) {
+          _lastVideoStateStr = stateKey;
+          player.style.cssText = `
+            position: absolute;
+            top: ${absoluteTop}px;
+            left: ${absoluteLeft}px;
+            width: ${w}px;
+            height: ${h}px;
+            bottom: auto;
+            right: auto;
+            border-radius: 23.5px 23.5px 0 0;
+            border: none;
+            box-shadow: none;
+            opacity: 1;
+            transform: none;
+            transition: none;
+            pointer-events: all;
+            z-index: 40;
+          `;
+        }
         if (!isOnCard) {
           player.classList.add("lbmp-on-card");
           player.classList.remove("lbmp-floating");
@@ -539,43 +650,42 @@
         }
       } else {
         const vw = window.innerWidth;
-        const floatW = vw <= 640 ? 260 : 352;
-        const bottom = vw <= 640 ? "16px" : "28px";
-        const right = vw <= 640 ? "16px" : "28px";
-        player.style.cssText = `
-          position: fixed;
-          top: auto;
-          left: auto;
-          bottom: ${bottom};
-          right: ${right};
-          width: ${floatW}px;
-          height: auto;
-          border: 2.5px solid var(--pop-border, #4338ca);
-          box-shadow: 0 24px 60px rgba(0,0,0,0.8);
-          border-radius: 20px;
-          opacity: 1;
-          transform: none;
-          transition: bottom 0.4s cubic-bezier(0.16,1,0.3,1), right 0.4s cubic-bezier(0.16,1,0.3,1), width 0.38s cubic-bezier(0.16,1,0.3,1), border-radius 0.35s ease, box-shadow 0.3s ease;
-          pointer-events: all;
-        `;
+        const stateKey = `float_${vw}`;
+        
+        if (_lastVideoStateStr !== stateKey) {
+          _lastVideoStateStr = stateKey;
+          const floatW = vw <= 640 ? 260 : 352;
+          const bottom = vw <= 640 ? "16px" : "28px";
+          const right = vw <= 640 ? "16px" : "28px";
+          player.style.cssText = `
+            position: fixed;
+            top: auto;
+            left: auto;
+            bottom: ${bottom};
+            right: ${right};
+            width: ${floatW}px;
+            height: auto;
+            border: 2.5px solid var(--pop-border, #4338ca);
+            box-shadow: 0 24px 60px rgba(0,0,0,0.8);
+            border-radius: 20px;
+            opacity: 1;
+            transform: none;
+            transition: bottom 0.4s cubic-bezier(0.16,1,0.3,1), right 0.4s cubic-bezier(0.16,1,0.3,1), width 0.38s cubic-bezier(0.16,1,0.3,1), border-radius 0.35s ease, box-shadow 0.3s ease;
+            pointer-events: all;
+          `;
+        }
         if (isOnCard) {
           player.classList.remove("lbmp-on-card");
           player.classList.add("lbmp-floating");
           isOnCard = false;
         }
       }
-    }, { rootMargin: '-20px 0px -30px 0px', threshold: 0 });
-
-    const wrap = document.getElementById(`video-wrap-${activeVideoPlace}`);
-    if (wrap) _videoObserver.observe(wrap);
+    }
+    
+    rafId = requestAnimationFrame(videoRafLoop);
   }
 
-  function updateVideoPosition() {
-    // Replaced by IntersectionObserver
-  }
-
-  // Track previous video position state to avoid infinite RAF
-  let _lastVideoState = null;
+  // Remove unused _lastVideoState since we use _lastVideoStateStr now
 
   function playVideo(event, placeNum, vidId) {
     if (event) event.stopPropagation();
@@ -599,7 +709,7 @@
 
     isOnCard = false;
     if (rafId) cancelAnimationFrame(rafId);
-    _lastVideoState = null;
+    _lastVideoStateStr = ""; // reset state cache to force immediate repaint
     
     // Set up the IntersectionObserver for the new video
     // Use setTimeout so the DOM has time to render the video-wrap
@@ -961,25 +1071,36 @@
     });
   });
 
-  // Animate remaining places counter smoothly whenever remainingCount updates
+  // Highly Optimized Lightweight Counter Animation
   $effect(() => {
     const target = remainingCount;
-    const currentDisplay = untrack(() => displayRemaining);
-    const diff = target - currentDisplay;
-    if (diff !== 0) {
-      const start = currentDisplay;
-      const duration = 800;
+    const current = untrack(() => displayRemaining);
+    if (target === current) return;
+
+    const diff = target - current;
+    const duration = 600; // Snappy 0.6 seconds
+    
+    let animRafId;
+    
+    // Wait 500ms for the page to fully render and the GPU to go idle before animating
+    const delayTimer = setTimeout(() => {
       const startTime = performance.now();
-      let _animRafId;
+      
       function step(now) {
         const p = Math.min((now - startTime) / duration, 1);
-        const eased = 1 - Math.pow(1 - p, 3);
-        displayRemaining = Math.round(start + diff * eased);
-        if (p < 1) _animRafId = requestAnimationFrame(step);
+        // Exponential ease-out (super smooth)
+        const eased = 1 - Math.pow(1 - p, 4);
+        displayRemaining = Math.round(current + diff * eased);
+        
+        if (p < 1) animRafId = requestAnimationFrame(step);
       }
-      _animRafId = requestAnimationFrame(step);
-      return () => cancelAnimationFrame(_animRafId);
-    }
+      animRafId = requestAnimationFrame(step);
+    }, 500);
+
+    return () => {
+      clearTimeout(delayTimer);
+      if (animRafId) cancelAnimationFrame(animRafId);
+    };
   });
 
   onDestroy(() => {
@@ -1154,7 +1275,7 @@
             type="search"
             id="lb-search"
             class="lb-search"
-            placeholder="Search name, message…"
+            placeholder="Search Place # or Price (₹)…"
             value={searchQuery}
             oninput={handleSearchInput}
             autocomplete="off"
@@ -1169,6 +1290,20 @@
             >
               ✕
             </button>
+          {/if}
+
+          {#if searchDropdownResults && searchDropdownResults.length > 0}
+            <div class="lb-search-dropdown">
+              {#each searchDropdownResults as matchId}
+                <button
+                  class="lb-search-item"
+                  onclick={() => goToSearchCard(matchId)}
+                >
+                  <span class="lb-search-item-place">Place #{matchId}</span>
+                  <span class="lb-search-item-price">₹{formatPrice(getPriceForId(matchId))}</span>
+                </button>
+              {/each}
+            </div>
           {/if}
         </div>
       </div>
@@ -1267,6 +1402,7 @@
                         src={item._thumbUrl}
                         alt="YouTube Thumbnail"
                         loading="lazy"
+                        decoding="async"
                         width="480"
                         height="360"
                         onerror={(e) => {
@@ -1283,6 +1419,7 @@
                         src={item._avatarSrc}
                         alt={item.name}
                         loading="lazy"
+                        decoding="async"
                         width="200"
                         height="200"
                         onerror={(e) => {
