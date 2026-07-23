@@ -183,13 +183,16 @@
   let shuffledIds = []; // Fisher-Yates shuffled copy for random tab
   let indexesLoaded = $state(false);
 
-  // $derived: sorted-by-likes view (only computed when masterIds/masterLikes change)
-  let sortedByLikes = $derived.by(() => {
-    if (masterIds.length === 0) return [];
-    const indices = Array.from({ length: masterIds.length }, (_, i) => i);
-    indices.sort((a, b) => (masterLikes[b] || 0) - (masterLikes[a] || 0));
-    return indices.map(i => masterIds[i]);
-  });
+  // Background sorting: sorted-by-likes view (runs async to not block main thread)
+  let sortedByLikes = $state([]);
+  function sortLikesInBackground() {
+    setTimeout(() => {
+      if (masterIds.length === 0) return;
+      const indices = Array.from({ length: masterIds.length }, (_, i) => i);
+      indices.sort((a, b) => (masterLikes[b] || 0) - (masterLikes[a] || 0));
+      sortedByLikes = indices.map(i => masterIds[i]);
+    }, 0);
+  }
 
   // Core data: Map<placeNumber, enrichedItem> — only holds the current window
   let itemsMap = $state(new Map());
@@ -205,6 +208,7 @@
   // Tracks IDs whose like has been sent to Supabase (permanent, never toggle)
   let sentLikesSet = $state(new Set());
   let expandedMessages = $state(new Set());
+  let brokenAvatars = new Set(); // Track failed images to prevent fallback cascade
   let theme = $state("light");
   let buyModalOpen = $state(false);
   let activeVideoPlace = $state(null);
@@ -326,7 +330,6 @@
       _scrollRafPending = false;
       // Trigger windowed fetch for newly visible range
       loadWindowForScroll();
-      updateVideoPosition();
     });
   }
 
@@ -505,80 +508,70 @@
 
   function setupVideoObserver() {
     if (_videoObserver) _videoObserver.disconnect();
-    _videoObserver = null;
+    
+    _videoObserver = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      const player = document.getElementById("lb-global-mini-player");
+      if (!player) return;
+
+      if (entry.isIntersecting) {
+        const rect = entry.boundingClientRect;
+        player.style.cssText = `
+          position: fixed;
+          top: ${Math.max(0, rect.top)}px;
+          left: ${rect.left}px;
+          width: ${rect.width}px;
+          height: ${rect.height}px;
+          bottom: auto;
+          right: auto;
+          border-radius: 23.5px 23.5px 0 0;
+          border: none;
+          box-shadow: none;
+          opacity: 1;
+          transform: none;
+          transition: none;
+          pointer-events: all;
+        `;
+        if (!isOnCard) {
+          player.classList.add("lbmp-on-card");
+          player.classList.remove("lbmp-floating");
+          isOnCard = true;
+        }
+      } else {
+        const vw = window.innerWidth;
+        const floatW = vw <= 640 ? 260 : 352;
+        const bottom = vw <= 640 ? "16px" : "28px";
+        const right = vw <= 640 ? "16px" : "28px";
+        player.style.cssText = `
+          position: fixed;
+          top: auto;
+          left: auto;
+          bottom: ${bottom};
+          right: ${right};
+          width: ${floatW}px;
+          height: auto;
+          border: 2.5px solid var(--pop-border, #4338ca);
+          box-shadow: 0 24px 60px rgba(0,0,0,0.8);
+          border-radius: 20px;
+          opacity: 1;
+          transform: none;
+          transition: bottom 0.4s cubic-bezier(0.16,1,0.3,1), right 0.4s cubic-bezier(0.16,1,0.3,1), width 0.38s cubic-bezier(0.16,1,0.3,1), border-radius 0.35s ease, box-shadow 0.3s ease;
+          pointer-events: all;
+        `;
+        if (isOnCard) {
+          player.classList.remove("lbmp-on-card");
+          player.classList.add("lbmp-floating");
+          isOnCard = false;
+        }
+      }
+    }, { rootMargin: '-20px 0px -30px 0px', threshold: 0 });
+
+    const wrap = document.getElementById(`video-wrap-${activeVideoPlace}`);
+    if (wrap) _videoObserver.observe(wrap);
   }
 
   function updateVideoPosition() {
-    const placeNum = activeVideoPlace;
-    if (placeNum === null) return;
-
-    const wrap = document.getElementById(`video-wrap-${placeNum}`);
-    const player = document.getElementById("lb-global-mini-player");
-    if (!player) return;
-
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    let inView = false;
-    let rect = null;
-
-    if (wrap) {
-      rect = wrap.getBoundingClientRect();
-      inView =
-        rect.top >= -20 &&
-        rect.bottom <= vh + 20 &&
-        rect.top < vh - 30 &&
-        rect.width > 0;
-    }
-
-    if (inView && rect) {
-      player.style.cssText = `
-        position: fixed;
-        top: ${Math.max(0, rect.top)}px;
-        left: ${rect.left}px;
-        width: ${rect.width}px;
-        height: ${rect.height}px;
-        bottom: auto;
-        right: auto;
-        border-radius: 23.5px 23.5px 0 0;
-        border: none;
-        box-shadow: none;
-        opacity: 1;
-        transform: none;
-        transition: none;
-        pointer-events: all;
-      `;
-      if (!isOnCard) {
-        player.classList.add("lbmp-on-card");
-        player.classList.remove("lbmp-floating");
-        isOnCard = true;
-      }
-    } else {
-      const floatW = vw <= 640 ? 260 : 352;
-      const bottom = vw <= 640 ? "16px" : "28px";
-      const right = vw <= 640 ? "16px" : "28px";
-      player.style.cssText = `
-        position: fixed;
-        top: auto;
-        left: auto;
-        bottom: ${bottom};
-        right: ${right};
-        width: ${floatW}px;
-        height: auto;
-        border: 2.5px solid var(--pop-border, #4338ca);
-        box-shadow: 0 24px 60px rgba(0,0,0,0.8);
-        border-radius: 20px;
-        opacity: 1;
-        transform: none;
-        transition: bottom 0.4s cubic-bezier(0.16,1,0.3,1), right 0.4s cubic-bezier(0.16,1,0.3,1), width 0.38s cubic-bezier(0.16,1,0.3,1), border-radius 0.35s ease, box-shadow 0.3s ease;
-        pointer-events: all;
-      `;
-      if (isOnCard) {
-        player.classList.remove("lbmp-on-card");
-        player.classList.add("lbmp-floating");
-        isOnCard = false;
-      }
-    }
+    // Replaced by IntersectionObserver
   }
 
   // Track previous video position state to avoid infinite RAF
@@ -607,7 +600,10 @@
     isOnCard = false;
     if (rafId) cancelAnimationFrame(rafId);
     _lastVideoState = null;
-    updateVideoPosition();
+    
+    // Set up the IntersectionObserver for the new video
+    // Use setTimeout so the DOM has time to render the video-wrap
+    setTimeout(setupVideoObserver, 0);
   }
 
   function closePlayer() {
@@ -768,6 +764,9 @@
 
     // Trigger initial window load
     loadWindowForScroll();
+
+    // Trigger background sort
+    sortLikesInBackground();
   }
 
   // ─── Sliding Window: fetch user cards for the visible range ────────
@@ -873,13 +872,33 @@
     }
   }
 
+  function startTimers() {
+    pollInterval = setInterval(loadPaymentData, 30000);
+    indexPollInterval = setInterval(fetchMasterData, 60000);
+  }
+
+  function stopTimers() {
+    clearInterval(pollInterval);
+    clearInterval(indexPollInterval);
+  }
+
   onMount(() => {
     loadPaymentData();
     // Restore ETag from localStorage for SWR
     _masterETag = localStorage.getItem('master_etag') || '';
     fetchMasterData(); // Single master JSON with SWR
-    pollInterval = setInterval(loadPaymentData, 30000);
-    indexPollInterval = setInterval(fetchMasterData, 60000);
+    
+    startTimers();
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        stopTimers();
+      } else {
+        startTimers();
+        loadPaymentData();
+        fetchMasterData();
+      }
+    });
 
     // Restore liked set — populate in-place to preserve $state proxy
     try {
@@ -1267,14 +1286,8 @@
                         width="200"
                         height="200"
                         onerror={(e) => {
-                          const lvl = parseInt(
-                            e.currentTarget.dataset.fallback || "0",
-                          );
-                          if (lvl === 0) {
-                            e.currentTarget.dataset.fallback = "1";
-                            e.currentTarget.src = item._avatarFallback1;
-                          } else {
-                            e.currentTarget.dataset.fallback = "2";
+                          if (!brokenAvatars.has(item.id)) {
+                            brokenAvatars.add(item.id);
                             e.currentTarget.src = item._avatarFallback2;
                           }
                         }}
