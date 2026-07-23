@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, untrack } from "svelte";
   import { createClient } from "@supabase/supabase-js";
 
   // ─── Supabase Client ────────────────────────────────────────────────
@@ -326,6 +326,7 @@
       _scrollRafPending = false;
       // Trigger windowed fetch for newly visible range
       loadWindowForScroll();
+      updateVideoPosition();
     });
   }
 
@@ -338,6 +339,7 @@
     else if (w <= 1280) columns = 3;
     else columns = 4;
     if (gridRef) gridTopOffset = gridRef.offsetTop;
+    updateVideoPosition();
   }, 150);
 
   // ─── Search input — UI only, filtering will be server-side ──────────
@@ -506,7 +508,7 @@
     _videoObserver = null;
   }
 
-  function tick() {
+  function updateVideoPosition() {
     const placeNum = activeVideoPlace;
     if (placeNum === null) return;
 
@@ -577,7 +579,6 @@
         isOnCard = false;
       }
     }
-    rafId = requestAnimationFrame(tick);
   }
 
   // Track previous video position state to avoid infinite RAF
@@ -606,7 +607,7 @@
     isOnCard = false;
     if (rafId) cancelAnimationFrame(rafId);
     _lastVideoState = null;
-    rafId = requestAnimationFrame(tick);
+    updateVideoPosition();
   }
 
   function closePlayer() {
@@ -944,9 +945,10 @@
   // Animate remaining places counter smoothly whenever remainingCount updates
   $effect(() => {
     const target = remainingCount;
-    const diff = target - displayRemaining;
+    const currentDisplay = untrack(() => displayRemaining);
+    const diff = target - currentDisplay;
     if (diff !== 0) {
-      const start = displayRemaining;
+      const start = currentDisplay;
       const duration = 800;
       const startTime = performance.now();
       let _animRafId;
@@ -1165,7 +1167,7 @@
         style="width: 100%; max-width: 1320px; display: block; margin: 0 auto; padding-top: {paddingTop}px; padding-bottom: {paddingBottom}px;"
       >
         <div class="lb-table-body">
-          {#each visibleCards as item (item.place)}
+          {#each visibleCards as item, index (index)}
               {@const place = item.place}
               {@const liked = likedSet.has(item.id || place)}
               {@const isExpanded = expandedMessages.has(place)}

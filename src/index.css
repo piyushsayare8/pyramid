@@ -2931,3 +2931,14 @@ body>* {
   pointer-events: none;
   opacity: 0.7;
 }
+.lb-card {
+  background: rgba(255, 255, 255, 0.98);
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  contain: layout style paint;
+  border-radius: 20px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
